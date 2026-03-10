@@ -96,6 +96,10 @@ int PT_DECLSPEC sosProcessBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf, realtyp
 				}
 			}
 			rp_out_buf[k] = out1;
+			if (cast_handle->target_rms != 0.0f)
+			{
+				sum_squares += rp_out_buf[k] * rp_out_buf[k];
+			}
 		}
 		else /* Stereo case */
 		{
@@ -156,30 +160,32 @@ int PT_DECLSPEC sosProcessBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf, realtyp
 		k += i_num_channels;
 	}
 
-	if (cast_handle->target_rms != 0.0f && i_num_channels == 2)
-	{		
-		realtype current_rms = sqrtf(sum_squares / (i_num_sample_sets * 2));
-		realtype rms_gain = std::fmin(cast_handle->target_rms / current_rms, 1.0f);
-		if (rms_gain > 0.0f)
+	if (cast_handle->target_rms != 0.0f)
+	{
+		realtype current_rms = sqrtf(sum_squares / (i_num_sample_sets * i_num_channels));
+
+		if (current_rms > 1e-6f)
 		{
-			if (cast_handle->normalization_gain == 1.0f)
-			{
-				cast_handle->normalization_gain = rms_gain;
-			}
-			else
-			{
-				if (fabs(cast_handle->normalization_gain - rms_gain) <= 0.01f)
-				{
-					cast_handle->normalization_gain = rms_gain;
-				}
-			}
+			realtype desired_gain = cast_handle->target_rms / current_rms;
+
+			/* Limit maximum gain based on UI setting (target_rms / 0.125) to prevent extreme amplification on silence */
+			desired_gain = std::fmin(desired_gain, cast_handle->target_rms / 0.125f);
+
+			/* Exponential smoothing: fast attack (gain decreases), slow release (gain increases) */
+			realtype alpha = (desired_gain < cast_handle->normalization_gain) ? 0.3f : 0.05f;
+			cast_handle->normalization_gain = cast_handle->normalization_gain * (1.0f - alpha) + desired_gain * alpha;
+
 		}
 
 		k = 0;
 		for (j = 0; j < i_num_sample_sets; j++)
 		{
-			rp_out_buf[k] *= cast_handle->normalization_gain;
-			rp_out_buf[k + 1] *= cast_handle->normalization_gain;
+			for (int c = 0; c < i_num_channels; c++)
+			{
+				rp_out_buf[k + c] *= cast_handle->normalization_gain;
+				if (rp_out_buf[k + c] > 1.0f) rp_out_buf[k + c] = 1.0f;
+				else if (rp_out_buf[k + c] < -1.0f) rp_out_buf[k + c] = -1.0f;
+			}
 			k += i_num_channels;
 		}
 	}
@@ -306,6 +312,7 @@ int PT_DECLSPEC sosProcessSurroundBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf,
 
 	struct sosSectionType *s;
 	int i, j, k;
+	realtype sum_squares = 0.0f;
     
 	cast_handle = (struct sosHdlType *)(hp_sos);  
 	
@@ -315,6 +322,7 @@ int PT_DECLSPEC sosProcessSurroundBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf,
 	/* Currently only handles 6 or 8 channel surround */
 	if( (i_num_channels != 6) && (i_num_channels != 8) )
 		return(NOT_OKAY);
+
 
 	//Ordering for 5.1 is: Front Left, Front Right, Front Center, Low Frequency, Back Left, Back Right
 	//Ordering for 7.1 is: Front Left, Front Right, Front Center, Low Frequency, Back Left, Back Right, Side Left, Side Right
@@ -361,6 +369,33 @@ int PT_DECLSPEC sosProcessSurroundBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf,
 				}
 			}
 			rp_out_buf[j+k] = out;
+			if (cast_handle->target_rms != 0.0f && k != 3)
+				sum_squares += out * out;
+		}
+	}
+
+	if (cast_handle->target_rms != 0.0f)
+	{
+		realtype current_rms = sqrtf(sum_squares / (i_num_sample_sets * (i_num_channels - 1)));
+		if (current_rms > 1e-6f)
+		{
+			realtype desired_gain = cast_handle->target_rms / current_rms;
+			desired_gain = std::fmin(desired_gain, cast_handle->target_rms / 0.125f);
+			realtype alpha = (desired_gain < cast_handle->normalization_gain) ? 0.3f : 0.05f;
+			cast_handle->normalization_gain = cast_handle->normalization_gain * (1.0f - alpha) + desired_gain * alpha;
+
+		}
+		int idx = 0;
+		for (int js = 0; js < i_num_sample_sets; js++)
+		{
+			for (int c = 0; c < i_num_channels; c++)
+			{
+				if (c == 3) continue;
+				rp_out_buf[idx + c] *= cast_handle->normalization_gain;
+				if (rp_out_buf[idx + c] > 1.0f) rp_out_buf[idx + c] = 1.0f;
+				else if (rp_out_buf[idx + c] < -1.0f) rp_out_buf[idx + c] = -1.0f;
+			}
+			idx += i_num_channels;
 		}
 	}
 	
