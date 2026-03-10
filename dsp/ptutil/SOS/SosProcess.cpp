@@ -164,6 +164,8 @@ int PT_DECLSPEC sosProcessBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf, realtyp
 	{
 		realtype current_rms = sqrtf(sum_squares / (i_num_sample_sets * i_num_channels));
 
+		realtype gain_start = cast_handle->normalization_gain;
+
 		if (current_rms > 1e-6f)
 		{
 			realtype desired_gain = cast_handle->target_rms / current_rms;
@@ -177,12 +179,43 @@ int PT_DECLSPEC sosProcessBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf, realtyp
 
 		}
 
+		/* Ramp gain linearly across the buffer to avoid discontinuities at buffer boundaries */
+		realtype gain_end = cast_handle->normalization_gain;
+
+		/* Cap gain to buffer peak to prevent hard clipping at transients */
+		{
+			realtype peak = 0.0f;
+			int pk = 0;
+			for (int pj = 0; pj < i_num_sample_sets; pj++)
+			{
+				for (int pc = 0; pc < i_num_channels; pc++)
+				{
+					realtype abs_val = std::fabs(rp_out_buf[pk + pc]);
+					if (abs_val > peak) peak = abs_val;
+				}
+				pk += i_num_channels;
+			}
+			if (peak > 1e-6f)
+			{
+				realtype peak_safe_gain = 1.0f / peak;
+				if (gain_end > peak_safe_gain)
+				{
+					gain_end = peak_safe_gain;
+					cast_handle->normalization_gain = peak_safe_gain;
+				}
+				if (gain_start > peak_safe_gain)
+					gain_start = peak_safe_gain;
+			}
+		}
+
 		k = 0;
 		for (j = 0; j < i_num_sample_sets; j++)
 		{
+			realtype t = (realtype)j / (realtype)i_num_sample_sets;
+			realtype gain = gain_start + t * (gain_end - gain_start);
 			for (int c = 0; c < i_num_channels; c++)
 			{
-				rp_out_buf[k + c] *= cast_handle->normalization_gain;
+				rp_out_buf[k + c] *= gain;
 				if (rp_out_buf[k + c] > 1.0f) rp_out_buf[k + c] = 1.0f;
 				else if (rp_out_buf[k + c] < -1.0f) rp_out_buf[k + c] = -1.0f;
 			}
@@ -377,6 +410,7 @@ int PT_DECLSPEC sosProcessSurroundBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf,
 	if (cast_handle->target_rms != 0.0f)
 	{
 		realtype current_rms = sqrtf(sum_squares / (i_num_sample_sets * (i_num_channels - 1)));
+		realtype gain_start = cast_handle->normalization_gain;
 		if (current_rms > 1e-6f)
 		{
 			realtype desired_gain = cast_handle->target_rms / current_rms;
@@ -385,13 +419,45 @@ int PT_DECLSPEC sosProcessSurroundBuffer(PT_HANDLE *hp_sos, realtype *rp_in_buf,
 			cast_handle->normalization_gain = cast_handle->normalization_gain * (1.0f - alpha) + desired_gain * alpha;
 
 		}
+		/* Ramp gain linearly across the buffer to avoid discontinuities at buffer boundaries */
+		realtype gain_end = cast_handle->normalization_gain;
+
+		/* Cap gain to buffer peak to prevent hard clipping at transients */
+		{
+			realtype peak = 0.0f;
+			int pk = 0;
+			for (int pj = 0; pj < i_num_sample_sets; pj++)
+			{
+				for (int pc = 0; pc < i_num_channels; pc++)
+				{
+					if (pc == 3) continue;
+					realtype abs_val = std::fabs(rp_out_buf[pk + pc]);
+					if (abs_val > peak) peak = abs_val;
+				}
+				pk += i_num_channels;
+			}
+			if (peak > 1e-6f)
+			{
+				realtype peak_safe_gain = 1.0f / peak;
+				if (gain_end > peak_safe_gain)
+				{
+					gain_end = peak_safe_gain;
+					cast_handle->normalization_gain = peak_safe_gain;
+				}
+				if (gain_start > peak_safe_gain)
+					gain_start = peak_safe_gain;
+			}
+		}
+
 		int idx = 0;
 		for (int js = 0; js < i_num_sample_sets; js++)
 		{
+			realtype t = (realtype)js / (realtype)i_num_sample_sets;
+			realtype gain = gain_start + t * (gain_end - gain_start);
 			for (int c = 0; c < i_num_channels; c++)
 			{
 				if (c == 3) continue;
-				rp_out_buf[idx + c] *= cast_handle->normalization_gain;
+				rp_out_buf[idx + c] *= gain;
 				if (rp_out_buf[idx + c] > 1.0f) rp_out_buf[idx + c] = 1.0f;
 				else if (rp_out_buf[idx + c] < -1.0f) rp_out_buf[idx + c] = -1.0f;
 			}
