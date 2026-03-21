@@ -28,6 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "reg.h"
 #include "mth.h"
 #include "ptutil/dfxp/u_dfxp.h"
+#include <sstream>
 
 int DFXP_GRAPHIC_EQ_NUM_BANDS = 31;
 
@@ -117,6 +118,8 @@ int DfxDspPrivate::resetEQ()
 		if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, (realtype)0.0) != OKAY)
 			return(NOT_OKAY);
 	}
+
+	logEqFlatTransition(L"resetEQ");
 
 	return(OKAY);
 }
@@ -452,6 +455,7 @@ void DfxDspPrivate::setNumBands(int num_bands)
 
 	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
 	GraphicEqSetNumBands(graphic_eq_handle, num_bands);
+	logEqFlatTransition(L"setNumBands");
 }
 float DfxDspPrivate::getEqBandFrequency(int band_num)
 {
@@ -503,4 +507,8 @@ void DfxDspPrivate::setEqBandBoostCut(int band_num, float boost)
 	update_from_registry_ = true;
 
 	dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, band_num + 1, boost);
+
+	std::wstringstream context;
+	context << L"setEqBandBoostCut band=" << band_num << L" boost=" << boost;
+	logEqFlatTransition(context.str());
 }

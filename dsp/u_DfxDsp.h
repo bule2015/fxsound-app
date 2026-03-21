@@ -120,6 +120,8 @@ private:
 	int getStateInfoFromVals(PT_HANDLE *hp_vals, bool b_include_eq = true);
 	int getGraphicEqInfoFromVals(PT_HANDLE *hp_vals);
 	int createValsFromStateInfo(wchar_t *preset_name, PT_HANDLE **hpp_vals);
+	void logEqFlatTransition(const std::wstring& context);
+	bool isEqFlat();
 
 	// DfxDspPrivate.cpp
 	int dfxpFreeAll();
@@ -154,5 +156,6 @@ private:
 	struct dfxg_product_specific_info_type product_specific_;
 
 	int eq_processing_on_;
+	bool eq_was_flat_ = false;
 };
 

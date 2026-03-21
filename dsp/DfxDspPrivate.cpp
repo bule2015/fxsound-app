@@ -34,6 +34,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GraphicEq.h"
 #include "spectrum.h"
 #include "SurroundSyn.h"
+#include <cstdio>
+#include <sstream>
 
 #define DFXG_REGISTRY_DFX_PRODUCT_NAME_WIDE		L"DFX"
 #define DFXG_DISPLAYED_DFX_PRODUCT_NAME_WIDE    L"FxSound"
@@ -49,6 +51,63 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define MIDI_MIN_VALUE          0
 #define MIDI_MAX_VALUE          127
+
+namespace
+{
+std::wstring getEqDiagnosticLogPath()
+{
+	wchar_t appdata_path[MAX_PATH] = {};
+	auto length = GetEnvironmentVariableW(L"APPDATA", appdata_path, MAX_PATH);
+	if (length == 0 || length >= MAX_PATH)
+	{
+		return L"";
+	}
+
+	std::wstring directory = std::wstring(appdata_path) + L"\\FxSound";
+	CreateDirectoryW(directory.c_str(), NULL);
+
+	return directory + L"\\fxsound-dsp-eq.log";
+}
+
+std::wstring getLocalTimestamp()
+{
+	SYSTEMTIME system_time = {};
+	GetLocalTime(&system_time);
+
+	wchar_t timestamp[64] = {};
+	swprintf(
+		timestamp,
+		sizeof(timestamp) / sizeof(timestamp[0]),
+		L"%04d-%02d-%02d %02d:%02d:%02d.%03d",
+		system_time.wYear,
+		system_time.wMonth,
+		system_time.wDay,
+		system_time.wHour,
+		system_time.wMinute,
+		system_time.wSecond,
+		system_time.wMilliseconds);
+
+	return timestamp;
+}
+
+void appendEqDiagnosticLog(const std::wstring& line)
+{
+	auto path = getEqDiagnosticLogPath();
+	if (path.empty())
+	{
+		return;
+	}
+
+	FILE* stream = nullptr;
+	if (_wfopen_s(&stream, path.c_str(), L"a+, ccs=UTF-8") != 0 || stream == nullptr)
+	{
+		return;
+	}
+
+	fwprintf(stream, L"%ls\r\n", line.c_str());
+	fclose(stream);
+}
+}
 
 DfxDspPrivate::DfxDspPrivate()
 {
@@ -168,6 +227,8 @@ void DfxDspPrivate::processTimer()
 		anything_changed = true;
 	}
 
+	logEqFlatTransition(L"processTimer");
+
 	/* If any settings have been changed, communicate all the changes to the DSP module */
 	// NOTE: I find that without this if condition and call dfxpCOmmunicateAll() repeatedly will mess up the audio.
 	if (anything_changed)
@@ -191,7 +252,82 @@ int DfxDspPrivate::setSignalFormat(int i_bps, int i_nch, int i_srate, int i_vali
 	if (dfxpUniversalSetSignalFormat(dfxp_handle_, i_bps, i_nch, i_srate, i_valid_bits) != OKAY)
 		return(NOT_OKAY);
 
+	std::wstringstream context;
+	context << L"setSignalFormat bps=" << i_bps
+		    << L" nch=" << i_nch
+		    << L" srate=" << i_srate
+		    << L" valid_bits=" << i_valid_bits;
+	logEqFlatTransition(context.str());
+
 	return OKAY;
+}
+
+bool DfxDspPrivate::isEqFlat()
+{
+	auto num_bands = getNumEqBands();
+	if (num_bands <= 0)
+	{
+		return false;
+	}
+
+	for (int band = 0; band < num_bands; ++band)
+	{
+		if (fabsf(getEqBandBoostCut(band)) > 0.0001f)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void DfxDspPrivate::logEqFlatTransition(const std::wstring& context)
+{
+	auto eq_is_flat = isEqFlat();
+	if (!eq_is_flat)
+	{
+		eq_was_flat_ = false;
+		return;
+	}
+
+	if (eq_was_flat_)
+	{
+		return;
+	}
+
+	eq_was_flat_ = true;
+
+	int eq_on_memory = 0;
+	int eq_on_registry = 0;
+	realtype sampling_freq = 0.0;
+
+	eqGetProcessingOn(DFXP_STORAGE_TYPE_MEMORY, &eq_on_memory);
+	eqGetProcessingOn(DFXP_STORAGE_TYPE_REGISTRY, &eq_on_registry);
+	dfxpGetSamplingFreq(dfxp_handle_, &sampling_freq);
+
+	std::wstringstream frequencies;
+	auto num_bands = getNumEqBands();
+	for (int band = 0; band < num_bands; ++band)
+	{
+		if (band > 0)
+		{
+			frequencies << L",";
+		}
+
+		frequencies << getEqBandFrequency(band);
+	}
+
+	std::wstringstream message;
+	message << getLocalTimestamp()
+		    << L" EQ flat detected context=\"" << context << L"\""
+		    << L" bands=" << num_bands
+		    << L" eq_on_memory=" << eq_on_memory
+		    << L" eq_on_registry=" << eq_on_registry
+		    << L" sampling_freq=" << sampling_freq
+		    << L" frequencies=[" << frequencies.str() << L"]";
+
+	appendEqDiagnosticLog(message.str());
+	OutputDebugStringW((message.str() + L"\n").c_str());
 }
 
 

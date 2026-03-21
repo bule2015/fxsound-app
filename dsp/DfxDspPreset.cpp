@@ -93,6 +93,8 @@ int DfxDspPrivate::loadPreset(std::wstring preset_file_full_path)
 	if (valsFreeUp(&new_vals_hdl) != OKAY)
 		return(NOT_OKAY);
 
+	logEqFlatTransition(L"loadPreset " + preset_file_full_path);
+
 	return(OKAY);
 }
 
