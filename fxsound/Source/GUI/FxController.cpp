@@ -1,4 +1,4 @@
-/*
+﻿/*
 FxSound
 Copyright (C) 2025  FxSound LLC
 
@@ -26,6 +26,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxEffects.h"
 #include "FxPresetSaveDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
+
+namespace
+{
+int findPresetIndexByName(const FxModel& model, const String& preset_name)
+{
+    if (preset_name.isEmpty())
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < model.getPresetCount(); ++i)
+    {
+        if (model.getPreset(i).name == preset_name)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+}
 
 class FxDeviceErrorMessage : public FxWindow
 {
@@ -355,8 +376,11 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 		initPresets();
 		
 		auto preset_name = settings_.getString("preset");
-		auto selected_preset = FxModel::getModel().selectPreset(preset_name, false);
-		setPreset(selected_preset);
+		auto selected_preset = findPresetIndexByName(FxModel::getModel(), preset_name);
+		if (!setPreset(selected_preset) && selected_preset != 0)
+		{
+			setPreset(0);
+		}
 
 		auto app_version = JUCEApplication::getInstance()->getApplicationVersion();
 		auto prev_version = settings_.getString("version");
@@ -605,7 +629,11 @@ bool FxController::setPreset(int selected_preset, bool notify)
 
 	if (preset.path.isNotEmpty())
 	{
-		dfx_dsp_.loadPreset(preset.path.toWideCharPointer());
+		if (dfx_dsp_.loadPreset(preset.path.toWideCharPointer()) != 0)
+		{
+			model.pushMessage(FormatString(TRANS("Unable to load preset %s."), preset.name));
+			return false;
+		}
 
 		settings_.setString("preset", preset.name);
 		model.selectPreset(selected_preset, true);
@@ -678,14 +706,16 @@ void FxController::setOutput(const String output_device_id, bool notify)
 					auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
 					if (device_config.preset.isNotEmpty())
 					{
-						auto selected_preset = FxModel::getModel().selectPreset(device_config.preset, false);
-						setPreset(selected_preset, false);
-
-						if (FxModel::getModel().getPowerState())
+						auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
+						if (setPreset(selected_preset, false))
 						{
-							message += "\n" + TRANS("Preset: ") + device_config.preset;
+							if (FxModel::getModel().getPowerState())
+							{
+								message += "\n" + TRANS("Preset: ") + device_config.preset;
+							}
 						}
 					}
+
 				}
 
 				FxModel::getModel().pushMessage(message);
@@ -755,7 +785,7 @@ void FxController::savePreset(const String& preset_name)
 
 		initPresets();
 		
-		auto selected_preset = model.selectPreset(preset_name, false);
+		auto selected_preset = findPresetIndexByName(model, preset_name);
 		setPreset(selected_preset);
 
 		model.pushMessage(FormatString(TRANS("New preset %s is saved."), preset_name));
@@ -795,7 +825,7 @@ void FxController::renamePreset(const String& new_name)
 
 		initPresets();
 
-		auto selected_preset = model.selectPreset(new_name, false);
+		auto selected_preset = findPresetIndexByName(model, new_name);
 		setPreset(selected_preset);
 
 		model.setPresetModified(false);
@@ -948,7 +978,7 @@ bool FxController::importPresets(const Array<File>& preset_files, StringArray& i
         initPresets();
 
         auto preset_name = settings_.getString("preset");
-        auto selected_preset = FxModel::getModel().selectPreset(preset_name, false);
+        auto selected_preset = findPresetIndexByName(FxModel::getModel(), preset_name);
         setPreset(selected_preset);
 
         return true;
@@ -1429,7 +1459,7 @@ void FxController::onSoundDeviceChange(std::vector<SoundDevice> sound_devices)
 					auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
 					if (device_config.preset.isNotEmpty())
 					{
-						auto selected_preset = FxModel::getModel().selectPreset(device_config.preset, false);
+						auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
 						setPreset(selected_preset, false);
 					}
 				}
@@ -1483,7 +1513,7 @@ void FxController::onSoundDeviceChange()
 					auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
 					if (device_config.preset.isNotEmpty())
 					{
-						auto selected_preset = FxModel::getModel().selectPreset(device_config.preset, false);
+						auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
 						setPreset(selected_preset, false);
 					}
 				}

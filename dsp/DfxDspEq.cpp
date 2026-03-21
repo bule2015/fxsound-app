@@ -127,11 +127,7 @@ int DfxDspPrivate::resetEQ()
 int DfxDspPrivate::getGraphicEqInfoFromVals(PT_HANDLE *hp_vals)
 {
 	PT_HANDLE *hp_graphicEq;
-	realtype r_boost_cut;
-    realtype r_freq;
-	int i_band_num;
 	int i_eq_on;
-	float f_bass_boost_value;
 
 	int graphic_eq_num_bands = DFXP_GRAPHIC_EQ_NUM_BANDS;
 
@@ -139,117 +135,106 @@ int DfxDspPrivate::getGraphicEqInfoFromVals(PT_HANDLE *hp_vals)
 		return(NOT_OKAY);
 
 	/*
-	* If it is an old preset which does not have any eq data eq to be on but then set all the bands to be flat 
+	* Old or malformed presets may not contain any EQ data. Preserve the current EQ in
+	* that case instead of flattening all bands, otherwise an automatic preset reload can
+	* unexpectedly wipe the user's EQ curve.
 	*/
 	if (hp_graphicEq == NULL)
 	{
-		i_eq_on = IS_TRUE;
-
-		if (dfxpEqSetProcessingOn(dfxp_handle_, DFXP_STORAGE_TYPE_REGISTRY, i_eq_on) != OKAY)
-			return(NOT_OKAY);
-
-		for (i_band_num = 1; i_band_num <= graphic_eq_num_bands; i_band_num++)
-		{
-			r_boost_cut = (realtype)0.0;
-
-			if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, r_boost_cut) != OKAY)
-				return(NOT_OKAY);
-		}
+		return(OKAY);
 	}
-	else
+
+	if (dfxpEqSetProcessingOn(dfxp_handle_, DFXP_STORAGE_TYPE_REGISTRY, i_eq_on) != OKAY)
+		return(NOT_OKAY);
+
+	PT_HANDLE* graphic_eq_handle;
+
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	
+	
+	// ====================================================================================
+	//  CORRECTION for variable number of bands (Since version Theremino 2.0)
+	//  - Eliminated errors produced by incorrect band number
+	//  - Interpolation and extrapolation if nBands not equal to graphic_eq_num_bands
+	// ====================================================================================
+	int nBands;
+	GraphicEqGetNumBands(hp_graphicEq, &nBands);
+	// ---------------------------------------------------------- Dimension arrays more than max bands number (31)
+	realtype r_boost_cut_original[35];
+	realtype r_freq_original[35];
+	realtype r_boost_cut_interpolated[35];
+	realtype r_freq_interpolated[35];
+	// ---------------------------------------------------------- Read values into the original arrays
+	for (int i_band_num = 1; i_band_num <= nBands; i_band_num++)
 	{
-		if (dfxpEqSetProcessingOn(dfxp_handle_, DFXP_STORAGE_TYPE_REGISTRY, i_eq_on) != OKAY)
+		if (GraphicEqGetBandBoostCut(hp_graphicEq, i_band_num, &r_boost_cut_original[i_band_num]) != OKAY)
 			return(NOT_OKAY);
 
-        PT_HANDLE* graphic_eq_handle;
+		if (GraphicEqGetBandCenterFrequency(hp_graphicEq, i_band_num, &r_freq_original[i_band_num]) != OKAY)
+			return(NOT_OKAY);
+	}
 
-        dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
-		
-		
-		// ====================================================================================
-		//  CORRECTION for variable number of bands (Since version Theremino 2.0)
-		//  - Eliminated errors produced by incorrect band number
-		//  - Interpolation and extrapolation if nBands not equal to graphic_eq_num_bands
-		// ====================================================================================
-		int nBands;
-		GraphicEqGetNumBands(hp_graphicEq, &nBands);
-		// ---------------------------------------------------------- Dimension arrays more than max bands number (31)
-		realtype r_boost_cut_original[35];
-		realtype r_freq_original[35];
-		realtype r_boost_cut_interpolated[35];
-		realtype r_freq_interpolated[35];
-		// ---------------------------------------------------------- Read values into the original arrays
-		for (int i_band_num = 1; i_band_num <= nBands; i_band_num++)
+	// ---------------------------------------------------------- Interpolate values if the number of bands is different
+	if (nBands != graphic_eq_num_bands)
+	{
+		if (nBands < graphic_eq_num_bands)
 		{
-			if (GraphicEqGetBandBoostCut(hp_graphicEq, i_band_num, &r_boost_cut_original[i_band_num]) != OKAY)
-				return(NOT_OKAY);
-
-			if (GraphicEqGetBandCenterFrequency(hp_graphicEq, i_band_num, &r_freq_original[i_band_num]) != OKAY)
-				return(NOT_OKAY);
-		}
-
-		// ---------------------------------------------------------- Interpolate values if the number of bands is different
-		if (nBands != graphic_eq_num_bands)
-		{
-			if (nBands < graphic_eq_num_bands)
+			// -------------------------------------------------- Increase number of bands (linear interpolation)
+			for (int i = 1; i <= graphic_eq_num_bands; i++)
 			{
-				// -------------------------------------------------- Increase number of bands (linear interpolation)
-				for (int i = 1; i <= graphic_eq_num_bands; i++)
-				{
-					realtype source_index = 1.0 + (realtype)(i - 1) * (nBands - 1.0) / (graphic_eq_num_bands - 1.0);
-					int lower_index = (int)source_index;
-					int upper_index = lower_index + 1;
-					realtype fraction = source_index - lower_index;
+				realtype source_index = 1.0 + (realtype)(i - 1) * (nBands - 1.0) / (graphic_eq_num_bands - 1.0);
+				int lower_index = (int)source_index;
+				int upper_index = lower_index + 1;
+				realtype fraction = source_index - lower_index;
 
-					if (lower_index >= 1 && upper_index <= nBands)
-					{
-						r_boost_cut_interpolated[i] = r_boost_cut_original[lower_index] + (r_boost_cut_original[upper_index] - r_boost_cut_original[lower_index]) * fraction;
-						r_freq_interpolated[i] = r_freq_original[lower_index] + (r_freq_original[upper_index] - r_freq_original[lower_index]) * fraction;
-					}
-					else if (lower_index == nBands)
-					{
-						r_boost_cut_interpolated[i] = r_boost_cut_original[lower_index];
-						r_freq_interpolated[i] = r_freq_original[lower_index];
-					}
+				if (lower_index >= 1 && upper_index <= nBands)
+				{
+					r_boost_cut_interpolated[i] = r_boost_cut_original[lower_index] + (r_boost_cut_original[upper_index] - r_boost_cut_original[lower_index]) * fraction;
+					r_freq_interpolated[i] = r_freq_original[lower_index] + (r_freq_original[upper_index] - r_freq_original[lower_index]) * fraction;
 				}
-			}
-			else
-			{
-				// -------------------------------------------------- Decrease number of bands (equidistant selection)
-				for (int i = 1; i <= graphic_eq_num_bands; i++)
+				else if (lower_index == nBands)
 				{
-					int source_index = 1 + (int)((i - 1.0) * (nBands - 1.0) / (graphic_eq_num_bands - 1.0) + 0.5);
-					r_boost_cut_interpolated[i] = r_boost_cut_original[source_index];
-					r_freq_interpolated[i] = r_freq_original[source_index];
-				}
-			}
-
-			// ------------------------------------------------------ Use interpolated values
-			for (int i_band_num = 1; i_band_num <= graphic_eq_num_bands; i_band_num++)
-			{
-				if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, r_boost_cut_interpolated[i_band_num]) != OKAY)
-					return(NOT_OKAY);
-
-				if (graphic_eq_num_bands < 15)
-				{
-					if (GraphicEqSetBandFreq(graphic_eq_handle, i_band_num, r_freq_interpolated[i_band_num]) != OKAY)
-						return(NOT_OKAY);
+					r_boost_cut_interpolated[i] = r_boost_cut_original[lower_index];
+					r_freq_interpolated[i] = r_freq_original[lower_index];
 				}
 			}
 		}
 		else
 		{
-			// ------------------------------------------------------ Use original values if the number of bands is the same
-			for (int i_band_num = 1; i_band_num <= graphic_eq_num_bands; i_band_num++)
+			// -------------------------------------------------- Decrease number of bands (equidistant selection)
+			for (int i = 1; i <= graphic_eq_num_bands; i++)
 			{
-				if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, r_boost_cut_original[i_band_num]) != OKAY)
-					return(NOT_OKAY);
+				int source_index = 1 + (int)((i - 1.0) * (nBands - 1.0) / (graphic_eq_num_bands - 1.0) + 0.5);
+				r_boost_cut_interpolated[i] = r_boost_cut_original[source_index];
+				r_freq_interpolated[i] = r_freq_original[source_index];
+			}
+		}
 
-				if (graphic_eq_num_bands < 15)
-				{
-					if (GraphicEqSetBandFreq(graphic_eq_handle, i_band_num, r_freq_original[i_band_num]) != OKAY)
-						return(NOT_OKAY);
-				}
+		// ------------------------------------------------------ Use interpolated values
+		for (int i_band_num = 1; i_band_num <= graphic_eq_num_bands; i_band_num++)
+		{
+			if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, r_boost_cut_interpolated[i_band_num]) != OKAY)
+				return(NOT_OKAY);
+
+			if (graphic_eq_num_bands < 15)
+			{
+				if (GraphicEqSetBandFreq(graphic_eq_handle, i_band_num, r_freq_interpolated[i_band_num]) != OKAY)
+					return(NOT_OKAY);
+			}
+		}
+	}
+	else
+	{
+		// ------------------------------------------------------ Use original values if the number of bands is the same
+		for (int i_band_num = 1; i_band_num <= graphic_eq_num_bands; i_band_num++)
+		{
+			if (dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_ALL, i_band_num, r_boost_cut_original[i_band_num]) != OKAY)
+				return(NOT_OKAY);
+
+			if (graphic_eq_num_bands < 15)
+			{
+				if (GraphicEqSetBandFreq(graphic_eq_handle, i_band_num, r_freq_original[i_band_num]) != OKAY)
+					return(NOT_OKAY);
 			}
 		}
 	}
