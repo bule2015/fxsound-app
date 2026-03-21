@@ -48,17 +48,23 @@ private:
 	static constexpr int PRESET_MENU_ID_START = 101;
 	static constexpr int OUTPUT_MENU_ID_START = 201;
 	static constexpr int WMAPP_FXTRAYICON = WM_APP + 1;
+	static constexpr UINT TRAY_ICON_UID = 1;
 	static const GUID trayIconGuid_;
 
 	static LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 	void addIcon();
+	void setNotifyIconIdentity(NOTIFYICONDATA& nid, bool use_guid) const;
+	void setNotifyIconIdentity(NOTIFYICONIDENTIFIER& icon_id) const;
+	HICON getTrayIconHandle(bool power, bool processing) const;
 	void showContextMenu();
 	void addOutputDeviceMenu(PopupMenu* context_menu);
 	void showNotification();
 	String getTruncatedText(const String& text, int max_length);
 
 	bool custom_notification_;
+	bool icon_added_;
+	bool use_guid_registration_;
 	FxNotification notification_;
 	WNDPROC componentWndProc_;
 	UINT taskbar_created_message_;

@@ -29,6 +29,8 @@ FxSystemTrayView::FxSystemTrayView()
     FxModel::getModel().addListener(this);
 
     custom_notification_ = true;
+    icon_added_ = false;
+    use_guid_registration_ = true;
 
     addToDesktop(0);
 
@@ -48,12 +50,17 @@ FxSystemTrayView::~FxSystemTrayView()
     HWND hWnd = (HWND)getWindowHandle();
 
     SetWindowLongPtr(hWnd, GWLP_USERDATA, NULL);
-    SetWindowLongPtr(hWnd, GWLP_WNDPROC, NULL);
+    if (componentWndProc_ != NULL)
+    {
+        SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)componentWndProc_);
+    }
 
-    NOTIFYICONDATA nid = { sizeof(nid) };
-    nid.uFlags = NIF_GUID;
-    nid.guidItem = trayIconGuid_;
-    Shell_NotifyIcon(NIM_DELETE, &nid);
+    if (icon_added_)
+    {
+        NOTIFYICONDATA nid = { sizeof(nid) };
+        setNotifyIconIdentity(nid, use_guid_registration_);
+        Shell_NotifyIcon(NIM_DELETE, &nid);
+    }
 
     removeFromDesktop();
 }
@@ -68,8 +75,6 @@ void FxSystemTrayView::modelChanged(FxModel::Event model_event)
 
 void FxSystemTrayView::setStatus(bool power, bool processing)
 {
-    HINSTANCE hInst = GetModuleHandle(NULL);
-
     String param = power ? TRANS(L"on") : TRANS(L"off");
 
     wchar_t tool_tip[1024];
@@ -82,30 +87,9 @@ void FxSystemTrayView::setStatus(bool power, bool processing)
 
     NOTIFYICONDATA nid = { sizeof(nid) };
 
-    nid.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP | NIF_GUID;
-    nid.guidItem = trayIconGuid_;
-    if (power)
-    {
-        if (processing)
-        {
-            if (FxTheme::getThemeMode() == FxThemeMode::Dark)
-            {
-                nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_RED");
-            }
-            else
-            {
-                nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_BLUE");
-            }
-        }
-        else
-        {
-            nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_WHITE");
-        }
-    }
-    else
-    {
-        nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_GRAY");
-    }
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    setNotifyIconIdentity(nid, use_guid_registration_);
+    nid.hIcon = getTrayIconHandle(power, processing);
 
     if (nid.hIcon == NULL)
     {
@@ -114,7 +98,12 @@ void FxSystemTrayView::setStatus(bool power, bool processing)
 
     lstrcpy(nid.szTip, tool_tip);
 
-    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    if (!Shell_NotifyIcon(NIM_MODIFY, &nid))
+    {
+        addIcon();
+        setNotifyIconIdentity(nid, use_guid_registration_);
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
+    }
 }
 
 Point<int> FxSystemTrayView::getSystemTrayWindowPosition(int width, int height)
@@ -128,7 +117,7 @@ Point<int> FxSystemTrayView::getSystemTrayWindowPosition(int width, int height)
 
     icon_id.cbSize = sizeof(NOTIFYICONIDENTIFIER);
     icon_id.hWnd = hWnd;
-    icon_id.guidItem = trayIconGuid_;
+    setNotifyIconIdentity(icon_id);
 
     if (FAILED(Shell_NotifyIconGetRect(&icon_id, &rect)))
     {
@@ -170,44 +159,99 @@ void FxSystemTrayView::addIcon()
 {
     NOTIFYICONDATA nid = { sizeof(nid) };
 
-    HINSTANCE hInst = GetModuleHandle(NULL);
     HWND hWnd = (HWND)getWindowHandle();
+    bool power = FxModel::getModel().getPowerState();
+    bool processing = FxController::getInstance().isAudioProcessing();
 
-    if (FxModel::getModel().getPowerState())
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
+    nid.uCallbackMessage = WMAPP_FXTRAYICON;
+    nid.hWnd = hWnd;
+    nid.hIcon = getTrayIconHandle(power, processing);
+    lstrcpy(nid.szTip, L"FxSound");
+
+    if (nid.hIcon == NULL)
     {
-        if (FxController::getInstance().isAudioProcessing())
+        icon_added_ = false;
+        setVisible(false);
+        return;
+    }
+
+    auto tryAddIcon = [&](bool use_guid) {
+        setNotifyIconIdentity(nid, use_guid);
+        if (!Shell_NotifyIcon(NIM_ADD, &nid))
         {
-            if (FxTheme::getThemeMode() == FxThemeMode::Dark)
-            {
-                nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_RED");
-            }
-            else
-            {
-                nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_BLUE");
-            }
+            return false;
         }
-        else
-        {
-            nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_WHITE");
-        }
+
+        // NOTIFYICON_VERSION_4 is prefered
+        nid.uVersion = NOTIFYICON_VERSION_4;
+        setNotifyIconIdentity(nid, use_guid);
+        Shell_NotifyIcon(NIM_SETVERSION, &nid);
+
+        use_guid_registration_ = use_guid;
+        icon_added_ = true;
+        return true;
+    };
+
+    icon_added_ = false;
+    if (!tryAddIcon(true))
+    {
+        tryAddIcon(false);
+    }
+
+    setVisible(icon_added_);
+}
+
+void FxSystemTrayView::setNotifyIconIdentity(NOTIFYICONDATA& nid, bool use_guid) const
+{
+    if (use_guid)
+    {
+        nid.uFlags |= NIF_GUID;
+        nid.guidItem = trayIconGuid_;
+        nid.uID = 0;
     }
     else
     {
-        nid.hIcon = LoadIcon(hInst, L"IDI_LOGO_GRAY");
+        nid.uFlags &= ~NIF_GUID;
+        nid.guidItem = GUID{};
+        nid.uID = TRAY_ICON_UID;
+    }
+}
+
+void FxSystemTrayView::setNotifyIconIdentity(NOTIFYICONIDENTIFIER& icon_id) const
+{
+    if (use_guid_registration_)
+    {
+        icon_id.guidItem = trayIconGuid_;
+        icon_id.uID = 0;
+    }
+    else
+    {
+        icon_id.guidItem = GUID{};
+        icon_id.uID = TRAY_ICON_UID;
+    }
+}
+
+HICON FxSystemTrayView::getTrayIconHandle(bool power, bool processing) const
+{
+    HINSTANCE hInst = GetModuleHandle(NULL);
+
+    if (power)
+    {
+        if (processing)
+        {
+            if (FxTheme::getThemeMode() == FxThemeMode::Dark)
+            {
+                return LoadIcon(hInst, L"IDI_LOGO_RED");
+            }
+
+            return LoadIcon(hInst, L"IDI_LOGO_BLUE");
+        }
+
+        return LoadIcon(hInst, L"IDI_LOGO_WHITE");
     }
 
-    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
-    nid.guidItem = trayIconGuid_;
-    nid.uCallbackMessage = WMAPP_FXTRAYICON;
-    nid.hWnd = hWnd;
-    lstrcpy(nid.szTip, L"FxSound");
-    Shell_NotifyIcon(NIM_ADD, &nid);
-
-    // NOTIFYICON_VERSION_4 is prefered
-    nid.uVersion = NOTIFYICON_VERSION_4;
-    Shell_NotifyIcon(NIM_SETVERSION, &nid);
-
-    setVisible(true);
+    return LoadIcon(hInst, L"IDI_LOGO_GRAY");
 }
 
 void FxSystemTrayView::showContextMenu()
@@ -405,8 +449,8 @@ void FxSystemTrayView::showNotification()
         {
             NOTIFYICONDATA nid = { sizeof(nid) };
 
-            nid.uFlags = NIF_INFO | NIF_GUID | NIF_REALTIME;
-            nid.guidItem = trayIconGuid_;
+            nid.uFlags = NIF_INFO | NIF_REALTIME;
+            setNotifyIconIdentity(nid, use_guid_registration_);
             nid.dwInfoFlags = NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
 
             String title = L"FxSound";
@@ -434,8 +478,14 @@ LRESULT CALLBACK FxSystemTrayView::wndProc(HWND hwnd, UINT message, WPARAM wPara
 {
     auto tray_view = reinterpret_cast<FxSystemTrayView*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 
+    if (tray_view == nullptr)
+    {
+        return DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
     if (message == tray_view->taskbar_created_message_)
     {
+        tray_view->icon_added_ = false;
         tray_view->addIcon();
     }
     else if (message == WMAPP_FXTRAYICON)
