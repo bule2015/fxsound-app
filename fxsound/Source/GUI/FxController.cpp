@@ -402,7 +402,6 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 				FxMessage::showMessage(TRANS("FxSound is now open-source"), { TRANS("GitHub"), "https://github.com/fxsound2/fxsound-app" });
 			}
         }
-		
 		showView();
 
 		auto theme_mode = settings_.getInt("theme_mode", 0);
