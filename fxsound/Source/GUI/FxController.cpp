@@ -371,6 +371,18 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 			path.createDirectory();
 		}
 
+		auto app_version = JUCEApplication::getInstance()->getApplicationVersion();
+		auto prev_version = settings_.getString("version");
+		auto version_changed = prev_version != app_version;
+		auto show_open_source_message = !prev_version.startsWith("1.1.2") && app_version.startsWith("1.1.2");
+        if (version_changed)
+        {
+			RegDeleteTree(HKEY_CURRENT_USER, L"Software\\DFX");
+            settings_.setString("version", app_version);
+            view_ = ViewType::Pro;
+            settings_.setBool("run_minimized", false);
+        }
+
 		setPowerState(dfx_enabled_ && settings_.getBool("power"));
 
 		initPresets();
@@ -382,20 +394,13 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 			setPreset(0);
 		}
 
-		auto app_version = JUCEApplication::getInstance()->getApplicationVersion();
-		auto prev_version = settings_.getString("version");
-        if (prev_version != app_version)
+        if (version_changed)
         {
-			RegDeleteTree(HKEY_CURRENT_USER, L"Software\\DFX");
-
             FxModel::getModel().pushMessage(" ", { TRANS("Click here to see what's new on this version!"), "https://www.fxsound.com/changelog" });			
-            settings_.setString("version", app_version);
-			if (!prev_version.startsWith("1.1.2") && app_version.startsWith("1.1.2"))
+			if (show_open_source_message)
 			{
 				FxMessage::showMessage(TRANS("FxSound is now open-source"), { TRANS("GitHub"), "https://github.com/fxsound2/fxsound-app" });
 			}
-            view_ = ViewType::Pro;
-            settings_.setBool("run_minimized", false);
         }
 		
 		showView();
