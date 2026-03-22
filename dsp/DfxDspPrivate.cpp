@@ -54,8 +54,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace
 {
-constexpr realtype kLoggedVolumeLevelingWindowBuffers = 6.0f;
-
 std::wstring getDiagnosticLogPath(const wchar_t* file_name)
 {
 	wchar_t appdata_path[MAX_PATH] = {};
@@ -112,11 +110,6 @@ void appendDiagnosticLog(const std::wstring& path, const std::wstring& line)
 void appendEqDiagnosticLog(const std::wstring& line)
 {
 	appendDiagnosticLog(getDiagnosticLogPath(L"fxsound-dsp-eq.log"), line);
-}
-
-void appendBufferDiagnosticLog(const std::wstring& line)
-{
-	appendDiagnosticLog(getDiagnosticLogPath(L"fxsound-dsp-buffer.log"), line);
 }
 }
 
@@ -251,7 +244,6 @@ void DfxDspPrivate::processTimer()
 int DfxDspPrivate::processAudio(short int *si_input_samples, short int *si_output_samples, int i_num_sample_sets, int i_check_for_duplicate_buffers)
 {
 	processTimer();
-	logBufferDuration(i_num_sample_sets);
 	// Apply DFX processing here using data and format vars above. Format will always be 32 bit floating point.
 	if (dfxpUniversalModifySamples(dfxp_handle_, si_input_samples, si_output_samples, i_num_sample_sets, i_check_for_duplicate_buffers) != OKAY)
 		return(NOT_OKAY);
@@ -272,45 +264,6 @@ int DfxDspPrivate::setSignalFormat(int i_bps, int i_nch, int i_srate, int i_vali
 	logEqFlatTransition(context.str());
 
 	return OKAY;
-}
-
-void DfxDspPrivate::logBufferDuration(int i_num_sample_sets)
-{
-	if (i_num_sample_sets <= 0)
-	{
-		return;
-	}
-
-	realtype sampling_freq = 0.0;
-	dfxpGetSamplingFreq(dfxp_handle_, &sampling_freq);
-
-	if (sampling_freq <= 0.0)
-	{
-		return;
-	}
-
-	if (last_logged_buffer_sample_sets_ == i_num_sample_sets &&
-		fabsf(last_logged_buffer_sampling_freq_ - sampling_freq) < 0.5f)
-	{
-		return;
-	}
-
-	last_logged_buffer_sample_sets_ = i_num_sample_sets;
-	last_logged_buffer_sampling_freq_ = sampling_freq;
-
-	realtype buffer_ms = ((realtype)i_num_sample_sets / sampling_freq) * 1000.0f;
-	realtype volume_leveling_window_ms = buffer_ms * kLoggedVolumeLevelingWindowBuffers;
-
-	std::wstringstream message;
-	message << getLocalTimestamp()
-		    << L" buffer_duration"
-		    << L" sample_sets=" << i_num_sample_sets
-		    << L" sampling_freq=" << sampling_freq
-		    << L" buffer_ms=" << buffer_ms
-		    << L" volume_leveling_window_ms=" << volume_leveling_window_ms;
-
-	appendBufferDiagnosticLog(message.str());
-	OutputDebugStringW((message.str() + L"\n").c_str());
 }
 
 bool DfxDspPrivate::isEqFlat()

@@ -121,7 +121,6 @@ private:
 	int getGraphicEqInfoFromVals(PT_HANDLE *hp_vals);
 	int createValsFromStateInfo(wchar_t *preset_name, PT_HANDLE **hpp_vals);
 	void logEqFlatTransition(const std::wstring& context);
-	void logBufferDuration(int i_num_sample_sets);
 	bool isEqFlat();
 
 	// DfxDspPrivate.cpp
@@ -158,7 +157,4 @@ private:
 
 	int eq_processing_on_;
 	bool eq_was_flat_ = false;
-	int last_logged_buffer_sample_sets_ = 0;
-	realtype last_logged_buffer_sampling_freq_ = 0.0;
 };
-
