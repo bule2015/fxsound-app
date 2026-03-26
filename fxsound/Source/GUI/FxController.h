@@ -30,6 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "AudioPassthru.h"
 #include "DfxDsp.h"
 #include <wtsapi32.h>
+#include <atomic>
 
 using namespace FxSound;
 
@@ -86,7 +87,6 @@ public:
 	void setOutput(int output, bool notify=true);
     
     bool isPlaybackDeviceAvailable();
-	void checkDeviceChanges();
 
 	void savePreset(const String& preset_name=L"");
 	void renamePreset(const String& new_name);
@@ -212,12 +212,16 @@ private:
 	static constexpr UINT CMD_NEXT_PRESET = 1003;
 	static constexpr UINT CMD_PREVIOUS_PRESET = 1004;
 	static constexpr UINT CMD_NEXT_OUTPUT = 1005;
+	static constexpr UINT WMAPP_SOUND_DEVICE_CHANGE = WM_APP + 1;
 
 	FxController();
 
 	static LRESULT CALLBACK eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param);
 	void timerCallback() override;
 	void onSoundDeviceChange() override;
+	void handleSoundDeviceChange();
+	void beginAudioProcessingGracePeriod();
+	bool isAudioProcessingGracePeriodActive() const;
 	
     void initOutputs(std::vector<SoundDevice>& sound_devices);
 	void updateOutputs(std::vector<SoundDevice>& sound_devices);
@@ -259,12 +263,15 @@ private:
 	int audio_process_off_counter_;
 	bool audio_process_on_;
 	std::time_t audio_process_start_time_;
+	int64 audio_process_grace_deadline_ms_;
 
 	bool minimize_tip_;
 	bool survey_tip_;
 	int max_user_presets_;
 
 	DWORD session_id_;
+	std::atomic<bool> device_change_message_pending_;
+	std::atomic<bool> shutting_down_;
 
 	CriticalSection lock_;
 };

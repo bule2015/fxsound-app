@@ -103,17 +103,12 @@ bool AudioPassthru::isPlaybackDeviceAvailable()
     return data_->isPlaybackDeviceAvailable();
 }
 
-bool AudioPassthru::checkDeviceChanges()
-{
-    return data_->checkDeviceChanges();
-}
-
 void AudioPassthru::restoreDefaultPlaybackDevice()
 {
     data_->restoreDefaultPlaybackDevice();
 }
 
-void AudioPassthru::setDeviceChangePending(bool value)
+bool AudioPassthru::restartProcessingForDeviceChange()
 {
-    data_->setDeviceChangePending(value);
+	return data_->restartProcessingForDeviceChange();
 }

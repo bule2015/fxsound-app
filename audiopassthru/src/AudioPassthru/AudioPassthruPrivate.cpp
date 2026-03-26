@@ -42,6 +42,7 @@ AudioPassthruPrivate::AudioPassthruPrivate()
 	ProcessingThreadID_ = (DWORD)0;
 	i_kill_processing_thread_ = IS_FALSE;
 	device_change_pending_ = false;
+	mute_ = false;
 	swprintf(wcp_playback_device_guid_, PT_MAX_GENERIC_STRLEN, L"");
 	b_no_valid_snd_device_dialog_shown_ = false;
 	debug_ = IS_TRUE;
@@ -122,15 +123,6 @@ void AudioPassthruPrivate::setDspProcessingModule(DfxDsp* p_dfx_dsp)
 
 std::vector<SoundDevice> AudioPassthruPrivate::getSoundDevices(bool active_devices)
 {
-	if (checkDeviceChanges())
-	{
-		int numRealDevices;
-		int DfxDeviceEnabledFlag;
-		int statusFlag;
-
-		sndDevices_GetAll(hp_sndDevices_, &(s_sndDevices_.totalNumDevices));
-	}
-
 	sndDeviceHandleToSoundDevices(active_devices);
 	return sound_devices_;
 }
@@ -151,8 +143,12 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 	// Clear SoundDevices
 	sound_devices_.clear();
 
+	wcp_user_seleted_playback_device_guid[0] = L'\0';
+
 	// Get the guid of the currently selected real playback device
-	if (sndDevicesGetID(hp_sndDevices_, SND_DEVICES_TARGETED_REAL_PLAYBACK, wcp_targeted_real_playback_device_guid, &i_resultFlag) != OKAY ||
+	if ((sndDevicesGetID(hp_sndDevices_, SND_DEVICES_USER_SELECTED_PLAYBACK_DEVICE, wcp_user_seleted_playback_device_guid, &i_resultFlag) != OKAY &&
+		i_resultFlag != SND_DEVICES_DEVICE_NOT_PRESENT) ||
+		sndDevicesGetID(hp_sndDevices_, SND_DEVICES_TARGETED_REAL_PLAYBACK, wcp_targeted_real_playback_device_guid, &i_resultFlag) != OKAY ||
 		sndDevicesGetID(hp_sndDevices_, SND_DEVICES_CAPTURE, wcp_capture_device_guid, &i_resultFlag) != OKAY ||
 		sndDevicesGetID(hp_sndDevices_, SND_DEVICES_VIRTUAL_PLAYBACK_DFX, wcp_dfx_device_guid, &i_resultFlag) != OKAY ||
 		sndDevicesGetID(hp_sndDevices_, SND_DEVICES_DEFAULT, wcp_default_device_guid, &i_resultFlag) != OKAY)
@@ -162,7 +158,7 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 
 	for (int index = 0; index < cast_handle->totalNumDevices; index++) 
 	{
-		if (cast_handle->pwszID[index][0] == L'\0' || cast_handle->deviceFriendlyName[index] == NULL)
+		if (cast_handle->pwszID[index][0] == L'\0' || cast_handle->deviceFriendlyName[index][0] == L'\0')
 		{
 			continue;
 		}
@@ -175,7 +171,7 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 		SoundDevice sound_device;
 		sound_device.pwszID = std::wstring(cast_handle->pwszID[index]);
 		sound_device.deviceFriendlyName = std::wstring(cast_handle->deviceFriendlyName[index]);
-		sound_device.deviceDescription = std::wstring(cast_handle->deviceDescription[index] != NULL ? cast_handle->deviceDescription[index] : L"");
+		sound_device.deviceDescription = std::wstring(cast_handle->deviceDescription[index][0] != L'\0' ? cast_handle->deviceDescription[index] : L"");
 		sound_device.deviceNumChannel = cast_handle->deviceNumChannel[index];
 		if (cast_handle->deviceState[index] == DEVICE_STATE_ACTIVE)
 		{
@@ -345,7 +341,6 @@ int AudioPassthruPrivate::processTimer()
 	int numRealDevices;
 	int DfxDeviceEnabledFlag;
 	int statusFlag;
-
 	b_need_to_start_thread = FALSE;
 
 	/*
@@ -439,7 +434,6 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	int i_valid_bits;
 	int resultFlag;
 	DWORD setReturn;
-
 	// Raise the priority of this tread to improve performance. GetCurrentThread() is a call that
 	// returns the current thread ID from within the thread itself.
 	// A return of 0 means set failed. Not sure what option to use, MS doc is confusing, THREAD_PRIORITY_HIGHEST is another option.
@@ -531,7 +525,6 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	}
 
 KillProcessingThread:
-
 	// Stop capture.
 	if (sndDevicesStartStopCapture(hp_sndDevices_, SND_DEVICES_STOP_CAPTURE) != OKAY)
 		return(NOT_OKAY);
@@ -579,17 +572,6 @@ bool AudioPassthruPrivate::isPlaybackDeviceAvailable()
         return false;
 }
 
-bool AudioPassthruPrivate::checkDeviceChanges()
-{
-    BOOL deviceChanged;
-
-	sndCheckDeviceChanges(hp_sndDevices_, &deviceChanged);
-	if (deviceChanged == TRUE)
-		return true;
-	else
-        return false;
-}
-
 void AudioPassthruPrivate::restoreDefaultPlaybackDevice()
 {
 	int i_resultFlag;
@@ -598,9 +580,21 @@ void AudioPassthruPrivate::restoreDefaultPlaybackDevice()
 		return;
 }
 
-void AudioPassthruPrivate::setDeviceChangePending(bool value)
+bool AudioPassthruPrivate::restartProcessingForDeviceChange()
 {
-	device_change_pending_ = value;
+	int i_timed_out = IS_FALSE;
+
+	device_change_pending_ = true;
+
+	if (killProcessingThread(&i_timed_out) != OKAY || i_timed_out)
+	{
+		device_change_pending_ = false;
+		return false;
+	}
+
+	device_change_pending_ = false;
+
+	return processTimer() == OKAY;
 }
 
 int AudioPassthruPrivate::setTargetedRealPlaybackDevice(const std::wstring sound_device_guid)

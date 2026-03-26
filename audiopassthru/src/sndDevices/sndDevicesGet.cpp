@@ -295,6 +295,13 @@ int PT_DECLSPEC sndDevicesGetFriendlyNameFromID(PT_HANDLE *hp_sndDevices, wchar_
 	if (cast_handle == NULL)
 		return(NOT_OKAY);
 
+	if (wcp_ID == NULL || wcp_ID[0] == L'\0')
+	{
+		*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
+		wcscpy(wcp_Name, L"");
+		return(OKAY);
+	}
+
 	*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
 	wcscpy(wcp_Name, L"");
 
@@ -325,6 +332,13 @@ int PT_DECLSPEC sndDevicesGetDeviceNameFromID(PT_HANDLE *hp_sndDevices, wchar_t 
 
 	if (cast_handle == NULL)
 		return(NOT_OKAY);
+
+	if (wcp_ID == NULL || wcp_ID[0] == L'\0')
+	{
+		*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
+		wcscpy(wcp_Description, L"");
+		return(OKAY);
+	}
 
 	*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
 	wcscpy(wcp_Description, L"");
@@ -357,7 +371,7 @@ int PT_DECLSPEC sndDevicesGetNumberOfChannelsFromID(PT_HANDLE *hp_sndDevices, wc
 		return(NOT_OKAY);
 
 	*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
-	if (wcp_ID == NULL)
+	if (wcp_ID == NULL || wcp_ID[0] == L'\0')
 	{
 		*ip_numChannels = 0;
 		return(NOT_OKAY);
@@ -420,6 +434,9 @@ int PT_DECLSPEC sndDevicesGetFormatFromID(PT_HANDLE *hp_sndDevices, wchar_t *wcp
 	*ip_resultFlag = SND_DEVICES_DEVICE_NOT_PRESENT;
 
 	if(cast_handle->totalNumDevices <= 0)
+		return(OKAY);
+
+	if (wcp_ID == NULL || wcp_ID[0] == L'\0')
 		return(OKAY);
 
 	for(i=0; i<cast_handle->totalNumDevices; i++)

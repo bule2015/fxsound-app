@@ -43,9 +43,6 @@ FxView::FxView()
 	addAndMakeVisible(&endpoint_list_);
 	endpoint_list_.addListener(this);
 	endpoint_list_.addMouseListener(this, true);
-	endpoint_list_.onShowPopup = []() {
-		FxController::getInstance().checkDeviceChanges();
-		};
 
     addChildComponent(&error_notification_);
 }
@@ -104,6 +101,14 @@ void FxView::modelChanged(FxModel::Event model_event)
 			}
 
 			id++;
+		}
+
+		auto selected_output_index = FxModel::getModel().getSelectedOutputIndex();
+		if (selected_output_index >= 0)
+		{
+			// Keep the visible combo box in sync when the output list is rebuilt
+			// during a device-change callback.
+			endpoint_list_.setSelectedId(selected_output_index + 1, NotificationType::dontSendNotification);
 		}
 	}
 

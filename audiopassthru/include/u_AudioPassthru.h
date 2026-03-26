@@ -51,9 +51,8 @@ public:
 	int setTargetedRealPlaybackDevice(const std::wstring sound_device_guid);
 	void registerCallback(AudioPassthruCallback *callback);
     bool isPlaybackDeviceAvailable();
-	bool checkDeviceChanges();
 	void restoreDefaultPlaybackDevice();
-    void setDeviceChangePending(bool value);
+	bool restartProcessingForDeviceChange();
 
 private:
 	int sndDeviceHandleToSoundDevices(bool active_devices = true);

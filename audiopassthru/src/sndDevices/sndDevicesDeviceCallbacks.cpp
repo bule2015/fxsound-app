@@ -106,9 +106,22 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDefaultDeviceChange
   if (cast_handle->dfxDeviceNum == SND_DEVICES_DEVICE_NOT_PRESENT)
 	return(S_OK);
 
+  // Windows may report the effective default render device through either
+  // the console or multimedia role. Let the controller coalesce duplicates.
+  if (flow != eRender || (role != eConsole && role != eMultimedia) || cast_handle->ignoreDeviceCallbacks != FALSE)
+	return(S_OK);
+
   SLOUT_FIRST_LINE(L"CsndDevicesMMNotificationClient::OnDefaultDeviceChanged() enters");
 
-  if( (flow == eRender) && (role == eMultimedia) && (cast_handle->ignoreDeviceCallbacks == FALSE) )
+  if (pwstrDeviceId == NULL || pwstrDeviceId[0] == L'\0')
+  {
+	  cast_handle->defaultDeviceNum = SND_DEVICES_DEVICE_NOT_PRESENT;
+	  if (cast_handle->deviceChangeCallback != NULL)
+		  cast_handle->deviceChangeCallback();
+	  return(S_OK);
+  }
+
+  if( (flow == eRender) && ((role == eConsole) || (role == eMultimedia)) && (cast_handle->ignoreDeviceCallbacks == FALSE) )
   {
 	  // If one of the DFX capture devices was set as the default and the default device has been changed, force a re-initialization.
 	  // Note- setting the flag only if a DFX device was the default is filtering out callbacks we want made.
@@ -123,13 +136,6 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDefaultDeviceChange
 	  /* Set the newly targeted playback device as the default.  It will then automatically become the targeted device */
 	  //if (sndDevicesSetDeviceType(g_sndDevicesCallbacks_hdl, SND_DEVICES_DEFAULT, &temp_string[0], &i_resultFlag) != OKAY)
 		//  return(NOT_OKAY);
-  }
-
-  // Ignore the notification for the device selected in the application.
-  if (cast_handle->defaultDeviceNum != SND_DEVICES_DEVICE_NOT_PRESENT &&
-	  wcscmp(pwstrDeviceId, cast_handle->pwszID[cast_handle->defaultDeviceNum]) == 0)
-  {
-	  return(S_OK);
   }
 
   cast_handle->defaultDeviceNum = SND_DEVICES_DEVICE_NOT_PRESENT;
