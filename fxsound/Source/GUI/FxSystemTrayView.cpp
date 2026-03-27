@@ -393,7 +393,7 @@ void FxSystemTrayView::addOutputDeviceMenu(PopupMenu* context_menu)
     {
         PopupMenu::Item menu_item(getTruncatedText(device.deviceFriendlyName.c_str(), 30));
         menu_item.setID(id);
-        if (device.deviceNumChannel < 2)
+        if (device.deviceNumChannel < 2 || !device.isActive)
         {
             menu_item.setEnabled(false);
         }

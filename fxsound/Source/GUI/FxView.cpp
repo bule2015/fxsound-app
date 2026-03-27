@@ -95,7 +95,7 @@ void FxView::modelChanged(FxModel::Event model_event)
 		for (auto device : output_devices)
 		{
 			endpoint_list_.addItem(device.deviceFriendlyName.c_str(), id);
-			if (device.deviceNumChannel < 2)
+			if (device.deviceNumChannel < 2 || !device.isActive)
 			{
 				endpoint_list_.setItemEnabled(id, false);
 			}
@@ -130,12 +130,24 @@ void FxView::modelChanged(FxModel::Event model_event)
     {
         if (!FxController::getInstance().isPlaybackDeviceAvailable())
         {
-            endpoint_list_.setItemEnabled(FxModel::getModel().getSelectedOutputIndex() + 1, false);
+            auto selected_output_index = FxModel::getModel().getSelectedOutputIndex();
+            if (selected_output_index >= 0)
+            {
+                endpoint_list_.setItemEnabled(selected_output_index + 1, false);
+            }
             endpoint_list_.setError(true);
         }
         else
         {
-            endpoint_list_.setItemEnabled(FxModel::getModel().getSelectedOutputIndex() + 1, true);
+            auto selected_output_index = FxModel::getModel().getSelectedOutputIndex();
+            if (selected_output_index >= 0)
+            {
+                auto output_devices = FxModel::getModel().getOutputDevices();
+                if (selected_output_index < (int)output_devices.size())
+                {
+                    endpoint_list_.setItemEnabled(selected_output_index + 1, output_devices[selected_output_index].isActive);
+                }
+            }
             endpoint_list_.setError(false);
             error_notification_.setVisible(false);
         }

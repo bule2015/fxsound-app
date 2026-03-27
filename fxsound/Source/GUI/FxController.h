@@ -218,15 +218,19 @@ private:
 
 	static LRESULT CALLBACK eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param);
 	void timerCallback() override;
-	void onSoundDeviceChange() override;
+	void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) override;
 	void handleSoundDeviceChange();
 	void beginAudioProcessingGracePeriod();
 	bool isAudioProcessingGracePeriodActive() const;
 	
     void initOutputs(std::vector<SoundDevice>& sound_devices);
+	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
+	void sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices);
 	void updateOutputs(std::vector<SoundDevice>& sound_devices);
     void selectProcessingOutput(std::vector<SoundDevice>& sound_devices);
     void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
+	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
+	bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, const String& device_id, const std::vector<SoundDevice>& sound_devices);
 
 	void powerOn(bool on);
 
@@ -272,6 +276,8 @@ private:
 	DWORD session_id_;
 	std::atomic<bool> device_change_message_pending_;
 	std::atomic<bool> shutting_down_;
+	AudioDeviceChangeKind pending_device_change_kind_;
+	String pending_device_change_id_;
 
 	CriticalSection lock_;
 };

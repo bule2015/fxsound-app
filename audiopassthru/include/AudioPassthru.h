@@ -41,6 +41,7 @@ struct SoundDevice {
     bool isActive = false;
 
 	std::wstring pwszID; // For the GUID ID strings for each device, all devices combined.
+	std::wstring containerId;
 	std::wstring pwszIDRealDevices; // For the GUID ID strings for each real playback device.
 	WCHAR pwszIDPreviousRealDevices[512]; // To detect when a new devices is added.
 
@@ -51,10 +52,19 @@ struct SoundDevice {
 	int deviceNumChannel; // Number of channels for all devices.
 };
 
+enum class AudioDeviceChangeKind
+{
+	Unknown = 0,
+	DefaultChanged,
+	DeviceAdded,
+	DeviceRemoved,
+	DeviceStateChanged
+};
+
 class AudioPassthruCallback
 {
 public:
-	virtual void onSoundDeviceChange() = 0;
+	virtual void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) = 0;
 };
 
 class AudioPassthruPrivate;

@@ -49,6 +49,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 	LPWSTR pwszIDdefault = NULL;
 	PROPVARIANT FriendlyName;
 	PROPVARIANT DeviceDesc;
+	PROPVARIANT ContainerId;
 	ULONG i;
 	WAVEFORMATEX wfx;
 	int k;
@@ -132,6 +133,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 		// Get and store the endpoint ID string for this device.
 		LPWSTR pID = NULL;
 		cast_handle->pwszID[i][0] = L'\0';
+		cast_handle->containerId[i][0] = L'\0';
 		hr = cast_handle->pAllDevices[i]->GetId(&pID);
 		if (FAILED(hr)) SND_DEVICES_SET_STATUS_AND_RETURN_OK(SND_DEVICES_GETID_FAILED);
 		wcscpy_s(cast_handle->pwszID[i], PT_MAX_GENERIC_STRLEN, pID);
@@ -162,6 +164,20 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 			continue;
 		}
 
+		PropVariantInit(&ContainerId);
+		hr = pProps->GetValue(PKEY_Device_ContainerId, &ContainerId);
+		if (SUCCEEDED(hr))
+		{
+			if (ContainerId.vt == VT_CLSID && ContainerId.puuid != NULL)
+			{
+				StringFromGUID2(*ContainerId.puuid, cast_handle->containerId[i], PT_MAX_GENERIC_STRLEN);
+			}
+			else if (ContainerId.vt == VT_LPWSTR && ContainerId.pwszVal != NULL)
+			{
+				wcscpy_s(cast_handle->containerId[i], PT_MAX_GENERIC_STRLEN, ContainerId.pwszVal);
+			}
+		}
+
 		if (FriendlyName.pwszVal != NULL && DeviceDesc.pwszVal != NULL)
 		{
 			wcscpy(cast_handle->deviceFriendlyName[i], FriendlyName.pwszVal);
@@ -173,6 +189,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 				CoTaskMemFree(pwszIDdefault);
 				PropVariantClear(&FriendlyName);
 				PropVariantClear(&DeviceDesc);
+				PropVariantClear(&ContainerId);
 				return(NOT_OKAY);
 			}
 			cast_handle->deviceNumChannel[i] = wfx.nChannels;
@@ -190,6 +207,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 				CoTaskMemFree(pwszIDdefault);
 				PropVariantClear(&FriendlyName);
 				PropVariantClear(&DeviceDesc);
+				PropVariantClear(&ContainerId);
 				SND_DEVICES_SET_STATUS_AND_RETURN_OK(SND_DEVICES_INSTANCE_CREATE_FAILED);
 			}
 			if (i_found_dfx_string)
@@ -201,6 +219,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 				CoTaskMemFree(pwszIDdefault);
 				PropVariantClear(&FriendlyName);
 				PropVariantClear(&DeviceDesc);
+				PropVariantClear(&ContainerId);
 				return(NOT_OKAY);
 			}
 		}
@@ -213,6 +232,7 @@ int PT_DECLSPEC sndDevices_GetAll(PT_HANDLE* hp_sndDevices, int* ip_num_devices)
 
 		PropVariantClear(&FriendlyName);
 		PropVariantClear(&DeviceDesc);
+		PropVariantClear(&ContainerId);
 	}
 
 	// -------------------------------------------------------------------------

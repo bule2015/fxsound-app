@@ -341,6 +341,7 @@ struct sndDevicesHdlType {
 	IMMDevice *pPlaybackDevice;
 
 	WCHAR pwszID[SND_DEVICES_MAX_NUM_DEVICES][PT_MAX_GENERIC_STRLEN]; // For the GUID ID strings for each device, all devices combined.
+	WCHAR containerId[SND_DEVICES_MAX_NUM_DEVICES][PT_MAX_GENERIC_STRLEN];
 	LPWSTR pwszIDRealDevices[SND_DEVICES_MAX_NUM_DEVICES]; // For the GUID ID strings for each real playback device.
 	WCHAR pwszIDPreviousRealDevices[SND_DEVICES_MAX_NUM_DEVICES][PT_MAX_GENERIC_STRLEN]; // To detect when a new devices is added.
     DWORD deviceState[SND_DEVICES_MAX_NUM_DEVICES]; // State of each device.
@@ -427,7 +428,7 @@ struct sndDevicesHdlType {
 	// Module common status flag, set by functions that can't complete their requestion operation
 	int function_status;
 
-	void (*deviceChangeCallback)();
+	void (*deviceChangeCallback)(int, LPCWSTR);
 };
 
 _COM_SMARTPTR_TYPEDEF(IMMDevice, __uuidof(IMMDevice));

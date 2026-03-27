@@ -42,6 +42,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // when this was an object in the handle, perhaps because it was allocated?
 //CsndDevicesMMNotificationClient g_DeviceEvents;
 
+static void sndDevicesUpdateCachedDeviceState(struct sndDevicesHdlType* cast_handle, LPCWSTR pwstrDeviceId, DWORD dwNewState)
+{
+  if (cast_handle == NULL || pwstrDeviceId == NULL || pwstrDeviceId[0] == L'\0')
+    return;
+
+  for (int i = 0; i < cast_handle->totalNumDevices; i++)
+  {
+    if (wcscmp(cast_handle->pwszID[i], pwstrDeviceId) == 0)
+    {
+      cast_handle->deviceState[i] = dwNewState;
+      break;
+    }
+  }
+}
+
 CsndDevicesMMNotificationClient::CsndDevicesMMNotificationClient() :_cRef(1),_pEnumerator(NULL)
 {
 }
@@ -117,7 +132,7 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDefaultDeviceChange
   {
 	  cast_handle->defaultDeviceNum = SND_DEVICES_DEVICE_NOT_PRESENT;
 	  if (cast_handle->deviceChangeCallback != NULL)
-		  cast_handle->deviceChangeCallback();
+		  cast_handle->deviceChangeCallback(SND_DEVICES_DEFAULT_DEVICE_CHANGED, pwstrDeviceId);
 	  return(S_OK);
   }
 
@@ -150,7 +165,7 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDefaultDeviceChange
   }
 
   if (cast_handle->deviceChangeCallback != NULL)
-	  cast_handle->deviceChangeCallback();
+	  cast_handle->deviceChangeCallback(SND_DEVICES_DEFAULT_DEVICE_CHANGED, pwstrDeviceId);
 
   return S_OK;
 }
@@ -173,7 +188,7 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDeviceAdded(LPCWSTR
   }
 
   if (cast_handle->deviceChangeCallback != NULL)
-	  cast_handle->deviceChangeCallback();
+	  cast_handle->deviceChangeCallback(SND_DEVICES_DEVICE_ADDED, pwstrDeviceId);
 
   return S_OK;
 };
@@ -196,7 +211,7 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDeviceRemoved(LPCWS
   }
 
   if (cast_handle->deviceChangeCallback != NULL)
-	  cast_handle->deviceChangeCallback();
+	  cast_handle->deviceChangeCallback(SND_DEVICES_DEVICE_REMOVED, pwstrDeviceId);
 
   return S_OK;
 }
@@ -247,13 +262,15 @@ HRESULT STDMETHODCALLTYPE CsndDevicesMMNotificationClient::OnDeviceStateChanged(
 
   cast_handle->lastDeviceAddCallbackGuidtype = dwNewState;
 
+  sndDevicesUpdateCachedDeviceState(cast_handle, pwstrDeviceId, dwNewState);
+
   if( cast_handle->ignoreDeviceCallbacks == FALSE )
   {
 	  SLOUT_FIRST_LINE(L"CsndDevicesMMNotificationClient::OnDeviceStateChanged() setting processing thread kill flag");
   }
 
   if (cast_handle->deviceChangeCallback != NULL)
-	  cast_handle->deviceChangeCallback();
+	  cast_handle->deviceChangeCallback(type, pwstrDeviceId);
 
   return S_OK;
 }

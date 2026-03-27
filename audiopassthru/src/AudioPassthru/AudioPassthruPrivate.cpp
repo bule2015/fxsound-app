@@ -170,6 +170,7 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 
 		SoundDevice sound_device;
 		sound_device.pwszID = std::wstring(cast_handle->pwszID[index]);
+		sound_device.containerId = std::wstring(cast_handle->containerId[index]);
 		sound_device.deviceFriendlyName = std::wstring(cast_handle->deviceFriendlyName[index]);
 		sound_device.deviceDescription = std::wstring(cast_handle->deviceDescription[index][0] != L'\0' ? cast_handle->deviceDescription[index] : L"");
 		sound_device.deviceNumChannel = cast_handle->deviceNumChannel[index];
@@ -225,11 +226,33 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 	return(OKAY);
 }
 
-void AudioPassthruPrivate::onDeviceChange()
+void AudioPassthruPrivate::onDeviceChange(int change_type, LPCWSTR device_id)
 {
 	if (s_callback_ != nullptr)
 	{
-		s_callback_->onSoundDeviceChange();
+		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown;
+
+		switch (change_type)
+		{
+			case SND_DEVICES_DEFAULT_DEVICE_CHANGED:
+				change_kind = AudioDeviceChangeKind::DefaultChanged;
+				break;
+			case SND_DEVICES_DEVICE_ADDED:
+				change_kind = AudioDeviceChangeKind::DeviceAdded;
+				break;
+			case SND_DEVICES_DEVICE_REMOVED:
+				change_kind = AudioDeviceChangeKind::DeviceRemoved;
+				break;
+			case SND_DEVICES_DEVICE_ACTIVE:
+			case SND_DEVICES_DEVICE_DISABLED:
+			case SND_DEVICES_DEVICE_NOTPRESENT:
+			case SND_DEVICES_DEVICE_UNPLUGGED:
+			case SND_DEVICES_DEVICE_PROPERTY_CHANGE:
+				change_kind = AudioDeviceChangeKind::DeviceStateChanged;
+				break;
+		}
+
+		s_callback_->onSoundDeviceChange(change_kind, device_id != nullptr ? std::wstring(device_id) : std::wstring());
 	}
 }
 

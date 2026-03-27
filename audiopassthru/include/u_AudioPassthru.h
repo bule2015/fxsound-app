@@ -56,7 +56,7 @@ public:
 
 private:
 	int sndDeviceHandleToSoundDevices(bool active_devices = true);
-	static void onDeviceChange();
+	static void onDeviceChange(int change_type, LPCWSTR device_id);
 
 	PT_HANDLE *hp_sndDevices_;
 	static sndDevicesHdlType s_sndDevices_;
