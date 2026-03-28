@@ -63,6 +63,15 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	struct PersistedOutputState
+	{
+		std::wstring device_id;
+		std::wstring device_name;
+		std::wstring container_id;
+		std::wstring device_description;
+		int device_num_channel = 2;
+	};
+
 	struct IdleSyncDecision
 	{
 		SoundDevice resolved_output;
@@ -93,6 +102,34 @@ namespace FxSound::OutputDeviceSelection
 			!rhs.deviceFriendlyName.empty() &&
 			lhs.deviceFriendlyName == rhs.deviceFriendlyName &&
 			lhs.deviceDescription == rhs.deviceDescription;
+	}
+
+	inline SoundDevice restorePersistedOutput(const PersistedOutputState& persisted_output)
+	{
+		if (persisted_output.device_id.empty() && persisted_output.device_name.empty())
+		{
+			return {};
+		}
+
+		SoundDevice sound_device;
+		sound_device.isRealDevice = true;
+		sound_device.pwszID = persisted_output.device_id;
+		sound_device.deviceFriendlyName = persisted_output.device_name;
+		sound_device.containerId = persisted_output.container_id;
+		sound_device.deviceDescription = persisted_output.device_description;
+		sound_device.deviceNumChannel = persisted_output.device_num_channel;
+		return sound_device;
+	}
+
+	inline PersistedOutputState makePersistedOutputState(const SoundDevice& sound_device)
+	{
+		PersistedOutputState persisted_output;
+		persisted_output.device_id = sound_device.pwszID;
+		persisted_output.device_name = sound_device.deviceFriendlyName;
+		persisted_output.container_id = sound_device.containerId;
+		persisted_output.device_description = sound_device.deviceDescription;
+		persisted_output.device_num_channel = sound_device.deviceNumChannel;
+		return persisted_output;
 	}
 
 	inline int getOutputDevicePriority(const std::vector<PriorityEntry>& priorities, const SoundDevice& sound_device)

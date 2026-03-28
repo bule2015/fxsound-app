@@ -2172,34 +2172,23 @@ int FxController::compareOutputDevicePriority(const String& output_device_name1,
 
 SoundDevice FxController::loadSelectedOutputFromSettings()
 {
-	SoundDevice sound_device;
-	auto selected_output_id = settings_.getString(kSelectedOutputIdSetting);
-	auto selected_output_name = settings_.getString(kSelectedOutputNameSetting);
-	auto selected_output_container_id = settings_.getString(kSelectedOutputContainerIdSetting);
-	auto selected_output_description = settings_.getString(kSelectedOutputDescriptionSetting);
-
-	if (selected_output_id.isEmpty() && selected_output_name.isEmpty())
-	{
-		return {};
-	}
-
-	sound_device.isRealDevice = true;
-	sound_device.pwszID = selected_output_id.toWideCharPointer();
-	sound_device.deviceFriendlyName = selected_output_name.toWideCharPointer();
-	sound_device.containerId = selected_output_container_id.toWideCharPointer();
-	sound_device.deviceDescription = selected_output_description.toWideCharPointer();
-	sound_device.deviceNumChannel = settings_.getInt(kSelectedOutputChannelsSetting, 2);
-
-	return sound_device;
+	FxSound::OutputDeviceSelection::PersistedOutputState persisted_output;
+	persisted_output.device_id = settings_.getString(kSelectedOutputIdSetting).toWideCharPointer();
+	persisted_output.device_name = settings_.getString(kSelectedOutputNameSetting).toWideCharPointer();
+	persisted_output.container_id = settings_.getString(kSelectedOutputContainerIdSetting).toWideCharPointer();
+	persisted_output.device_description = settings_.getString(kSelectedOutputDescriptionSetting).toWideCharPointer();
+	persisted_output.device_num_channel = settings_.getInt(kSelectedOutputChannelsSetting, 2);
+	return FxSound::OutputDeviceSelection::restorePersistedOutput(persisted_output);
 }
 
 void FxController::saveSelectedOutputToSettings(const SoundDevice& sound_device)
 {
-	settings_.setString(kSelectedOutputIdSetting, String(sound_device.pwszID.c_str()));
-	settings_.setString(kSelectedOutputNameSetting, String(sound_device.deviceFriendlyName.c_str()));
-	settings_.setString(kSelectedOutputContainerIdSetting, String(sound_device.containerId.c_str()));
-	settings_.setString(kSelectedOutputDescriptionSetting, String(sound_device.deviceDescription.c_str()));
-	settings_.setInt(kSelectedOutputChannelsSetting, sound_device.deviceNumChannel);
+	auto persisted_output = FxSound::OutputDeviceSelection::makePersistedOutputState(sound_device);
+	settings_.setString(kSelectedOutputIdSetting, String(persisted_output.device_id.c_str()));
+	settings_.setString(kSelectedOutputNameSetting, String(persisted_output.device_name.c_str()));
+	settings_.setString(kSelectedOutputContainerIdSetting, String(persisted_output.container_id.c_str()));
+	settings_.setString(kSelectedOutputDescriptionSetting, String(persisted_output.device_description.c_str()));
+	settings_.setInt(kSelectedOutputChannelsSetting, persisted_output.device_num_channel);
 }
 
 const String& FxController::getOutputName()
