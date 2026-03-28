@@ -183,7 +183,7 @@ namespace FxSound::OutputDeviceSelection
 		std::vector<PriorityEntry> priorities;
 		for (const auto& sound_device : sorted_devices)
 		{
-			if (!sound_device.isRealDevice)
+			if (!sound_device.isRealDevice || sound_device.deviceNumChannel < 2)
 			{
 				continue;
 			}
@@ -209,20 +209,42 @@ namespace FxSound::OutputDeviceSelection
 		const std::vector<SoundDevice>& sound_devices)
 	{
 		PriorityMergeResult result;
-		result.priorities = existing_priorities;
+		result.priorities.reserve(existing_priorities.size());
+
+		auto matchesPriorityEntry = [](const PriorityEntry& entry, const SoundDevice& sound_device)
+		{
+			return (!entry.device_id.empty() && entry.device_id == sound_device.pwszID) ||
+				(!entry.device_name.empty() && entry.device_name == sound_device.deviceFriendlyName);
+		};
+
+		for (const auto& existing_entry : existing_priorities)
+		{
+			auto known_device = std::find_if(sound_devices.begin(), sound_devices.end(),
+				[&existing_entry, &matchesPriorityEntry](const SoundDevice& sound_device)
+				{
+					return sound_device.isRealDevice && matchesPriorityEntry(existing_entry, sound_device);
+				});
+
+			if (known_device != sound_devices.end() && known_device->deviceNumChannel < 2)
+			{
+				result.changed = true;
+				continue;
+			}
+
+			result.priorities.push_back(existing_entry);
+		}
 
 		for (const auto& sound_device : sound_devices)
 		{
-			if (!sound_device.isRealDevice)
+			if (!sound_device.isRealDevice || sound_device.deviceNumChannel < 2)
 			{
 				continue;
 			}
 
 			auto existing_entry = std::find_if(result.priorities.begin(), result.priorities.end(),
-				[&sound_device](const PriorityEntry& entry)
+				[&sound_device, &matchesPriorityEntry](const PriorityEntry& entry)
 				{
-					return (!entry.device_id.empty() && entry.device_id == sound_device.pwszID) ||
-						(!entry.device_name.empty() && entry.device_name == sound_device.deviceFriendlyName);
+					return matchesPriorityEntry(entry, sound_device);
 				});
 
 			if (existing_entry == result.priorities.end())
@@ -563,7 +585,7 @@ namespace FxSound::OutputDeviceSelection
 
 		for (const auto& sound_device : sound_devices)
 		{
-			if (!sound_device.isRealDevice || output_device_id != sound_device.pwszID)
+			if (!sound_device.isRealDevice || output_device_id != sound_device.pwszID || sound_device.deviceNumChannel < 2)
 			{
 				continue;
 			}
