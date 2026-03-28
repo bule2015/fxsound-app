@@ -63,6 +63,15 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	struct IdleSyncDecision
+	{
+		SoundDevice resolved_output;
+		bool has_resolved_output = false;
+		bool output_changed = false;
+		bool name_changed = false;
+		bool should_notify_error = false;
+	};
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -316,6 +325,26 @@ namespace FxSound::OutputDeviceSelection
 		}
 
 		return true;
+	}
+
+	inline IdleSyncDecision buildIdleSyncDecision(const std::vector<SoundDevice>& output_devices,
+		const SoundDevice& selected_output,
+		const std::wstring& output_name,
+		const std::vector<PriorityEntry>& priorities)
+	{
+		IdleSyncDecision decision;
+		decision.resolved_output = resolveSelectedOutput(output_devices, selected_output, output_name, priorities);
+		decision.has_resolved_output = !decision.resolved_output.pwszID.empty();
+
+		if (!decision.has_resolved_output)
+		{
+			return decision;
+		}
+
+		decision.output_changed = selected_output.pwszID != decision.resolved_output.pwszID;
+		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
+		decision.should_notify_error = !decision.resolved_output.isActive;
+		return decision;
 	}
 
 	inline SyncDecision buildSyncDecision(const std::vector<SoundDevice>& output_devices,

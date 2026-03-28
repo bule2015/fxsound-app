@@ -1200,32 +1200,20 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 	}
 
 	auto& model = FxModel::getModel();
-	auto selected_output = model.getSelectedOutput();
-	auto synced_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+	auto idle_sync_decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		active_output_devices_,
-		selected_output,
+		model.getSelectedOutput(),
 		getOutputName().toWideCharPointer(),
 		loadOutputPriorities(settings_));
 
-	if (synced_output.pwszID.empty())
+	if (idle_sync_decision.has_resolved_output)
 	{
-		for (auto& output_device : active_output_devices_)
-		{
-			if (output_device.isDefaultDevice)
-			{
-				synced_output = output_device;
-				break;
-			}
-		}
-	}
-
-	if (!synced_output.pwszID.empty())
-	{
+		auto& synced_output = idle_sync_decision.resolved_output;
 		setOutputName(synced_output.deviceFriendlyName.c_str());
 		model.setSelectedOutput(synced_output);
 		saveSelectedOutputToSettings(synced_output);
 
-		if (!synced_output.isActive)
+		if (idle_sync_decision.should_notify_error)
 		{
 			playback_device_available_ = false;
 			model.notifyOutputError();
