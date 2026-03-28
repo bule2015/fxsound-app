@@ -535,6 +535,29 @@ void testBuildVisibleOutputsDropsUnselectedInactive()
 	expect(output_devices[0].deviceFriendlyName == L"Speakers", "active selected output should remain visible");
 }
 
+void testRestorePersistedOutputReturnsEmptyWhenStateIsEmpty()
+{
+	auto sound_device = FxSound::OutputDeviceSelection::restorePersistedOutput({});
+	expect(sound_device.pwszID.empty(), "empty persisted output should restore as an empty sound device");
+	expect(sound_device.deviceFriendlyName.empty(), "empty persisted output should not set a device name");
+}
+
+void testPersistedOutputRoundTripPreservesIdentity()
+{
+	auto original_output = makeOutput(L"dac", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	original_output.deviceNumChannel = 6;
+
+	auto persisted_output = FxSound::OutputDeviceSelection::makePersistedOutputState(original_output);
+	auto restored_output = FxSound::OutputDeviceSelection::restorePersistedOutput(persisted_output);
+
+	expect(restored_output.isRealDevice, "restored persisted output should be marked as a real device");
+	expect(restored_output.pwszID == L"dac", "restored persisted output should preserve the endpoint id");
+	expect(restored_output.deviceFriendlyName == L"USB DAC", "restored persisted output should preserve the device name");
+	expect(restored_output.containerId == L"c-dac", "restored persisted output should preserve the container id");
+	expect(restored_output.deviceDescription == L"USB Audio", "restored persisted output should preserve the description");
+	expect(restored_output.deviceNumChannel == 6, "restored persisted output should preserve the channel count");
+}
+
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
 {
 	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -1118,6 +1141,8 @@ int main()
 	{
 		runTest("build visible outputs keeps selected inactive", testBuildVisibleOutputsKeepsSelectedInactive);
 		runTest("build visible outputs drops unselected inactive", testBuildVisibleOutputsDropsUnselectedInactive);
+		runTest("restore persisted output returns empty when state is empty", testRestorePersistedOutputReturnsEmptyWhenStateIsEmpty);
+		runTest("persisted output round trip preserves identity", testPersistedOutputRoundTripPreservesIdentity);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
