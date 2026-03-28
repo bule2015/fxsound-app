@@ -66,9 +66,10 @@ public:
 	FxController(const FxController&) = delete;
 	void operator=(FxController&) = delete;
 
-    void config(const String& commandline);
+	void config(const String& commandline);
 	void init(FxMainWindow* main_window, FxSystemTrayView* system_tray_view, IAudioPassthru* audio_passthru);
 	void initPresets();
+	void releaseRuntimeObjects();
 
 	void showView();
 	void switchView();

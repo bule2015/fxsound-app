@@ -64,6 +64,10 @@ AudioPassthruPrivate::~AudioPassthruPrivate()
 	if (i_timed_out)
 		return;
 
+	s_callback_ = nullptr;
+	s_sndDevices_.deviceChangeCallback = nullptr;
+	device_change_pending_ = false;
+
 	/*
 	* Disable the virtual soundcard
 	* NOTE: FOR NOW WE DON'T DO THE DISABLE BECAUSE THIS CAN CAUSE PROBLEMS
@@ -123,11 +127,12 @@ void AudioPassthruPrivate::setDspProcessingModule(DfxDsp* p_dfx_dsp)
 
 std::vector<SoundDevice> AudioPassthruPrivate::getSoundDevices(bool active_devices)
 {
-	sndDeviceHandleToSoundDevices(active_devices);
-	return sound_devices_;
+	std::vector<SoundDevice> sound_devices;
+	sndDeviceHandleToSoundDevices(sound_devices, active_devices);
+	return sound_devices;
 }
 
-int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
+int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(std::vector<SoundDevice>& sound_devices, bool active_devices)
 {
 	int i_resultFlag;
 	wchar_t wcp_user_seleted_playback_device_guid[PT_MAX_GENERIC_STRLEN];
@@ -140,8 +145,7 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 	struct sndDevicesHdlType *cast_handle;
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices_;
 
-	// Clear SoundDevices
-	sound_devices_.clear();
+	sound_devices.clear();
 
 	wcp_user_seleted_playback_device_guid[0] = L'\0';
 
@@ -220,7 +224,7 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(bool active_devices)
 			sound_device.isDefaultDevice = true;
 		}
 
-		sound_devices_.push_back(sound_device);
+		sound_devices.push_back(sound_device);
 	}	
 
 	return(OKAY);

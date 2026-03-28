@@ -502,6 +502,28 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 	}
 }
 
+void FxController::releaseRuntimeObjects()
+{
+	ScopedLock auto_lock(lock_);
+
+	shutting_down_ = true;
+	device_change_message_pending_ = false;
+	pending_device_change_kind_ = AudioDeviceChangeKind::Unknown;
+	pending_device_change_id_.clear();
+
+	stopTimer();
+	SetWindowLongPtr(message_window_.getHandle(), GWLP_USERDATA, 0);
+
+	if (audio_passthru_ != nullptr)
+	{
+		audio_passthru_->registerCallback(nullptr);
+	}
+
+	audio_passthru_ = nullptr;
+	system_tray_view_ = nullptr;
+	main_window_ = nullptr;
+}
+
 void FxController::initPresets()
 {
 	Array<FxModel::Preset> presets;

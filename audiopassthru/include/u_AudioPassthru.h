@@ -55,7 +55,7 @@ public:
 	bool restartProcessingForDeviceChange();
 
 private:
-	int sndDeviceHandleToSoundDevices(bool active_devices = true);
+	int sndDeviceHandleToSoundDevices(std::vector<SoundDevice>& sound_devices, bool active_devices = true);
 	static void onDeviceChange(int change_type, LPCWSTR device_id);
 
 	PT_HANDLE *hp_sndDevices_;
@@ -69,7 +69,6 @@ private:
 	wchar_t wcp_playback_device_guid_[PT_MAX_GENERIC_STRLEN];
 	bool b_no_valid_snd_device_dialog_shown_; /* Flag stating whether we have shown the user a message to select a valid snd device.  We only want it shown once per session. */
 	int debug_;
-	std::vector<SoundDevice> sound_devices_;
 	bool mute_;
 	DfxDsp *p_dfx_dsp_;
 	static AudioPassthruCallback *s_callback_;
