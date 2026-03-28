@@ -677,6 +677,22 @@ void testBuildInitialOutputPrioritiesDropsDuplicatesByName()
 	expect(priorities[0].device_name == L"USB DAC", "initial priorities should preserve the device name");
 }
 
+void testBuildInitialOutputPrioritiesSkipsMonoDevices()
+{
+	auto mono_output = makeOutput(L"chat", L"Headset Chat", L"Chat", true, false, false, L"c-chat");
+	mono_output.deviceNumChannel = 1;
+
+	std::vector<SoundDevice> sound_devices {
+		mono_output,
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+
+	auto priorities = FxSound::OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
+
+	expect(priorities.size() == 1, "initial priorities should skip mono outputs");
+	expect(priorities[0].device_id == L"spk", "initial priorities should keep stereo outputs only");
+}
+
 void testMergeOutputPrioritiesAppendsNewOutputs()
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
@@ -708,6 +724,26 @@ void testMergeOutputPrioritiesRefreshesReconnectedIds()
 	expect(merge_result.changed, "merge should report changes when a known output reconnects with a new endpoint id");
 	expect(merge_result.priorities.size() == 1, "merge should preserve the original priority entry count");
 	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the stored endpoint id for the known output");
+}
+
+void testMergeOutputPrioritiesDropsKnownMonoOutputs()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"chat", L"Headset Chat"},
+		{L"spk", L"Speakers"}
+	};
+	auto mono_output = makeOutput(L"chat", L"Headset Chat", L"Chat", true, false, false, L"c-chat");
+	mono_output.deviceNumChannel = 1;
+	std::vector<SoundDevice> sound_devices {
+		mono_output,
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+
+	expect(merge_result.changed, "merge should report changes when a known mono output is removed from priorities");
+	expect(merge_result.priorities.size() == 1, "merge should drop known mono outputs from priorities");
+	expect(merge_result.priorities[0].device_id == L"spk", "merge should keep stereo priorities after dropping mono outputs");
 }
 
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
@@ -1041,6 +1077,24 @@ void testManualSelectionDecisionPowersOffWhenOutputIsMissing()
 	expect(decision.should_power_off, "missing output should request power off");
 }
 
+void testManualSelectionDecisionRejectsMonoOutput()
+{
+	auto mono_output = makeOutput(L"chat", L"Headset Chat", L"Chat", true, false, false, L"c-chat");
+	mono_output.deviceNumChannel = 1;
+	std::vector<SoundDevice> sound_devices { mono_output };
+
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		sound_devices,
+		L"chat",
+		{},
+		true,
+		true,
+		true);
+
+	expect(!decision.found_output, "manual selection should reject mono outputs");
+	expect(decision.should_power_off, "manual selection should treat mono outputs as unavailable");
+}
+
 void testScenarioKeepsSelectedActiveOutputAcrossUnrelatedReconnect()
 {
 	ScenarioState state;
@@ -1304,8 +1358,10 @@ int main()
 		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);
 		runTest("build initial output priorities keeps default first", testBuildInitialOutputPrioritiesKeepsDefaultFirst);
 		runTest("build initial output priorities drops duplicates by name", testBuildInitialOutputPrioritiesDropsDuplicatesByName);
+		runTest("build initial output priorities skips mono devices", testBuildInitialOutputPrioritiesSkipsMonoDevices);
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
 		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
+		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
@@ -1323,6 +1379,7 @@ int main()
 		runTest("manual selection restarts processing after inactive selection", testManualSelectionDecisionRestartsProcessingAfterInactiveSelection);
 		runTest("manual selection leaves default output untouched when processing is off", testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff);
 		runTest("manual selection powers off when output is missing", testManualSelectionDecisionPowersOffWhenOutputIsMissing);
+		runTest("manual selection rejects mono output", testManualSelectionDecisionRejectsMonoOutput);
 		runTest("scenario keeps selected active output across unrelated reconnect", testScenarioKeepsSelectedActiveOutputAcrossUnrelatedReconnect);
 		runTest("scenario restores reconnected selected output", testScenarioRestoresReconnectedSelectedOutput);
 		runTest("scenario manual selection recovers from inactive output", testScenarioManualSelectionRecoversFromInactiveOutput);
