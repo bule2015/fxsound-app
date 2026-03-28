@@ -131,6 +131,57 @@ void testGetPreferredOutputUsesConfiguredPriority()
 	expect(preferred_output.pwszID == L"hdmi", "preferred output should follow configured priority");
 }
 
+void testShouldIgnoreDeviceChangeForUnselectedActiveDevice()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> sound_devices {
+		selected_output,
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+
+	auto ignored = FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
+		AudioDeviceChangeKind::DeviceStateChanged,
+		L"hdmi",
+		selected_output,
+		sound_devices);
+
+	expect(ignored, "device changes for unselected active outputs should be ignored");
+}
+
+void testShouldNotIgnoreDeviceChangeForSelectedOutput()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> sound_devices {
+		selected_output,
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+
+	auto ignored = FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
+		AudioDeviceChangeKind::DeviceStateChanged,
+		L"spk",
+		selected_output,
+		sound_devices);
+
+	expect(!ignored, "selected output changes should not be ignored");
+}
+
+void testShouldNotIgnoreDeviceChangeWhenSelectedOutputIsInactive()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", false, false, false, L"c-spk");
+	std::vector<SoundDevice> sound_devices {
+		selected_output,
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, true, L"c-hdmi")
+	};
+
+	auto ignored = FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
+		AudioDeviceChangeKind::DeviceStateChanged,
+		L"hdmi",
+		selected_output,
+		sound_devices);
+
+	expect(!ignored, "inactive selected output should not suppress device changes");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -147,6 +198,9 @@ int main()
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
+		runTest("ignore device change for unselected active device", testShouldIgnoreDeviceChangeForUnselectedActiveDevice);
+		runTest("do not ignore device change for selected output", testShouldNotIgnoreDeviceChangeForSelectedOutput);
+		runTest("do not ignore device change when selected output is inactive", testShouldNotIgnoreDeviceChangeWhenSelectedOutputIsInactive);
 	}
 	catch (const std::exception& exception)
 	{
