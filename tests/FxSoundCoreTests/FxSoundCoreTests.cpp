@@ -604,6 +604,52 @@ void testAutoPresetDecisionSkipsEmptyPreset()
 	expect(!decision.should_apply, "auto preset should not apply when no preset is configured");
 }
 
+void testScanProcessingOutputsPrefersTargetedOutput()
+{
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"usb", L"USB DAC", L"USB Audio", true, false, true, L"c-usb")
+	};
+
+	auto snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
+
+	expect(!snapshot.dfx_enabled, "processing scan should not report dfx enabled without the virtual endpoint");
+	expect(snapshot.has_synced_output, "processing scan should resolve an output when an active real device exists");
+	expect(snapshot.synced_output.pwszID == L"usb", "processing scan should prefer the targeted playback device");
+}
+
+void testScanProcessingOutputsSkipsMonoDefaultWithoutFallback()
+{
+	auto mono_default = makeOutput(L"mono", L"Headset Chat", L"Chat", true, true, false, L"c-chat");
+	mono_default.deviceNumChannel = 1;
+
+	std::vector<SoundDevice> sound_devices {
+		mono_default,
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, false, false, L"c-spk")
+	};
+
+	auto snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
+
+	expect(!snapshot.has_synced_output, "processing scan should skip mono defaults when no targeted or default stereo output exists");
+}
+
+void testScanProcessingOutputsDetectsDfxEndpoint()
+{
+	SoundDevice dfx_device;
+	dfx_device.isRealDevice = false;
+	dfx_device.deviceFriendlyName = L"FxSound Audio Enhancer";
+
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		dfx_device
+	};
+
+	auto snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
+
+	expect(snapshot.dfx_enabled, "processing scan should detect the FxSound virtual endpoint");
+	expect(snapshot.has_synced_output, "processing scan should keep the real output alongside the virtual endpoint");
+}
+
 void testBuildInitialOutputPrioritiesKeepsDefaultFirst()
 {
 	std::vector<SoundDevice> sound_devices {
@@ -1253,6 +1299,9 @@ int main()
 		runTest("auto preset decision skips modified preset", testAutoPresetDecisionSkipsModifiedPreset);
 		runTest("auto preset decision skips when not triggered", testAutoPresetDecisionSkipsWhenNotTriggered);
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
+		runTest("processing scan prefers targeted output", testScanProcessingOutputsPrefersTargetedOutput);
+		runTest("processing scan skips mono default without fallback", testScanProcessingOutputsSkipsMonoDefaultWithoutFallback);
+		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);
 		runTest("build initial output priorities keeps default first", testBuildInitialOutputPrioritiesKeepsDefaultFirst);
 		runTest("build initial output priorities drops duplicates by name", testBuildInitialOutputPrioritiesDropsDuplicatesByName);
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
