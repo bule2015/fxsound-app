@@ -32,6 +32,12 @@ namespace FxSound::OutputDeviceSelection
 		std::wstring device_name;
 	};
 
+	struct PriorityMergeResult
+	{
+		std::vector<PriorityEntry> priorities;
+		bool changed = false;
+	};
+
 	struct SyncDecision
 	{
 		SoundDevice resolved_output;
@@ -154,6 +160,81 @@ namespace FxSound::OutputDeviceSelection
 		}
 
 		return priority;
+	}
+
+	inline std::vector<PriorityEntry> buildInitialOutputPriorities(const std::vector<SoundDevice>& sound_devices)
+	{
+		std::vector<SoundDevice> sorted_devices = sound_devices;
+		std::stable_sort(sorted_devices.begin(), sorted_devices.end(),
+			[](const SoundDevice& a, const SoundDevice& b)
+			{
+				auto priority_a = (a.isDefaultDevice || a.isTargetedRealPlaybackDevice) ? 2 : (a.isActive ? 1 : 0);
+				auto priority_b = (b.isDefaultDevice || b.isTargetedRealPlaybackDevice) ? 2 : (b.isActive ? 1 : 0);
+				return priority_a > priority_b;
+			});
+
+		std::vector<PriorityEntry> priorities;
+		for (const auto& sound_device : sorted_devices)
+		{
+			if (!sound_device.isRealDevice)
+			{
+				continue;
+			}
+
+			PriorityEntry entry { sound_device.pwszID, sound_device.deviceFriendlyName };
+			auto duplicate = std::find_if(priorities.begin(), priorities.end(),
+				[&entry](const PriorityEntry& existing_entry)
+				{
+					return (!entry.device_id.empty() && existing_entry.device_id == entry.device_id) ||
+						(!entry.device_name.empty() && existing_entry.device_name == entry.device_name);
+				});
+
+			if (duplicate == priorities.end())
+			{
+				priorities.push_back(entry);
+			}
+		}
+
+		return priorities;
+	}
+
+	inline PriorityMergeResult mergeOutputPriorities(const std::vector<PriorityEntry>& existing_priorities,
+		const std::vector<SoundDevice>& sound_devices)
+	{
+		PriorityMergeResult result;
+		result.priorities = existing_priorities;
+
+		for (const auto& sound_device : sound_devices)
+		{
+			if (!sound_device.isRealDevice)
+			{
+				continue;
+			}
+
+			auto existing_entry = std::find_if(result.priorities.begin(), result.priorities.end(),
+				[&sound_device](const PriorityEntry& entry)
+				{
+					return (!entry.device_id.empty() && entry.device_id == sound_device.pwszID) ||
+						(!entry.device_name.empty() && entry.device_name == sound_device.deviceFriendlyName);
+				});
+
+			if (existing_entry == result.priorities.end())
+			{
+				result.priorities.push_back({ sound_device.pwszID, sound_device.deviceFriendlyName });
+				result.changed = true;
+				continue;
+			}
+
+			if (existing_entry->device_id != sound_device.pwszID ||
+				existing_entry->device_name != sound_device.deviceFriendlyName)
+			{
+				existing_entry->device_id = sound_device.pwszID;
+				existing_entry->device_name = sound_device.deviceFriendlyName;
+				result.changed = true;
+			}
+		}
+
+		return result;
 	}
 
 	inline void sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices, const std::vector<PriorityEntry>& priorities)

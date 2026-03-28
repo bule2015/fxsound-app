@@ -18,32 +18,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "DeviceConfig.h"
 #include "Settings.h"
+#include "../../GUI/OutputDeviceSelection.h"
 
 namespace FxSound
 {
     void DeviceConfig::initDeviceConfigs(Settings& settings, std::vector<SoundDevice>& sound_devices)
     {
         juce::Array<DeviceConfig> device_configs;
-
-        std::sort(sound_devices.begin(), sound_devices.end(),
-            [](const SoundDevice& a, const SoundDevice& b)
-            {
-                return a.isActive > b.isActive;
-            });
-
-        std::sort(sound_devices.begin(), sound_devices.end(),
-            [](const SoundDevice& a, const SoundDevice& b)
-            {
-                return (a.isDefaultDevice || a.isTargetedRealPlaybackDevice) > (b.isDefaultDevice || b.isTargetedRealPlaybackDevice);
-            });
-
-        for (auto sound_device : sound_devices)
+        auto priorities = OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
+        for (const auto& priority : priorities)
         {
-            if (sound_device.isRealDevice)
-            {
-                DeviceConfig device_config = { sound_device.pwszID.c_str() , sound_device.deviceFriendlyName.c_str(), "" };
-                device_configs.add(device_config);
-            }            
+            DeviceConfig device_config = { priority.device_id.c_str(), priority.device_name.c_str(), "" };
+            device_configs.add(device_config);
         }
 
         saveDeviceConfigs(settings, "device_configs", device_configs);
@@ -52,32 +38,38 @@ namespace FxSound
     void DeviceConfig::updateDeviceConfigs(Settings& settings, const std::vector<SoundDevice>& sound_devices)
     {
         juce::Array<DeviceConfig> device_configs = loadDeviceConfigs(settings, "device_configs");
-
-        bool save_config = false;
-        for (auto sound_device : sound_devices)
+        std::vector<OutputDeviceSelection::PriorityEntry> existing_priorities;
+        existing_priorities.reserve(static_cast<size_t>(device_configs.size()));
+        for (const auto& device_config : device_configs)
         {
-            if (!sound_device.isRealDevice)
-                continue;
-
-            bool device_found = false;
-            for (auto device_config : device_configs)
-            {
-                if (device_config.device_name == sound_device.deviceFriendlyName.c_str())
-                {
-                    device_found = true;
-                    break;
-                }
-            }
-            if (!device_found)
-            {
-                save_config = true;
-                DeviceConfig device_config = { sound_device.pwszID.c_str() , sound_device.deviceFriendlyName.c_str(), "" };
-                device_configs.add(device_config);
-            }
+            existing_priorities.push_back({
+                device_config.device_id.toWideCharPointer(),
+                device_config.device_name.toWideCharPointer()
+                });
         }
 
-        if (save_config)
+        auto merge_result = OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+        if (merge_result.changed)
         {
+            juce::Array<DeviceConfig> merged_device_configs;
+            merged_device_configs.ensureStorageAllocated(static_cast<int>(merge_result.priorities.size()));
+            for (const auto& priority : merge_result.priorities)
+            {
+                auto existing_config = std::find_if(device_configs.begin(), device_configs.end(),
+                    [&priority](const DeviceConfig& device_config)
+                    {
+                        return device_config.device_name == priority.device_name.c_str();
+                    });
+
+                DeviceConfig device_config {
+                    priority.device_id.c_str(),
+                    priority.device_name.c_str(),
+                    existing_config != device_configs.end() ? existing_config->preset : juce::String()
+                };
+                merged_device_configs.add(device_config);
+            }
+
+            device_configs = merged_device_configs;
             saveDeviceConfigs(settings, "device_configs", device_configs);
         }
     }
