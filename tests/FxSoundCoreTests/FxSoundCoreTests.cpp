@@ -604,6 +604,66 @@ void testAutoPresetDecisionSkipsEmptyPreset()
 	expect(!decision.should_apply, "auto preset should not apply when no preset is configured");
 }
 
+void testBuildInitialOutputPrioritiesKeepsDefaultFirst()
+{
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi"),
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"usb", L"USB DAC", L"USB Audio", false, false, false, L"c-usb")
+	};
+
+	auto priorities = FxSound::OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
+
+	expect(priorities.size() == 3, "initial priorities should include each real output once");
+	expect(priorities[0].device_id == L"spk", "default or targeted output should lead the initial priority order");
+}
+
+void testBuildInitialOutputPrioritiesDropsDuplicatesByName()
+{
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", true, false, false, L"c-dac"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+
+	auto priorities = FxSound::OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
+
+	expect(priorities.size() == 1, "initial priorities should not duplicate the same device name");
+	expect(priorities[0].device_name == L"USB DAC", "initial priorities should preserve the device name");
+}
+
+void testMergeOutputPrioritiesAppendsNewOutputs()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"spk", L"Speakers"}
+	};
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+
+	expect(merge_result.changed, "merge should report changes when a new output appears");
+	expect(merge_result.priorities.size() == 2, "merge should append newly discovered outputs");
+	expect(merge_result.priorities[1].device_id == L"hdmi", "merge should append the new output at the end");
+}
+
+void testMergeOutputPrioritiesRefreshesReconnectedIds()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"dac-old", L"USB DAC"}
+	};
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+
+	expect(merge_result.changed, "merge should report changes when a known output reconnects with a new endpoint id");
+	expect(merge_result.priorities.size() == 1, "merge should preserve the original priority entry count");
+	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the stored endpoint id for the known output");
+}
+
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
 {
 	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -1193,6 +1253,10 @@ int main()
 		runTest("auto preset decision skips modified preset", testAutoPresetDecisionSkipsModifiedPreset);
 		runTest("auto preset decision skips when not triggered", testAutoPresetDecisionSkipsWhenNotTriggered);
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
+		runTest("build initial output priorities keeps default first", testBuildInitialOutputPrioritiesKeepsDefaultFirst);
+		runTest("build initial output priorities drops duplicates by name", testBuildInitialOutputPrioritiesDropsDuplicatesByName);
+		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
+		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
