@@ -363,6 +363,37 @@ void applyRuntimeStartup(RuntimeHarness& harness)
 	}
 }
 
+void applyRuntimeIdleSync(RuntimeHarness& harness)
+{
+	resetScenarioActions(harness.state);
+	resetAudioActions(harness.audio);
+
+	harness.state.visible_outputs = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		harness.audio.getSoundDevices(false),
+		harness.state.selected_output,
+		harness.priorities,
+		true);
+
+	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
+		harness.state.visible_outputs,
+		harness.state.selected_output,
+		harness.state.output_name,
+		harness.priorities);
+
+	if (!decision.has_resolved_output)
+	{
+		return;
+	}
+
+	harness.state.selected_output = decision.resolved_output;
+	harness.state.output_name = decision.resolved_output.deviceFriendlyName;
+	harness.state.playback_device_available = !decision.should_notify_error;
+	if (decision.should_notify_error)
+	{
+		harness.state.muted = true;
+	}
+}
+
 void applyRuntimeDeviceChange(RuntimeHarness& harness,
 	AudioDeviceChangeKind change_kind,
 	const std::wstring& device_id)
@@ -736,6 +767,44 @@ void testBuildInitDecisionResolvesReconnectedSelectedOutput()
 	expect(decision.should_apply_output, "reconnected selected output should be applied on startup");
 }
 
+void testBuildIdleSyncDecisionKeepsInactiveSelectedOutput()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> output_devices {
+		selected_output,
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
+		output_devices,
+		selected_output,
+		L"USB DAC",
+		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+
+	expect(decision.has_resolved_output, "idle sync should resolve the selected inactive output");
+	expect(decision.resolved_output.pwszID == L"dac-old", "idle sync should preserve the selected inactive output");
+	expect(decision.should_notify_error, "idle sync should report the inactive selected output");
+}
+
+void testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
+		output_devices,
+		selected_output,
+		L"USB DAC",
+		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+
+	expect(decision.has_resolved_output, "idle sync should resolve a reconnected selected output");
+	expect(decision.resolved_output.pwszID == L"dac-new", "idle sync should resolve to the reconnected endpoint");
+	expect(!decision.should_notify_error, "idle sync should not report an error for an active reconnected output");
+}
+
 void testManualSelectionDecisionRestartsProcessingAfterInactiveSelection()
 {
 	auto previous_selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -991,6 +1060,51 @@ void testRuntimeStartupRecoversReconnectedSelectedOutput()
 	expect(harness.state.selected_output.pwszID == L"dac-new", "startup should resolve the selected output to the reconnected endpoint");
 }
 
+void testRuntimeIdleSyncPreservesInactiveSelectedOutputWithoutAudioCalls()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	harness.state.output_name = L"USB DAC";
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk")
+	};
+	harness.priorities = {
+		{L"dac-old", L"USB DAC"},
+		{L"spk", L"Speakers"}
+	};
+
+	applyRuntimeIdleSync(harness);
+
+	expect(harness.audio.set_playback_call_count == 0, "idle sync should not retarget playback");
+	expect(harness.audio.restart_call_count == 0, "idle sync should not restart processing");
+	expect(harness.audio.mute_call_count == 0, "idle sync should not touch backend mute state");
+	expect(harness.state.selected_output.pwszID == L"dac-old", "idle sync should preserve the selected inactive output");
+	expect(!harness.state.playback_device_available, "idle sync should mark the inactive selected output unavailable");
+}
+
+void testRuntimeIdleSyncRecoversReconnectedSelectedOutputWithoutAudioCalls()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	harness.state.output_name = L"USB DAC";
+	harness.state.playback_device_available = false;
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+	harness.priorities = {
+		{L"dac-old", L"USB DAC"},
+		{L"spk", L"Speakers"}
+	};
+
+	applyRuntimeIdleSync(harness);
+
+	expect(harness.audio.set_playback_call_count == 0, "idle sync should not retarget playback while processing is off");
+	expect(harness.audio.restart_call_count == 0, "idle sync should not restart processing while processing is off");
+	expect(harness.state.selected_output.pwszID == L"dac-new", "idle sync should resolve to the reconnected selected output");
+	expect(harness.state.playback_device_available, "idle sync should mark the recovered selected output available");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -1016,6 +1130,8 @@ int main()
 		runTest("init decision keeps selected inactive output", testBuildInitDecisionKeepsSelectedInactiveOutput);
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
+		runTest("idle sync decision keeps inactive selected output", testBuildIdleSyncDecisionKeepsInactiveSelectedOutput);
+		runTest("idle sync decision resolves reconnected selected output", testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput);
 		runTest("manual selection restarts processing after inactive selection", testManualSelectionDecisionRestartsProcessingAfterInactiveSelection);
 		runTest("manual selection leaves default output untouched when processing is off", testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff);
 		runTest("manual selection powers off when output is missing", testManualSelectionDecisionPowersOffWhenOutputIsMissing);
@@ -1027,6 +1143,8 @@ int main()
 		runTest("runtime manual selection recovers through audio passthru", testRuntimeManualSelectionRecoversThroughAudioPassthru);
 		runTest("runtime startup preserves selected inactive output", testRuntimeStartupPreservesSelectedInactiveOutput);
 		runTest("runtime startup recovers reconnected selected output", testRuntimeStartupRecoversReconnectedSelectedOutput);
+		runTest("runtime idle sync preserves inactive selected output without audio calls", testRuntimeIdleSyncPreservesInactiveSelectedOutputWithoutAudioCalls);
+		runTest("runtime idle sync recovers reconnected selected output without audio calls", testRuntimeIdleSyncRecoversReconnectedSelectedOutputWithoutAudioCalls);
 	}
 	catch (const std::exception& exception)
 	{
