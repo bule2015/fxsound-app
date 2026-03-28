@@ -24,6 +24,123 @@ struct ScenarioState
 	std::vector<SoundDevice> visible_outputs;
 };
 
+struct FakeAudioPassthru : IAudioPassthru
+{
+	std::vector<SoundDevice> sound_devices;
+	bool playback_device_available = true;
+	bool muted = false;
+	int mute_call_count = 0;
+	int mute_true_call_count = 0;
+	int mute_false_call_count = 0;
+	int set_playback_call_count = 0;
+	int restart_call_count = 0;
+	std::wstring last_playback_device_id;
+	AudioPassthruCallback* callback = nullptr;
+
+	int init() override
+	{
+		return 0;
+	}
+
+	void mute(bool mute_value) override
+	{
+		muted = mute_value;
+		++mute_call_count;
+		if (mute_value)
+		{
+			++mute_true_call_count;
+		}
+		else
+		{
+			++mute_false_call_count;
+		}
+	}
+
+	std::vector<SoundDevice> getSoundDevices(bool active_devices = true) override
+	{
+		if (!active_devices)
+		{
+			return sound_devices;
+		}
+
+		std::vector<SoundDevice> active_sound_devices;
+		for (const auto& sound_device : sound_devices)
+		{
+			if (sound_device.isActive)
+			{
+				active_sound_devices.push_back(sound_device);
+			}
+		}
+
+		return active_sound_devices;
+	}
+
+	int setBufferLength(int) override
+	{
+		return 0;
+	}
+
+	int processTimer() override
+	{
+		return 0;
+	}
+
+	void setDspProcessingModule(DfxDsp*) override
+	{
+	}
+
+	void setAsPlaybackDevice(const SoundDevice sound_device) override
+	{
+		last_playback_device_id = sound_device.pwszID;
+		++set_playback_call_count;
+
+		for (auto& device : sound_devices)
+		{
+			if (device.isRealDevice)
+			{
+				device.isTargetedRealPlaybackDevice = (device.pwszID == sound_device.pwszID);
+			}
+		}
+
+		playback_device_available = sound_device.isActive;
+	}
+
+	void registerCallback(AudioPassthruCallback* new_callback) override
+	{
+		callback = new_callback;
+	}
+
+	bool isPlaybackDeviceAvailable() override
+	{
+		return playback_device_available;
+	}
+
+	void restoreDefaultPlaybackDevice() override
+	{
+	}
+
+	bool restartProcessingForDeviceChange() override
+	{
+		++restart_call_count;
+
+		auto targeted_device = std::find_if(sound_devices.begin(), sound_devices.end(),
+			[](const SoundDevice& sound_device)
+			{
+				return sound_device.isTargetedRealPlaybackDevice;
+			});
+
+		playback_device_available = targeted_device != sound_devices.end() && targeted_device->isActive;
+		return playback_device_available;
+	}
+};
+
+struct RuntimeHarness
+{
+	ScenarioState state;
+	FakeAudioPassthru audio;
+	std::vector<PriorityEntry> priorities;
+};
+
 SoundDevice makeOutput(const wchar_t* id,
 	const wchar_t* name,
 	const wchar_t* description,
@@ -57,6 +174,16 @@ void resetScenarioActions(ScenarioState& state)
 {
 	state.restarted_processing = false;
 	state.retargeted_playback = false;
+}
+
+void resetAudioActions(FakeAudioPassthru& audio)
+{
+	audio.mute_call_count = 0;
+	audio.mute_true_call_count = 0;
+	audio.mute_false_call_count = 0;
+	audio.set_playback_call_count = 0;
+	audio.restart_call_count = 0;
+	audio.last_playback_device_id.clear();
 }
 
 void applyRefresh(ScenarioState& state,
@@ -151,6 +278,143 @@ void applyManualSelection(ScenarioState& state,
 	{
 		state.playback_device_available = decision.selected_output.isActive;
 		state.muted = !state.playback_device_available;
+	}
+}
+
+void refreshRuntime(RuntimeHarness& harness, bool include_selected_inactive = true)
+{
+	harness.state.visible_outputs = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		harness.audio.getSoundDevices(false),
+		harness.state.selected_output,
+		harness.priorities,
+		include_selected_inactive);
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		harness.state.visible_outputs,
+		harness.state.selected_output,
+		harness.state.output_name,
+		harness.priorities,
+		harness.state.timer_running);
+
+	if (!decision.has_resolved_output)
+	{
+		return;
+	}
+
+	harness.state.selected_output = decision.resolved_output;
+	harness.state.output_name = decision.resolved_output.deviceFriendlyName;
+
+	if (decision.should_apply_routing)
+	{
+		harness.audio.setAsPlaybackDevice(decision.resolved_output);
+		harness.state.retargeted_playback = true;
+	}
+
+	if (decision.should_mute)
+	{
+		harness.audio.mute(true);
+		harness.state.playback_device_available = false;
+		harness.state.muted = true;
+	}
+	else
+	{
+		harness.state.playback_device_available = harness.audio.isPlaybackDeviceAvailable();
+		harness.state.muted = harness.audio.muted;
+	}
+}
+
+void applyRuntimeDeviceChange(RuntimeHarness& harness,
+	AudioDeviceChangeKind change_kind,
+	const std::wstring& device_id)
+{
+	resetScenarioActions(harness.state);
+	resetAudioActions(harness.audio);
+
+	auto sound_devices = harness.audio.getSoundDevices(false);
+	auto ignored = FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
+		change_kind,
+		device_id,
+		harness.state.selected_output,
+		sound_devices);
+
+	if (ignored)
+	{
+		refreshRuntime(harness);
+		return;
+	}
+
+	harness.audio.restartProcessingForDeviceChange();
+	harness.state.restarted_processing = true;
+	refreshRuntime(harness);
+
+	if (harness.state.power_state)
+	{
+		harness.audio.mute(false);
+		harness.state.muted = false;
+	}
+
+	auto refreshed_selected_output = harness.state.selected_output;
+	auto refreshed_selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
+		[&refreshed_selected_output](const SoundDevice& sound_device)
+		{
+			return FxSound::OutputDeviceSelection::areSameOutputDevice(refreshed_selected_output, sound_device);
+		});
+
+	if (refreshed_selected_output_it == sound_devices.end() || !refreshed_selected_output_it->isActive)
+	{
+		harness.state.playback_device_available = false;
+		harness.audio.mute(true);
+		harness.state.muted = true;
+	}
+	else
+	{
+		harness.state.playback_device_available = harness.audio.isPlaybackDeviceAvailable();
+		harness.state.muted = harness.audio.muted;
+	}
+}
+
+void applyRuntimeManualSelection(RuntimeHarness& harness, const std::wstring& output_device_id)
+{
+	resetScenarioActions(harness.state);
+	resetAudioActions(harness.audio);
+
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		harness.audio.getSoundDevices(),
+		output_device_id,
+		harness.state.selected_output,
+		harness.state.timer_running,
+		harness.state.power_state,
+		harness.audio.isPlaybackDeviceAvailable());
+
+	if (!decision.found_output)
+	{
+		harness.audio.mute(true);
+		harness.state.playback_device_available = false;
+		harness.state.muted = true;
+		harness.state.power_state = false;
+		return;
+	}
+
+	harness.state.selected_output = decision.selected_output;
+	harness.state.output_name = decision.selected_output.deviceFriendlyName;
+
+	if (decision.should_retarget_playback)
+	{
+		harness.audio.setAsPlaybackDevice(decision.selected_output);
+		harness.state.retargeted_playback = true;
+	}
+
+	if (decision.should_restart_processing)
+	{
+		harness.audio.restartProcessingForDeviceChange();
+		harness.state.restarted_processing = true;
+	}
+
+	if (decision.should_sync_processing_state)
+	{
+		harness.state.playback_device_available = harness.audio.isPlaybackDeviceAvailable();
+		harness.audio.mute(!harness.state.playback_device_available);
+		harness.state.muted = !harness.state.playback_device_available;
 	}
 }
 
@@ -490,6 +754,79 @@ void testScenarioManualSelectionRecoversFromInactiveOutput()
 	expect(!state.muted, "manual selection of an active device should restore playback");
 }
 
+void testRuntimeDeviceChangeIgnoresUnrelatedReconnect()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	harness.state.output_name = L"Speakers";
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+	harness.audio.playback_device_available = true;
+	harness.priorities = {
+		{L"spk", L"Speakers"},
+		{L"hdmi", L"Monitor"}
+	};
+
+	applyRuntimeDeviceChange(harness, AudioDeviceChangeKind::DeviceAdded, L"hdmi");
+
+	expect(harness.audio.restart_call_count == 0, "ignored device change should not restart processing");
+	expect(harness.audio.set_playback_call_count == 0, "ignored device change should not retarget playback");
+	expect(harness.audio.mute_call_count == 0, "ignored device change should not touch mute state");
+	expect(harness.state.selected_output.pwszID == L"spk", "ignored device change should keep the selected output");
+}
+
+void testRuntimeDeviceChangeRestoresReconnectedSelectedOutput()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	harness.state.output_name = L"USB DAC";
+	harness.state.playback_device_available = false;
+	harness.state.muted = true;
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+	harness.audio.playback_device_available = false;
+	harness.audio.muted = true;
+	harness.priorities = {
+		{L"dac-old", L"USB DAC"},
+		{L"spk", L"Speakers"}
+	};
+
+	applyRuntimeDeviceChange(harness, AudioDeviceChangeKind::DeviceStateChanged, L"dac-new");
+
+	expect(harness.audio.restart_call_count == 1, "reconnected selected output should restart processing");
+	expect(harness.audio.set_playback_call_count == 1, "reconnected selected output should retarget playback");
+	expect(harness.audio.last_playback_device_id == L"dac-new", "retargeting should point at the reconnected device");
+	expect(harness.audio.mute_false_call_count == 1, "reconnected selected output should unmute playback");
+	expect(harness.state.selected_output.pwszID == L"dac-new", "selected output should resolve to the reconnected endpoint");
+}
+
+void testRuntimeManualSelectionRecoversThroughAudioPassthru()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	harness.state.output_name = L"USB DAC";
+	harness.state.playback_device_available = false;
+	harness.state.muted = true;
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+	harness.audio.playback_device_available = false;
+	harness.audio.muted = true;
+
+	applyRuntimeManualSelection(harness, L"spk");
+
+	expect(harness.audio.set_playback_call_count == 1, "manual selection should retarget playback");
+	expect(harness.audio.restart_call_count == 1, "manual selection should restart processing after inactive output");
+	expect(harness.audio.mute_false_call_count == 1, "manual selection should unmute the recovered output");
+	expect(harness.state.selected_output.pwszID == L"spk", "manual selection should switch to the chosen active output");
+	expect(!harness.state.muted, "manual selection should leave playback unmuted");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -518,6 +855,9 @@ int main()
 		runTest("scenario keeps selected active output across unrelated reconnect", testScenarioKeepsSelectedActiveOutputAcrossUnrelatedReconnect);
 		runTest("scenario restores reconnected selected output", testScenarioRestoresReconnectedSelectedOutput);
 		runTest("scenario manual selection recovers from inactive output", testScenarioManualSelectionRecoversFromInactiveOutput);
+		runTest("runtime device change ignores unrelated reconnect", testRuntimeDeviceChangeIgnoresUnrelatedReconnect);
+		runTest("runtime device change restores reconnected selected output", testRuntimeDeviceChangeRestoresReconnectedSelectedOutput);
+		runTest("runtime manual selection recovers through audio passthru", testRuntimeManualSelectionRecoversThroughAudioPassthru);
 	}
 	catch (const std::exception& exception)
 	{
