@@ -94,6 +94,13 @@ namespace FxSound::OutputDeviceSelection
 		bool should_announce = false;
 	};
 
+	struct ProcessingDeviceSnapshot
+	{
+		SoundDevice synced_output;
+		bool has_synced_output = false;
+		bool dfx_enabled = false;
+	};
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -487,6 +494,38 @@ namespace FxSound::OutputDeviceSelection
 		decision.should_apply = true;
 		decision.should_announce = power_state;
 		return decision;
+	}
+
+	inline ProcessingDeviceSnapshot scanProcessingOutputs(const std::vector<SoundDevice>& sound_devices)
+	{
+		ProcessingDeviceSnapshot snapshot;
+
+		for (const auto& sound_device : sound_devices)
+		{
+			if (sound_device.isRealDevice)
+			{
+				if (!sound_device.isActive || sound_device.deviceNumChannel < 2)
+				{
+					continue;
+				}
+
+				if (sound_device.isTargetedRealPlaybackDevice ||
+					(!snapshot.has_synced_output && sound_device.isDefaultDevice))
+				{
+					snapshot.synced_output = sound_device;
+					snapshot.has_synced_output = true;
+				}
+
+				continue;
+			}
+
+			if (sound_device.deviceFriendlyName.find(L"FxSound Audio Enhancer") != std::wstring::npos)
+			{
+				snapshot.dfx_enabled = true;
+			}
+		}
+
+		return snapshot;
 	}
 
 	inline SyncDecision buildSyncDecision(const std::vector<SoundDevice>& output_devices,

@@ -1091,30 +1091,9 @@ void FxController::sortOutputDevicesByPriority(std::vector<SoundDevice>& output_
 
 void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 {
-	dfx_enabled_ = false;
-
-	SoundDevice synced_output;
-
 	DeviceConfig::updateDeviceConfigs(settings_, sound_devices);
-
-	for (auto sound_device : sound_devices)
-	{
-		if (sound_device.isRealDevice)
-		{
-			if (sound_device.isActive && sound_device.deviceNumChannel >= 2)
-			{
-				if (sound_device.isTargetedRealPlaybackDevice ||
-					(synced_output.pwszID.empty() && sound_device.isDefaultDevice))
-				{
-					synced_output = sound_device;
-				}
-			}
-		}
-		else if (sound_device.deviceFriendlyName.find(L"FxSound Audio Enhancer") != std::wstring::npos)
-		{
-			dfx_enabled_ = true;
-		}
-	}
+	auto processing_snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
+	dfx_enabled_ = processing_snapshot.dfx_enabled;
 
 	rebuildOutputDeviceList(sound_devices);
 	FxModel::getModel().initOutputs(active_output_devices_);
@@ -1128,7 +1107,7 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 	if (sync_decision.has_resolved_output)
 	{
 		auto& model = FxModel::getModel();
-		synced_output = sync_decision.resolved_output;
+		auto synced_output = sync_decision.resolved_output;
 
 		setOutputName(synced_output.deviceFriendlyName.c_str());
 		model.setSelectedOutput(synced_output, sync_decision.output_changed);
