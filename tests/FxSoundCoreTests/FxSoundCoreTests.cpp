@@ -558,6 +558,52 @@ void testPersistedOutputRoundTripPreservesIdentity()
 	expect(restored_output.deviceNumChannel == 6, "restored persisted output should preserve the channel count");
 }
 
+void testAutoPresetDecisionAppliesWhenTriggered()
+{
+	auto decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+		false,
+		true,
+		L"General",
+		true);
+
+	expect(decision.should_apply, "auto preset should apply when the output change is eligible");
+	expect(decision.should_announce, "auto preset should announce when power is on");
+	expect(decision.preset_name == L"General", "auto preset should preserve the configured preset name");
+}
+
+void testAutoPresetDecisionSkipsModifiedPreset()
+{
+	auto decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+		true,
+		true,
+		L"General",
+		true);
+
+	expect(!decision.should_apply, "auto preset should not apply when the current preset is modified");
+}
+
+void testAutoPresetDecisionSkipsWhenNotTriggered()
+{
+	auto decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+		false,
+		false,
+		L"General",
+		true);
+
+	expect(!decision.should_apply, "auto preset should not apply when the output change did not trigger it");
+}
+
+void testAutoPresetDecisionSkipsEmptyPreset()
+{
+	auto decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+		false,
+		true,
+		L"",
+		true);
+
+	expect(!decision.should_apply, "auto preset should not apply when no preset is configured");
+}
+
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
 {
 	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -1143,6 +1189,10 @@ int main()
 		runTest("build visible outputs drops unselected inactive", testBuildVisibleOutputsDropsUnselectedInactive);
 		runTest("restore persisted output returns empty when state is empty", testRestorePersistedOutputReturnsEmptyWhenStateIsEmpty);
 		runTest("persisted output round trip preserves identity", testPersistedOutputRoundTripPreservesIdentity);
+		runTest("auto preset decision applies when triggered", testAutoPresetDecisionAppliesWhenTriggered);
+		runTest("auto preset decision skips modified preset", testAutoPresetDecisionSkipsModifiedPreset);
+		runTest("auto preset decision skips when not triggered", testAutoPresetDecisionSkipsWhenNotTriggered);
+		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
