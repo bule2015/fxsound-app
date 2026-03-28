@@ -1180,37 +1180,36 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 
 	rebuildOutputDeviceList(sound_devices);
 	FxModel::getModel().initOutputs(active_output_devices_);
-	synced_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+	auto sync_decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		active_output_devices_,
 		FxModel::getModel().getSelectedOutput(),
 		getOutputName().toWideCharPointer(),
-		loadOutputPriorities(settings_));
+		loadOutputPriorities(settings_),
+		isTimerRunning());
 
-	if (!synced_output.pwszID.empty())
+	if (sync_decision.has_resolved_output)
 	{
 		auto& model = FxModel::getModel();
-		auto output_changed = model.getSelectedOutput().pwszID != synced_output.pwszID;
-		auto name_changed = getOutputName() != synced_output.deviceFriendlyName.c_str();
-		auto routing_changed = synced_output.isActive && !synced_output.isTargetedRealPlaybackDevice;
+		synced_output = sync_decision.resolved_output;
 
 		setOutputName(synced_output.deviceFriendlyName.c_str());
-		model.setSelectedOutput(synced_output, output_changed);
+		model.setSelectedOutput(synced_output, sync_decision.output_changed);
 		saveSelectedOutputToSettings(synced_output);
 
-		if (isTimerRunning() && synced_output.isActive && (output_changed || routing_changed))
+		if (sync_decision.should_apply_routing)
 		{
 			audio_passthru_->setAsPlaybackDevice(synced_output);
 			beginAudioProcessingGracePeriod();
 			output_changed_ = true;
 		}
 
-		if (!synced_output.isActive)
+		if (sync_decision.should_mute)
 		{
 			playback_device_available_ = false;
 			audio_passthru_->mute(true);
 			model.notifyOutputError();
 		}
-		else if ((output_changed || name_changed) && !model.isPresetModified())
+		else if ((sync_decision.output_changed || sync_decision.name_changed) && !model.isPresetModified())
 		{
 			auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
 			if (device_config.preset.isNotEmpty())
