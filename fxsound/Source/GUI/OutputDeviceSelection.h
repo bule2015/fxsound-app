@@ -81,6 +81,13 @@ namespace FxSound::OutputDeviceSelection
 		bool should_notify_error = false;
 	};
 
+	struct AutoPresetDecision
+	{
+		std::wstring preset_name;
+		bool should_apply = false;
+		bool should_announce = false;
+	};
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -381,6 +388,23 @@ namespace FxSound::OutputDeviceSelection
 		decision.output_changed = selected_output.pwszID != decision.resolved_output.pwszID;
 		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
 		decision.should_notify_error = !decision.resolved_output.isActive;
+		return decision;
+	}
+
+	inline AutoPresetDecision buildAutoPresetDecision(bool preset_modified,
+		bool trigger_change,
+		const std::wstring& configured_preset,
+		bool power_state)
+	{
+		AutoPresetDecision decision;
+		if (preset_modified || !trigger_change || configured_preset.empty())
+		{
+			return decision;
+		}
+
+		decision.preset_name = configured_preset;
+		decision.should_apply = true;
+		decision.should_announce = power_state;
 		return decision;
 	}
 

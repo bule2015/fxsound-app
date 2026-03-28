@@ -752,19 +752,18 @@ void FxController::setOutput(const String output_device_id, bool notify)
 		String message = TRANS("Output: ") + sound_device.deviceFriendlyName.c_str();
 
 		// Auto-select preset for the output device if the preset is not modified by user
-		if (!FxModel::getModel().isPresetModified())
+		auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
+		auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+			FxModel::getModel().isPresetModified(),
+			true,
+			device_config.preset.toWideCharPointer(),
+			FxModel::getModel().getPowerState());
+		if (auto_preset_decision.should_apply)
 		{
-			auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
-			if (device_config.preset.isNotEmpty())
+			auto selected_preset = findPresetIndexByName(FxModel::getModel(), auto_preset_decision.preset_name.c_str());
+			if (setPreset(selected_preset, false) && auto_preset_decision.should_announce)
 			{
-				auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
-				if (setPreset(selected_preset, false))
-				{
-					if (FxModel::getModel().getPowerState())
-					{
-						message += "\n" + TRANS("Preset: ") + device_config.preset;
-					}
-				}
+				message += "\n" + TRANS("Preset: ") + String(auto_preset_decision.preset_name.c_str());
 			}
 		}
 
@@ -1148,12 +1147,17 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 			audio_passthru_->mute(true);
 			model.notifyOutputError();
 		}
-		else if ((sync_decision.output_changed || sync_decision.name_changed) && !model.isPresetModified())
+		else
 		{
 			auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
-			if (device_config.preset.isNotEmpty())
+			auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+				model.isPresetModified(),
+				sync_decision.output_changed || sync_decision.name_changed,
+				device_config.preset.toWideCharPointer(),
+				model.getPowerState());
+			if (auto_preset_decision.should_apply)
 			{
-				auto selected_preset = model.selectPreset(device_config.preset, false);
+				auto selected_preset = model.selectPreset(String(auto_preset_decision.preset_name.c_str()), false);
 				setPreset(selected_preset, false);
 			}
 		}
@@ -1220,14 +1224,16 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 			return;
 		}
 
-		if (!model.isPresetModified())
+		auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
+		auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+			model.isPresetModified(),
+			true,
+			device_config.preset.toWideCharPointer(),
+			model.getPowerState());
+		if (auto_preset_decision.should_apply)
 		{
-			auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
-			if (device_config.preset.isNotEmpty())
-			{
-				auto selected_preset = model.selectPreset(device_config.preset, false);
-				setPreset(selected_preset, false);
-			}
+			auto selected_preset = model.selectPreset(String(auto_preset_decision.preset_name.c_str()), false);
+			setPreset(selected_preset, false);
 		}
 	}
 }
