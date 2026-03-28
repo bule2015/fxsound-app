@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxMainWindow.h"
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
+#include "OutputDeviceSelection.h"
 #include "FxEffects.h"
 #include "FxPresetSaveDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
@@ -53,45 +54,21 @@ int findPresetIndexByName(const FxModel& model, const String& preset_name)
     return -1;
 }
 
-int getOutputDevicePriority(const juce::Array<DeviceConfig>& device_configs, const SoundDevice& sound_device)
+std::vector<FxSound::OutputDeviceSelection::PriorityEntry> loadOutputPriorities(FxSound::Settings& settings)
 {
-    auto priority = (int)device_configs.size();
-    auto device_id = String(sound_device.pwszID.c_str());
-    auto device_name = String(sound_device.deviceFriendlyName.c_str());
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> priorities;
+	auto device_configs = DeviceConfig::loadDeviceConfigs(settings, "device_configs");
+	priorities.reserve(static_cast<size_t>(device_configs.size()));
 
-    for (int i = 0; i < device_configs.size(); ++i)
-    {
-        const auto& device_config = device_configs.getReference(i);
-        if (device_config.device_id == device_id || device_config.device_name == device_name)
-        {
-            return i;
-        }
-    }
+	for (const auto& device_config : device_configs)
+	{
+		priorities.push_back({
+			device_config.device_id.toWideCharPointer(),
+			device_config.device_name.toWideCharPointer()
+			});
+	}
 
-    return priority;
-}
-
-bool isSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
-{
-    if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
-    {
-        return true;
-    }
-
-    if (!lhs.containerId.empty() &&
-        !rhs.containerId.empty() &&
-        lhs.containerId == rhs.containerId &&
-        !lhs.deviceFriendlyName.empty() &&
-        !rhs.deviceFriendlyName.empty() &&
-        lhs.deviceFriendlyName == rhs.deviceFriendlyName)
-    {
-        return true;
-    }
-
-    return !lhs.deviceFriendlyName.empty() &&
-        !rhs.deviceFriendlyName.empty() &&
-        lhs.deviceFriendlyName == rhs.deviceFriendlyName &&
-        lhs.deviceDescription == rhs.deviceDescription;
+	return priorities;
 }
 }
 
@@ -1102,12 +1079,13 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 
 	rebuildOutputDeviceList(sound_devices, true);
 	auto selected_output = FxModel::getModel().getSelectedOutput();
+	auto priorities = loadOutputPriorities(settings_);
 
 	if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
 	{
 		for (auto& output_device : active_output_devices_)
 		{
-			if (isSameOutputDevice(selected_output, output_device))
+			if (FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, output_device))
 			{
 				default_output = output_device;
 				break;
@@ -1127,19 +1105,13 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 	}
 	else if (default_output.pwszID.empty() && active_output_devices_.size() > 0)
 	{
-		bool found = false;
-		for (auto& output_device : active_output_devices_)
-		{			
-			if (getOutputName() == output_device.deviceFriendlyName.c_str())
-			{
-				default_output = output_device;
-				found = true;
-				break;
-			}
-		}
-		if (!found)
+		default_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+			active_output_devices_,
+			selected_output,
+			getOutputName().toWideCharPointer(),
+			priorities);
+		if (!default_output.pwszID.empty())
 		{
-            default_output = getPreferredOutput();
 			setOutputName(default_output.deviceFriendlyName.c_str());
 		}
 	}
@@ -1167,65 +1139,16 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 void FxController::rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive)
 {
 	active_output_devices_.clear();
-
-	auto selected_output = FxModel::getModel().getSelectedOutput();
-	bool selected_output_present = false;
-
-	for (auto sound_device : sound_devices)
-	{
-		if (!sound_device.isRealDevice || sound_device.deviceNumChannel < 2)
-		{
-			continue;
-		}
-
-		auto is_selected_output = isSameOutputDevice(selected_output, sound_device);
-		if (sound_device.isActive || (include_selected_inactive && is_selected_output))
-		{
-			if (!sound_device.isActive && is_selected_output)
-			{
-				sound_device.isTargetedRealPlaybackDevice = false;
-				sound_device.isDefaultDevice = false;
-				sound_device.isCaptureDevice = false;
-			}
-
-			selected_output_present = selected_output_present || is_selected_output;
-			active_output_devices_.push_back(sound_device);
-		}
-	}
-
-	if (include_selected_inactive && !selected_output.pwszID.empty() && !selected_output_present && selected_output.deviceNumChannel >= 2)
-	{
-		selected_output.isActive = false;
-		selected_output.isTargetedRealPlaybackDevice = false;
-		selected_output.isDefaultDevice = false;
-		selected_output.isCaptureDevice = false;
-		active_output_devices_.push_back(selected_output);
-	}
-
-	sortOutputDevicesByPriority(active_output_devices_);
+	active_output_devices_ = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		FxModel::getModel().getSelectedOutput(),
+		loadOutputPriorities(settings_),
+		include_selected_inactive);
 }
 
 void FxController::sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices)
 {
-	auto device_configs = DeviceConfig::loadDeviceConfigs(settings_, "device_configs");
-
-	std::stable_sort(output_devices.begin(), output_devices.end(),
-		[&device_configs](const SoundDevice& a, const SoundDevice& b)
-		{
-			auto priority_a = getOutputDevicePriority(device_configs, a);
-			auto priority_b = getOutputDevicePriority(device_configs, b);
-			if (priority_a != priority_b)
-			{
-				return priority_a < priority_b;
-			}
-
-			if (a.isActive != b.isActive)
-			{
-				return a.isActive > b.isActive;
-			}
-
-			return a.deviceFriendlyName < b.deviceFriendlyName;
-		});
+	FxSound::OutputDeviceSelection::sortOutputDevicesByPriority(output_devices, loadOutputPriorities(settings_));
 }
 
 void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
@@ -1233,7 +1156,6 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 	dfx_enabled_ = false;
 
 	SoundDevice synced_output;
-	SoundDevice preferred_output;
 
 	DeviceConfig::updateDeviceConfigs(settings_, sound_devices);
 
@@ -1258,36 +1180,11 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 
 	rebuildOutputDeviceList(sound_devices);
 	FxModel::getModel().initOutputs(active_output_devices_);
-	preferred_output = getPreferredOutput();
-	auto selected_output = FxModel::getModel().getSelectedOutput();
-	if (!selected_output.pwszID.empty())
-	{
-		for (auto& output_device : active_output_devices_)
-		{
-			if (isSameOutputDevice(selected_output, output_device))
-			{
-				synced_output = output_device;
-				break;
-			}
-		}
-	}
-
-	if (synced_output.pwszID.empty() && active_output_devices_.size() > 0)
-	{
-		for (auto& output_device : active_output_devices_)
-		{
-			if (getOutputName() == output_device.deviceFriendlyName.c_str())
-			{
-				synced_output = output_device;
-				break;
-			}
-		}
-
-		if (synced_output.pwszID.empty())
-		{
-			synced_output = preferred_output;
-		}
-	}
+	synced_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+		active_output_devices_,
+		FxModel::getModel().getSelectedOutput(),
+		getOutputName().toWideCharPointer(),
+		loadOutputPriorities(settings_));
 
 	if (!synced_output.pwszID.empty())
 	{
@@ -1366,19 +1263,11 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 
 	auto& model = FxModel::getModel();
 	auto selected_output = model.getSelectedOutput();
-	SoundDevice synced_output;
-
-	if (!selected_output.pwszID.empty())
-	{
-		for (auto& output_device : active_output_devices_)
-		{
-			if (isSameOutputDevice(selected_output, output_device))
-			{
-				synced_output = output_device;
-				break;
-			}
-		}
-	}
+	auto synced_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+		active_output_devices_,
+		selected_output,
+		getOutputName().toWideCharPointer(),
+		loadOutputPriorities(settings_));
 
 	if (synced_output.pwszID.empty())
 	{
@@ -1390,11 +1279,6 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 				break;
 			}
 		}
-	}
-
-	if (synced_output.pwszID.empty())
-	{
-		synced_output = getPreferredOutput();
 	}
 
 	if (!synced_output.pwszID.empty())
@@ -1841,7 +1725,7 @@ void FxController::handleSoundDeviceChange()
 	auto refreshed_selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
 		[&refreshed_selected_output](const SoundDevice& sound_device)
 		{
-			return isSameOutputDevice(refreshed_selected_output, sound_device);
+			return FxSound::OutputDeviceSelection::areSameOutputDevice(refreshed_selected_output, sound_device);
 		});
 
 	if (refreshed_selected_output_it == sound_devices.end() || !refreshed_selected_output_it->isActive)
@@ -2341,50 +2225,19 @@ SoundDevice FxController::getPreferredOutput()
 
 SoundDevice FxController::getPreferredOutput(const std::vector<SoundDevice>& output_devices)
 {
-	auto device_configs = DeviceConfig::loadDeviceConfigs(settings_, "device_configs");
-
-	for (auto& device_config : device_configs)
-	{
-		for (auto& device : output_devices)
-		{
-			if (device_config.device_id == device.pwszID.c_str() ||
-				device_config.device_name == device.deviceFriendlyName.c_str())
-			{
-				return device;
-			}
-		}
-	}
-
-	if (output_devices.size() > 0)
-	{
-		return output_devices[0];
-	}
-
-	return {};
+	return FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, loadOutputPriorities(settings_));
 }
 
 int FxController::compareOutputDevicePriority(const String& output_device_name1, const String& output_device_name2)
 {
-	auto device_configs = DeviceConfig::loadDeviceConfigs(settings_, "device_configs");
+	SoundDevice output_device1;
+	output_device1.deviceFriendlyName = output_device_name1.toWideCharPointer();
+	SoundDevice output_device2;
+	output_device2.deviceFriendlyName = output_device_name2.toWideCharPointer();
+	auto priorities = loadOutputPriorities(settings_);
 
-	int priority1 = (int)device_configs.size();
-	int priority2 = (int)device_configs.size();
-	int index = 0;
-
-	for (auto& device_config : device_configs)
-	{
-		if (device_config.device_name == output_device_name1)
-			priority1 = index;
-		if (device_config.device_name == output_device_name2)
-			priority2 = index;
-
-		if (priority1 != (int)device_configs.size() && priority2 != (int)device_configs.size())
-			break;
-
-		index++;
-	}
-
-	return priority1 - priority2;
+	return FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, output_device1) -
+		FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, output_device2);
 }
 
 bool FxController::shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, const String& device_id, const std::vector<SoundDevice>& sound_devices)
@@ -2403,7 +2256,7 @@ bool FxController::shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, c
 	auto selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
 		[&](const SoundDevice& sound_device)
 		{
-			return sound_device.pwszID == selected_output.pwszID;
+			return FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, sound_device);
 		});
 
 	if (selected_output_it == sound_devices.end() ||
