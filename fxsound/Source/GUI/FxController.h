@@ -227,10 +227,9 @@ private:
 	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
 	void sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices);
 	void updateOutputs(std::vector<SoundDevice>& sound_devices);
-    void selectProcessingOutput(std::vector<SoundDevice>& sound_devices);
-    void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
+	void selectProcessingOutput(std::vector<SoundDevice>& sound_devices);
+	void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
-	bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, const String& device_id, const std::vector<SoundDevice>& sound_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);
 

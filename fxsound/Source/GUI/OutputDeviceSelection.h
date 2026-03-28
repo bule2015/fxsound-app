@@ -191,4 +191,40 @@ namespace FxSound::OutputDeviceSelection
 
 		return getPreferredOutput(output_devices, priorities);
 	}
+
+	inline bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind,
+		const std::wstring& device_id,
+		const SoundDevice& selected_output,
+		const std::vector<SoundDevice>& sound_devices)
+	{
+		if (change_kind == AudioDeviceChangeKind::Unknown || device_id.empty())
+		{
+			return false;
+		}
+
+		if (selected_output.pwszID.empty())
+		{
+			return false;
+		}
+
+		auto selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
+			[&selected_output](const SoundDevice& sound_device)
+			{
+				return areSameOutputDevice(selected_output, sound_device);
+			});
+
+		if (selected_output_it == sound_devices.end() ||
+			!selected_output_it->isActive ||
+			!selected_output_it->isTargetedRealPlaybackDevice)
+		{
+			return false;
+		}
+
+		if (device_id == selected_output.pwszID)
+		{
+			return false;
+		}
+
+		return true;
+	}
 }

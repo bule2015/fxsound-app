@@ -1696,7 +1696,11 @@ void FxController::handleSoundDeviceChange()
 	pending_device_change_id_.clear();
 
 	auto current_sound_devices = audio_passthru_->getSoundDevices(false);
-	if (shouldIgnoreDeviceChange(pending_change_kind, pending_change_id, current_sound_devices))
+	if (FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
+		pending_change_kind,
+		pending_change_id.toWideCharPointer(),
+		FxModel::getModel().getSelectedOutput(),
+		current_sound_devices))
 	{
 		updateOutputs(current_sound_devices);
 		return;
@@ -2238,40 +2242,6 @@ int FxController::compareOutputDevicePriority(const String& output_device_name1,
 
 	return FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, output_device1) -
 		FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, output_device2);
-}
-
-bool FxController::shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, const String& device_id, const std::vector<SoundDevice>& sound_devices)
-{
-	if (change_kind == AudioDeviceChangeKind::Unknown || device_id.isEmpty())
-	{
-		return false;
-	}
-
-	const auto selected_output = FxModel::getModel().getSelectedOutput();
-	if (selected_output.pwszID.empty())
-	{
-		return false;
-	}
-
-	auto selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
-		[&](const SoundDevice& sound_device)
-		{
-			return FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, sound_device);
-		});
-
-	if (selected_output_it == sound_devices.end() ||
-		!selected_output_it->isActive ||
-		!selected_output_it->isTargetedRealPlaybackDevice)
-	{
-		return false;
-	}
-
-	if (device_id == String(selected_output.pwszID.c_str()))
-	{
-		return false;
-	}
-
-	return true;
 }
 
 SoundDevice FxController::loadSelectedOutputFromSettings()
