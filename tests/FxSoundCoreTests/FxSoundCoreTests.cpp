@@ -182,6 +182,68 @@ void testShouldNotIgnoreDeviceChangeWhenSelectedOutputIsInactive()
 	expect(!ignored, "inactive selected output should not suppress device changes");
 }
 
+void testBuildSyncDecisionRequestsRoutingForActiveUntargetedOutput()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk");
+	std::vector<SoundDevice> output_devices { selected_output };
+	std::vector<PriorityEntry> priorities { {L"spk", L"Speakers"} };
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		output_devices,
+		selected_output,
+		L"Speakers",
+		priorities,
+		true);
+
+	expect(decision.has_resolved_output, "sync decision should resolve active output");
+	expect(decision.routing_changed, "untargeted active output should require routing");
+	expect(decision.should_apply_routing, "timer-running sync should apply routing when target differs");
+	expect(!decision.should_mute, "active output should not be muted");
+}
+
+void testBuildSyncDecisionMutesInactiveSelectedOutput()
+{
+	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> output_devices { selected_output };
+	std::vector<PriorityEntry> priorities { {L"dac-old", L"USB DAC"} };
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		output_devices,
+		selected_output,
+		L"USB DAC",
+		priorities,
+		true);
+
+	expect(decision.has_resolved_output, "sync decision should preserve inactive selected output");
+	expect(decision.should_mute, "inactive selected output should mute processing");
+	expect(!decision.should_apply_routing, "inactive selected output should not retarget playback");
+}
+
+void testBuildSyncDecisionFallsBackToPreferredOutput()
+{
+	SoundDevice selected_output = makeOutput(L"missing", L"Missing DAC", L"USB Audio", false, false, false, L"c-old");
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, true, L"c-hdmi")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"spk", L"Speakers"},
+		{L"hdmi", L"Monitor"}
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		output_devices,
+		selected_output,
+		L"",
+		priorities,
+		true);
+
+	expect(decision.has_resolved_output, "sync decision should fall back to a preferred active output");
+	expect(decision.resolved_output.pwszID == L"spk", "fallback should follow configured priority");
+	expect(decision.output_changed, "fallback to another output should count as an output change");
+	expect(decision.should_apply_routing, "fallback to a new active output should apply routing");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -201,6 +263,9 @@ int main()
 		runTest("ignore device change for unselected active device", testShouldIgnoreDeviceChangeForUnselectedActiveDevice);
 		runTest("do not ignore device change for selected output", testShouldNotIgnoreDeviceChangeForSelectedOutput);
 		runTest("do not ignore device change when selected output is inactive", testShouldNotIgnoreDeviceChangeWhenSelectedOutputIsInactive);
+		runTest("sync decision routes active untargeted output", testBuildSyncDecisionRequestsRoutingForActiveUntargetedOutput);
+		runTest("sync decision mutes inactive selected output", testBuildSyncDecisionMutesInactiveSelectedOutput);
+		runTest("sync decision falls back to preferred output", testBuildSyncDecisionFallsBackToPreferredOutput);
 	}
 	catch (const std::exception& exception)
 	{
