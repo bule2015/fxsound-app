@@ -54,6 +54,15 @@ namespace FxSound::OutputDeviceSelection
 		bool should_sync_processing_state = false;
 	};
 
+	struct InitDecision
+	{
+		SoundDevice resolved_output;
+		bool has_resolved_output = false;
+		bool name_changed = false;
+		bool should_apply_output = false;
+		bool should_mute = false;
+	};
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -212,6 +221,65 @@ namespace FxSound::OutputDeviceSelection
 		}
 
 		return getPreferredOutput(output_devices, priorities);
+	}
+
+	inline InitDecision buildInitDecision(const std::vector<SoundDevice>& sound_devices,
+		const std::vector<SoundDevice>& output_devices,
+		const SoundDevice& selected_output,
+		const std::wstring& output_name,
+		const std::vector<PriorityEntry>& priorities)
+	{
+		InitDecision decision;
+		SoundDevice default_output;
+
+		for (const auto& sound_device : sound_devices)
+		{
+			if (!sound_device.isRealDevice || !sound_device.isActive || sound_device.deviceNumChannel < 2)
+			{
+				continue;
+			}
+
+			if (sound_device.isTargetedRealPlaybackDevice ||
+				(default_output.pwszID.empty() && sound_device.isDefaultDevice))
+			{
+				default_output = sound_device;
+			}
+		}
+
+		decision.resolved_output = default_output;
+
+		if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
+		{
+			for (const auto& output_device : output_devices)
+			{
+				if (areSameOutputDevice(selected_output, output_device))
+				{
+					decision.resolved_output = output_device;
+					break;
+				}
+			}
+
+			if (decision.resolved_output.pwszID.empty() && selected_output.deviceNumChannel >= 2)
+			{
+				decision.resolved_output = selected_output;
+			}
+		}
+
+		if (decision.resolved_output.pwszID.empty() && !output_devices.empty())
+		{
+			decision.resolved_output = resolveSelectedOutput(output_devices, selected_output, output_name, priorities);
+		}
+
+		decision.has_resolved_output = !decision.resolved_output.pwszID.empty();
+		if (!decision.has_resolved_output)
+		{
+			return decision;
+		}
+
+		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
+		decision.should_apply_output = decision.resolved_output.isActive;
+		decision.should_mute = !decision.resolved_output.isActive;
+		return decision;
 	}
 
 	inline bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind,

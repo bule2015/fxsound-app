@@ -1023,8 +1023,6 @@ bool FxController::importPresets(const Array<File>& preset_files, StringArray& i
 void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 {
     dfx_enabled_ = false;
-
-	SoundDevice default_output;
 	
 	auto device_configs = DeviceConfig::loadDeviceConfigs(settings_, "device_configs");
 	if (device_configs.size() == 0)
@@ -1040,71 +1038,35 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 
     for (auto sound_device : sound_devices)
     {
-        if (sound_device.isRealDevice)
-        {
-			if (sound_device.isActive && sound_device.deviceNumChannel >= 2 &&
-				(sound_device.isDefaultDevice || sound_device.isTargetedRealPlaybackDevice))
-			{
-				default_output = sound_device;
-			}
-        }
-        else if (sound_device.deviceFriendlyName.find(L"FxSound Audio Enhancer") != std::wstring::npos)
+        if (!sound_device.isRealDevice &&
+			sound_device.deviceFriendlyName.find(L"FxSound Audio Enhancer") != std::wstring::npos)
         {
             dfx_enabled_ = true;
         }
     }
 
 	rebuildOutputDeviceList(sound_devices, true);
-	auto selected_output = FxModel::getModel().getSelectedOutput();
 	auto priorities = loadOutputPriorities(settings_);
-
-	if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
-	{
-		for (auto& output_device : active_output_devices_)
-		{
-			if (FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, output_device))
-			{
-				default_output = output_device;
-				break;
-			}
-		}
-
-		if (default_output.pwszID.empty() && selected_output.deviceNumChannel >= 2)
-		{
-			default_output = selected_output;
-		}
-	}
-
-	// If output is not set previously, use the system default output.
-	if (default_output.pwszID.empty() && getOutputName().isEmpty() && default_output.deviceFriendlyName.size() > 0)
-	{
-		setOutputName(default_output.deviceFriendlyName.c_str());
-	}
-	else if (default_output.pwszID.empty() && active_output_devices_.size() > 0)
-	{
-		default_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
-			active_output_devices_,
-			selected_output,
-			getOutputName().toWideCharPointer(),
-			priorities);
-		if (!default_output.pwszID.empty())
-		{
-			setOutputName(default_output.deviceFriendlyName.c_str());
-		}
-	}
+	auto init_decision = FxSound::OutputDeviceSelection::buildInitDecision(
+		sound_devices,
+		active_output_devices_,
+		FxModel::getModel().getSelectedOutput(),
+		getOutputName().toWideCharPointer(),
+		priorities);
 
 	FxModel::getModel().initOutputs(active_output_devices_);
-	if (!default_output.pwszID.empty())
+	if (init_decision.has_resolved_output)
 	{
+		auto& default_output = init_decision.resolved_output;
 		setOutputName(default_output.deviceFriendlyName.c_str());
 		FxModel::getModel().setSelectedOutput(default_output, false);
 		saveSelectedOutputToSettings(default_output);
 
-		if (default_output.isActive)
+		if (init_decision.should_apply_output)
 		{
 			setOutput(default_output.pwszID.c_str());
 		}
-		else
+		else if (init_decision.should_mute)
 		{
 			playback_device_available_ = false;
 			audio_passthru_->mute(true);
