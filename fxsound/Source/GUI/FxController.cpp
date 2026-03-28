@@ -1021,8 +1021,6 @@ bool FxController::importPresets(const Array<File>& preset_files, StringArray& i
 
 void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 {
-    dfx_enabled_ = false;
-	
 	auto device_configs = DeviceConfig::loadDeviceConfigs(settings_, "device_configs");
 	if (device_configs.size() == 0)
 	{
@@ -1035,14 +1033,7 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 		DeviceConfig::updateDeviceConfigs(settings_, sound_devices);
 	}
 
-    for (auto sound_device : sound_devices)
-    {
-        if (!sound_device.isRealDevice &&
-			sound_device.deviceFriendlyName.find(L"FxSound Audio Enhancer") != std::wstring::npos)
-        {
-            dfx_enabled_ = true;
-        }
-    }
+	dfx_enabled_ = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices).dfx_enabled;
 
 	rebuildOutputDeviceList(sound_devices, true);
 	auto priorities = loadOutputPriorities(settings_);
@@ -1082,11 +1073,6 @@ void FxController::rebuildOutputDeviceList(const std::vector<SoundDevice>& sound
 		FxModel::getModel().getSelectedOutput(),
 		loadOutputPriorities(settings_),
 		include_selected_inactive);
-}
-
-void FxController::sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices)
-{
-	FxSound::OutputDeviceSelection::sortOutputDevicesByPriority(output_devices, loadOutputPriorities(settings_));
 }
 
 void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)

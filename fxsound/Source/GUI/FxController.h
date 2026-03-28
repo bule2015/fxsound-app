@@ -225,7 +225,6 @@ private:
 	
     void initOutputs(std::vector<SoundDevice>& sound_devices);
 	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
-	void sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices);
 	void updateOutputs(std::vector<SoundDevice>& sound_devices);
 	void selectProcessingOutput(std::vector<SoundDevice>& sound_devices);
 	void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
