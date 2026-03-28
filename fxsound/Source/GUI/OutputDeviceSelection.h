@@ -43,6 +43,17 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	struct ManualSelectionDecision
+	{
+		SoundDevice selected_output;
+		bool found_output = false;
+		bool should_retarget_playback = false;
+		bool should_restart_processing = false;
+		bool should_begin_grace_period = false;
+		bool should_power_off = false;
+		bool should_sync_processing_state = false;
+	};
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -260,6 +271,49 @@ namespace FxSound::OutputDeviceSelection
 		decision.should_apply_routing = timer_running && decision.resolved_output.isActive &&
 			(decision.output_changed || decision.routing_changed);
 		decision.should_mute = !decision.resolved_output.isActive;
+		return decision;
+	}
+
+	inline ManualSelectionDecision buildManualSelectionDecision(const std::vector<SoundDevice>& sound_devices,
+		const std::wstring& output_device_id,
+		const SoundDevice& previous_selected_output,
+		bool timer_running,
+		bool power_state,
+		bool playback_device_available)
+	{
+		ManualSelectionDecision decision;
+
+		for (const auto& sound_device : sound_devices)
+		{
+			if (!sound_device.isRealDevice || output_device_id != sound_device.pwszID)
+			{
+				continue;
+			}
+
+			decision.selected_output = sound_device;
+			decision.found_output = true;
+
+			if (!timer_running && sound_device.isDefaultDevice)
+			{
+				decision.should_sync_processing_state = power_state;
+				return decision;
+			}
+
+			decision.should_retarget_playback = !sound_device.isTargetedRealPlaybackDevice;
+			decision.should_restart_processing =
+				timer_running &&
+				sound_device.isActive &&
+				(!sound_device.isTargetedRealPlaybackDevice ||
+					!previous_selected_output.isActive ||
+					!playback_device_available);
+			decision.should_begin_grace_period =
+				power_state &&
+				(decision.should_restart_processing || decision.should_retarget_playback);
+			decision.should_sync_processing_state = power_state;
+			return decision;
+		}
+
+		decision.should_power_off = true;
 		return decision;
 	}
 }

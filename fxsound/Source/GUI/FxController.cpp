@@ -709,82 +709,15 @@ void FxController::setOutput(const String output_device_id, bool notify)
 {
 	std::vector<SoundDevice> sound_devices = audio_passthru_->getSoundDevices();
 	auto previous_selected_output = FxModel::getModel().getSelectedOutput();
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		sound_devices,
+		output_device_id.toWideCharPointer(),
+		previous_selected_output,
+		isTimerRunning(),
+		FxModel::getModel().getPowerState(),
+		audio_passthru_->isPlaybackDeviceAvailable());
 
-	bool output_found = false;
-
-	for (auto sound_device : sound_devices)
-	{
-		if (sound_device.isRealDevice)
-		{
-			if (output_device_id == sound_device.pwszID.c_str())
-			{
-				output_found = true;
-				FxModel::getModel().setSelectedOutput(sound_device, notify);
-				saveSelectedOutputToSettings(sound_device);
-
-				if (!isTimerRunning())
-				{
-                    // FxSound is off and the selected output device is the default playback device
-					if (sound_device.isDefaultDevice)
-					{
-						break;
-                    }
-				}
-
-				auto should_restart_processing =
-					isTimerRunning() &&
-					sound_device.isActive &&
-					(!sound_device.isTargetedRealPlaybackDevice ||
-					 !previous_selected_output.isActive ||
-					 !audio_passthru_->isPlaybackDeviceAvailable());
-
-				if (!sound_device.isTargetedRealPlaybackDevice)
-				{
-					audio_passthru_->setAsPlaybackDevice(sound_device);
-					output_changed_ = true;
-				}
-
-				if (should_restart_processing)
-				{
-					audio_passthru_->restartProcessingForDeviceChange();
-					output_changed_ = true;
-				}
-
-				if (FxModel::getModel().getPowerState() && (should_restart_processing || !sound_device.isTargetedRealPlaybackDevice))
-				{
-					beginAudioProcessingGracePeriod();
-				}
-				
-				setOutputName(sound_device.deviceFriendlyName.c_str());
-
-				String message = TRANS("Output: ") + sound_device.deviceFriendlyName.c_str();
-
-                // Auto-select preset for the output device if the preset is not modified by user
-				if (!FxModel::getModel().isPresetModified())
-				{
-					auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
-					if (device_config.preset.isNotEmpty())
-					{
-						auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
-						if (setPreset(selected_preset, false))
-						{
-							if (FxModel::getModel().getPowerState())
-							{
-								message += "\n" + TRANS("Preset: ") + device_config.preset;
-							}
-						}
-					}
-
-				}
-
-				FxModel::getModel().pushMessage(message);
-
-				break;
-			}
-		}
-	}
-
-	if (!output_found)
+	if (!decision.found_output)
 	{
 		audio_passthru_->mute(true);
 		powerOn(false);
@@ -793,7 +726,51 @@ void FxController::setOutput(const String output_device_id, bool notify)
 	}
 	else
 	{
-		if (FxModel::getModel().getPowerState())
+		auto sound_device = decision.selected_output;
+		FxModel::getModel().setSelectedOutput(sound_device, notify);
+		saveSelectedOutputToSettings(sound_device);
+
+		if (decision.should_retarget_playback)
+		{
+			audio_passthru_->setAsPlaybackDevice(sound_device);
+			output_changed_ = true;
+		}
+
+		if (decision.should_restart_processing)
+		{
+			audio_passthru_->restartProcessingForDeviceChange();
+			output_changed_ = true;
+		}
+
+		if (decision.should_begin_grace_period)
+		{
+			beginAudioProcessingGracePeriod();
+		}
+
+		setOutputName(sound_device.deviceFriendlyName.c_str());
+
+		String message = TRANS("Output: ") + sound_device.deviceFriendlyName.c_str();
+
+		// Auto-select preset for the output device if the preset is not modified by user
+		if (!FxModel::getModel().isPresetModified())
+		{
+			auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
+			if (device_config.preset.isNotEmpty())
+			{
+				auto selected_preset = findPresetIndexByName(FxModel::getModel(), device_config.preset);
+				if (setPreset(selected_preset, false))
+				{
+					if (FxModel::getModel().getPowerState())
+					{
+						message += "\n" + TRANS("Preset: ") + device_config.preset;
+					}
+				}
+			}
+		}
+
+		FxModel::getModel().pushMessage(message);
+
+		if (decision.should_sync_processing_state)
 		{
 			playback_device_available_ = audio_passthru_->isPlaybackDeviceAvailable();
 			powerOn(true);
