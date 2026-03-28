@@ -231,6 +231,8 @@ private:
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);
+	void applySelectedOutput(const SoundDevice& sound_device, bool notify = false, bool output_changed = false);
+	String tryApplyAutoPresetForCurrentOutput(bool trigger_change);
 
 	void powerOn(bool on);
 

@@ -727,8 +727,7 @@ void FxController::setOutput(const String output_device_id, bool notify)
 	else
 	{
 		auto sound_device = decision.selected_output;
-		FxModel::getModel().setSelectedOutput(sound_device, notify);
-		saveSelectedOutputToSettings(sound_device);
+		applySelectedOutput(sound_device, notify);
 
 		if (decision.should_retarget_playback)
 		{
@@ -747,24 +746,12 @@ void FxController::setOutput(const String output_device_id, bool notify)
 			beginAudioProcessingGracePeriod();
 		}
 
-		setOutputName(sound_device.deviceFriendlyName.c_str());
-
 		String message = TRANS("Output: ") + sound_device.deviceFriendlyName.c_str();
 
-		// Auto-select preset for the output device if the preset is not modified by user
-		auto device_config = DeviceConfig::getDeviceConfig(settings_, sound_device.deviceFriendlyName.c_str());
-		auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
-			FxModel::getModel().isPresetModified(),
-			true,
-			device_config.preset.toWideCharPointer(),
-			FxModel::getModel().getPowerState());
-		if (auto_preset_decision.should_apply)
+		auto applied_preset_name = tryApplyAutoPresetForCurrentOutput(true);
+		if (applied_preset_name.isNotEmpty())
 		{
-			auto selected_preset = findPresetIndexByName(FxModel::getModel(), auto_preset_decision.preset_name.c_str());
-			if (setPreset(selected_preset, false) && auto_preset_decision.should_announce)
-			{
-				message += "\n" + TRANS("Preset: ") + String(auto_preset_decision.preset_name.c_str());
-			}
+			message += "\n" + TRANS("Preset: ") + applied_preset_name;
 		}
 
 		FxModel::getModel().pushMessage(message);
@@ -1048,9 +1035,7 @@ void FxController::initOutputs(std::vector<SoundDevice>& sound_devices)
 	if (init_decision.has_resolved_output)
 	{
 		auto& default_output = init_decision.resolved_output;
-		setOutputName(default_output.deviceFriendlyName.c_str());
-		FxModel::getModel().setSelectedOutput(default_output, false);
-		saveSelectedOutputToSettings(default_output);
+		applySelectedOutput(default_output);
 
 		if (init_decision.should_apply_output)
 		{
@@ -1095,9 +1080,7 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 		auto& model = FxModel::getModel();
 		auto synced_output = sync_decision.resolved_output;
 
-		setOutputName(synced_output.deviceFriendlyName.c_str());
-		model.setSelectedOutput(synced_output, sync_decision.output_changed);
-		saveSelectedOutputToSettings(synced_output);
+		applySelectedOutput(synced_output, false, sync_decision.output_changed);
 
 		if (sync_decision.should_apply_routing)
 		{
@@ -1114,17 +1097,7 @@ void FxController::updateOutputs(std::vector<SoundDevice>& sound_devices)
 		}
 		else
 		{
-			auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
-			auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
-				model.isPresetModified(),
-				sync_decision.output_changed || sync_decision.name_changed,
-				device_config.preset.toWideCharPointer(),
-				model.getPowerState());
-			if (auto_preset_decision.should_apply)
-			{
-				auto selected_preset = model.selectPreset(String(auto_preset_decision.preset_name.c_str()), false);
-				setPreset(selected_preset, false);
-			}
+			tryApplyAutoPresetForCurrentOutput(sync_decision.output_changed || sync_decision.name_changed);
 		}
 	}
 }
@@ -1178,9 +1151,7 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 	if (idle_sync_decision.has_resolved_output)
 	{
 		auto& synced_output = idle_sync_decision.resolved_output;
-		setOutputName(synced_output.deviceFriendlyName.c_str());
-		model.setSelectedOutput(synced_output);
-		saveSelectedOutputToSettings(synced_output);
+		applySelectedOutput(synced_output);
 
 		if (idle_sync_decision.should_notify_error)
 		{
@@ -1189,18 +1160,38 @@ void FxController::syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_d
 			return;
 		}
 
-		auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
-		auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
-			model.isPresetModified(),
-			true,
-			device_config.preset.toWideCharPointer(),
-			model.getPowerState());
-		if (auto_preset_decision.should_apply)
-		{
-			auto selected_preset = model.selectPreset(String(auto_preset_decision.preset_name.c_str()), false);
-			setPreset(selected_preset, false);
-		}
+		tryApplyAutoPresetForCurrentOutput(true);
 	}
+}
+
+void FxController::applySelectedOutput(const SoundDevice& sound_device, bool notify, bool output_changed)
+{
+	setOutputName(sound_device.deviceFriendlyName.c_str());
+	FxModel::getModel().setSelectedOutput(sound_device, notify || output_changed);
+	saveSelectedOutputToSettings(sound_device);
+}
+
+String FxController::tryApplyAutoPresetForCurrentOutput(bool trigger_change)
+{
+	auto& model = FxModel::getModel();
+	auto device_config = DeviceConfig::getDeviceConfig(settings_, getOutputName());
+	auto auto_preset_decision = FxSound::OutputDeviceSelection::buildAutoPresetDecision(
+		model.isPresetModified(),
+		trigger_change,
+		device_config.preset.toWideCharPointer(),
+		model.getPowerState());
+	if (!auto_preset_decision.should_apply)
+	{
+		return {};
+	}
+
+	auto selected_preset = findPresetIndexByName(model, auto_preset_decision.preset_name.c_str());
+	if (!setPreset(selected_preset, false))
+	{
+		return {};
+	}
+
+	return String(auto_preset_decision.preset_name.c_str());
 }
 
 void FxController::powerOn(bool on)
