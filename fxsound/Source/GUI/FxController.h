@@ -231,6 +231,8 @@ private:
     void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind, const String& device_id, const std::vector<SoundDevice>& sound_devices);
+	SoundDevice loadSelectedOutputFromSettings();
+	void saveSelectedOutputToSettings(const SoundDevice& sound_device);
 
 	void powerOn(bool on);
 
