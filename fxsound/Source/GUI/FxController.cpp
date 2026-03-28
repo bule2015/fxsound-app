@@ -370,7 +370,7 @@ void FxController::config(const String& commandline)
 	setMasterGain(mg);
 }
 
-void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray_view, AudioPassthru* audio_passthru)
+void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray_view, IAudioPassthru* audio_passthru)
 {
 	if (!isTimerRunning())
 	{

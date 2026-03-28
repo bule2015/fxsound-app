@@ -64,26 +64,44 @@ enum class AudioDeviceChangeKind
 class AudioPassthruCallback
 {
 public:
+	virtual ~AudioPassthruCallback() = default;
 	virtual void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) = 0;
 };
 
+class IAudioPassthru
+{
+public:
+	virtual ~IAudioPassthru() = default;
+	virtual int init() = 0;
+	virtual void mute(bool mute) = 0;
+	virtual std::vector<SoundDevice> getSoundDevices(bool active_devices = true) = 0;
+	virtual int setBufferLength(int i_buffer_length_msecs) = 0;
+	virtual int processTimer() = 0;
+	virtual void setDspProcessingModule(DfxDsp* pDspProcessingModule) = 0;
+	virtual void setAsPlaybackDevice(const SoundDevice sound_device) = 0;
+	virtual void registerCallback(AudioPassthruCallback* callback) = 0;
+	virtual bool isPlaybackDeviceAvailable() = 0;
+	virtual void restoreDefaultPlaybackDevice() = 0;
+	virtual bool restartProcessingForDeviceChange() = 0;
+};
+
 class AudioPassthruPrivate;
-class AudioPassthru
+class AudioPassthru : public IAudioPassthru
 {
 public:
 	AudioPassthru();
 	~AudioPassthru();
-	int init();
-	void mute(bool mute);
-	std::vector<SoundDevice> getSoundDevices(bool active_devices = true);
-	int setBufferLength(int i_buffer_length_msecs);
-	int processTimer();
-	void setDspProcessingModule(DfxDsp* pDspProcessingModule);
-	void setAsPlaybackDevice(const SoundDevice sound_device);
-	void registerCallback(AudioPassthruCallback *callback);
-    bool isPlaybackDeviceAvailable();
-	void restoreDefaultPlaybackDevice();
-	bool restartProcessingForDeviceChange();
+	int init() override;
+	void mute(bool mute) override;
+	std::vector<SoundDevice> getSoundDevices(bool active_devices = true) override;
+	int setBufferLength(int i_buffer_length_msecs) override;
+	int processTimer() override;
+	void setDspProcessingModule(DfxDsp* pDspProcessingModule) override;
+	void setAsPlaybackDevice(const SoundDevice sound_device) override;
+	void registerCallback(AudioPassthruCallback *callback) override;
+    bool isPlaybackDeviceAvailable() override;
+	void restoreDefaultPlaybackDevice() override;
+	bool restartProcessingForDeviceChange() override;
 
 private:
 	AudioPassthruPrivate *data_;
