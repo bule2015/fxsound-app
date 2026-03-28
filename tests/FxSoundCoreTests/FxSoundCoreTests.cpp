@@ -244,6 +244,67 @@ void testBuildSyncDecisionFallsBackToPreferredOutput()
 	expect(decision.should_apply_routing, "fallback to a new active output should apply routing");
 }
 
+void testManualSelectionDecisionRestartsProcessingAfterInactiveSelection()
+{
+	auto previous_selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		sound_devices,
+		L"spk",
+		previous_selected_output,
+		true,
+		true,
+		false);
+
+	expect(decision.found_output, "manual selection should find active speaker output");
+	expect(decision.should_retarget_playback, "manual selection should retarget untargeted output");
+	expect(decision.should_restart_processing, "manual selection should restart processing after inactive selection");
+	expect(decision.should_begin_grace_period, "manual selection should begin grace period when processing restarts");
+}
+
+void testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff()
+{
+	auto previous_selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		sound_devices,
+		L"spk",
+		previous_selected_output,
+		false,
+		false,
+		true);
+
+	expect(decision.found_output, "manual selection should resolve default output");
+	expect(!decision.should_retarget_playback, "default output should not be retargeted while processing is off");
+	expect(!decision.should_restart_processing, "processing-off selection should not restart processing");
+	expect(!decision.should_begin_grace_period, "processing-off selection should not start a grace period");
+}
+
+void testManualSelectionDecisionPowersOffWhenOutputIsMissing()
+{
+	auto previous_selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildManualSelectionDecision(
+		sound_devices,
+		L"missing",
+		previous_selected_output,
+		true,
+		true,
+		true);
+
+	expect(!decision.found_output, "manual selection should report missing outputs");
+	expect(decision.should_power_off, "missing output should request power off");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -266,6 +327,9 @@ int main()
 		runTest("sync decision routes active untargeted output", testBuildSyncDecisionRequestsRoutingForActiveUntargetedOutput);
 		runTest("sync decision mutes inactive selected output", testBuildSyncDecisionMutesInactiveSelectedOutput);
 		runTest("sync decision falls back to preferred output", testBuildSyncDecisionFallsBackToPreferredOutput);
+		runTest("manual selection restarts processing after inactive selection", testManualSelectionDecisionRestartsProcessingAfterInactiveSelection);
+		runTest("manual selection leaves default output untouched when processing is off", testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff);
+		runTest("manual selection powers off when output is missing", testManualSelectionDecisionPowersOffWhenOutputIsMissing);
 	}
 	catch (const std::exception& exception)
 	{
