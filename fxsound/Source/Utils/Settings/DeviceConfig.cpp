@@ -22,13 +22,47 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace FxSound
 {
-    void DeviceConfig::initDeviceConfigs(Settings& settings, std::vector<SoundDevice>& sound_devices)
+    namespace
+    {
+        bool matchesDeviceConfig(const DeviceConfig& device_config, const SoundDevice& sound_device)
+        {
+            if (!device_config.device_id.isEmpty() &&
+                device_config.device_id == sound_device.pwszID.c_str())
+            {
+                return true;
+            }
+
+            if (!device_config.container_id.isEmpty() &&
+                !sound_device.containerId.empty() &&
+                device_config.container_id == sound_device.containerId.c_str())
+            {
+                return true;
+            }
+
+            return device_config.container_id.isEmpty() &&
+                device_config.device_name == sound_device.deviceFriendlyName.c_str();
+        }
+
+        bool matchesDeviceConfigKey(const DeviceConfig& lhs, const DeviceConfig& rhs)
+        {
+            return (!lhs.device_id.isEmpty() && lhs.device_id == rhs.device_id) ||
+                (!lhs.container_id.isEmpty() &&
+                 !rhs.container_id.isEmpty() &&
+                 lhs.container_id == rhs.container_id &&
+                 lhs.device_name == rhs.device_name) ||
+                (lhs.container_id.isEmpty() &&
+                 rhs.container_id.isEmpty() &&
+                 lhs.device_name == rhs.device_name);
+        }
+    }
+
+    void DeviceConfig::initDeviceConfigs(Settings& settings, const std::vector<SoundDevice>& sound_devices)
     {
         juce::Array<DeviceConfig> device_configs;
         auto priorities = OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
         for (const auto& priority : priorities)
         {
-            DeviceConfig device_config = { priority.device_id.c_str(), priority.device_name.c_str(), "" };
+            DeviceConfig device_config = { priority.device_id.c_str(), priority.device_name.c_str(), priority.container_id.c_str(), "" };
             device_configs.add(device_config);
         }
 
@@ -44,7 +78,8 @@ namespace FxSound
         {
             existing_priorities.push_back({
                 device_config.device_id.toWideCharPointer(),
-                device_config.device_name.toWideCharPointer()
+                device_config.device_name.toWideCharPointer(),
+                device_config.container_id.toWideCharPointer()
                 });
         }
 
@@ -58,12 +93,17 @@ namespace FxSound
                 auto existing_config = std::find_if(device_configs.begin(), device_configs.end(),
                     [&priority](const DeviceConfig& device_config)
                     {
-                        return device_config.device_name == priority.device_name.c_str();
+                        SoundDevice sound_device;
+                        sound_device.pwszID = priority.device_id;
+                        sound_device.deviceFriendlyName = priority.device_name;
+                        sound_device.containerId = priority.container_id;
+                        return matchesDeviceConfig(device_config, sound_device);
                     });
 
                 DeviceConfig device_config {
                     priority.device_id.c_str(),
                     priority.device_name.c_str(),
+                    priority.container_id.c_str(),
                     existing_config != device_configs.end() ? existing_config->preset : juce::String()
                 };
                 merged_device_configs.add(device_config);
@@ -74,13 +114,13 @@ namespace FxSound
         }
     }
 
-    DeviceConfig DeviceConfig::getDeviceConfig(Settings& settings, juce::String device_name)
+    DeviceConfig DeviceConfig::getDeviceConfig(Settings& settings, const SoundDevice& sound_device)
     {
         juce::Array<DeviceConfig> device_configs = loadDeviceConfigs(settings, "device_configs");
 
-        for (auto device_config : device_configs)
+        for (const auto& device_config : device_configs)
         {
-            if (device_config.device_name == device_name)
+            if (matchesDeviceConfig(device_config, sound_device))
             {
                 return device_config;
             }
@@ -94,6 +134,7 @@ namespace FxSound
         auto* obj = new juce::DynamicObject();
         obj->setProperty("device_id", device_config.device_id);
         obj->setProperty("device_name", device_config.device_name);
+        obj->setProperty("container_id", device_config.container_id);
         obj->setProperty("preset", device_config.preset);
 
         return juce::var(obj);
@@ -107,6 +148,7 @@ namespace FxSound
         {
             device_config.device_id = obj->getProperty("device_id").toString();
             device_config.device_name = obj->getProperty("device_name").toString();
+            device_config.container_id = obj->getProperty("container_id").toString();
             device_config.preset = obj->getProperty("preset").toString();
         }
 
@@ -116,13 +158,16 @@ namespace FxSound
     juce::Array<DeviceConfig> DeviceConfig::removeDuplicates(const juce::Array<DeviceConfig>& device_configs)
     {
         juce::Array<DeviceConfig> result;
-        juce::StringArray duplicate_names;
-
         for (const auto& device_config : device_configs)
         {
-            if (!duplicate_names.contains(device_config.device_name))
+            auto existing = std::find_if(result.begin(), result.end(),
+                [&device_config](const DeviceConfig& existing_config)
+                {
+                    return matchesDeviceConfigKey(existing_config, device_config);
+                });
+
+            if (existing == result.end())
             {
-                duplicate_names.add(device_config.device_name);
                 result.add(device_config);
             }
         }

@@ -19,6 +19,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxController.h"
 #include "FxOutputPreference.h"
 
+namespace
+{
+bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
+{
+    if (!lhs.device_id.isEmpty() && !rhs.device_id.isEmpty() && lhs.device_id == rhs.device_id)
+    {
+        return true;
+    }
+
+    if (!lhs.container_id.isEmpty() &&
+        !rhs.container_id.isEmpty() &&
+        lhs.container_id == rhs.container_id &&
+        lhs.device_name == rhs.device_name)
+    {
+        return true;
+    }
+
+    return lhs.container_id.isEmpty() &&
+        rhs.container_id.isEmpty() &&
+        lhs.device_name == rhs.device_name;
+}
+}
+
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
 {
     up_image_ = Drawable::createFromImageData(FXIMAGE(ArrowUp), FXIMAGESIZE(ArrowUp));
@@ -110,7 +133,7 @@ void FxOutputDeviceRow::update(int index, const DeviceConfig& device_config)
     device_name_.setBounds(x, bounds.getY(), width, bounds.getHeight());
 
     device_name_.setText(String::formatted("%d. ", row_index_ + 1) +  device_config.device_name, NotificationType::dontSendNotification);
-    device_name_.setEnabled(FxController::getInstance().isOutputDeviceConnected(device_config.device_name));
+    device_name_.setEnabled(FxController::getInstance().isOutputDeviceConnected(device_config));
 
     preset_list_.clear();
     preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
@@ -204,11 +227,11 @@ void FxOutputPreferenceListModel::modelChanged(FxModel::Event model_event)
     }
 }
 
-void FxOutputPreferenceListModel::updateDeviceConfig(const DeviceConfig device_config)
+void FxOutputPreferenceListModel::updateDeviceConfig(const DeviceConfig& device_config)
 {
     for (auto i = 0; i < device_configs_.size(); i++)
     {
-        if (device_configs_[i].device_name == device_config.device_name)
+        if (matchesDeviceConfigEntry(device_configs_[i], device_config))
         {
             device_configs_.getReference(i).preset = device_config.preset;
             break;

@@ -30,6 +30,7 @@ namespace FxSound::OutputDeviceSelection
 	{
 		std::wstring device_id;
 		std::wstring device_name;
+		std::wstring container_id;
 	};
 
 	struct PriorityMergeResult
@@ -101,6 +102,34 @@ namespace FxSound::OutputDeviceSelection
 		bool dfx_enabled = false;
 	};
 
+	inline bool matchesPriorityEntryExactly(const PriorityEntry& entry, const SoundDevice& sound_device)
+	{
+		if (!entry.device_id.empty() && entry.device_id == sound_device.pwszID)
+		{
+			return true;
+		}
+
+		if (!entry.container_id.empty() &&
+			!sound_device.containerId.empty() &&
+			entry.container_id == sound_device.containerId &&
+			!entry.device_name.empty() &&
+			entry.device_name == sound_device.deviceFriendlyName)
+		{
+			return true;
+		}
+
+		return entry.container_id.empty() &&
+			!entry.device_name.empty() &&
+			entry.device_name == sound_device.deviceFriendlyName;
+	}
+
+	inline bool matchesPriorityEntryByContainer(const PriorityEntry& entry, const SoundDevice& sound_device)
+	{
+		return !entry.container_id.empty() &&
+			!sound_device.containerId.empty() &&
+			entry.container_id == sound_device.containerId;
+	}
+
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -154,19 +183,24 @@ namespace FxSound::OutputDeviceSelection
 
 	inline int getOutputDevicePriority(const std::vector<PriorityEntry>& priorities, const SoundDevice& sound_device)
 	{
-		auto priority = static_cast<int>(priorities.size());
-
 		for (int i = 0; i < static_cast<int>(priorities.size()); ++i)
 		{
 			const auto& entry = priorities[static_cast<size_t>(i)];
-			if ((!entry.device_id.empty() && entry.device_id == sound_device.pwszID) ||
-				(!entry.device_name.empty() && entry.device_name == sound_device.deviceFriendlyName))
+			if (matchesPriorityEntryExactly(entry, sound_device))
 			{
 				return i;
 			}
 		}
 
-		return priority;
+		for (int i = 0; i < static_cast<int>(priorities.size()); ++i)
+		{
+			if (matchesPriorityEntryByContainer(priorities[static_cast<size_t>(i)], sound_device))
+			{
+				return i;
+			}
+		}
+
+		return static_cast<int>(priorities.size());
 	}
 
 	inline std::vector<PriorityEntry> buildInitialOutputPriorities(const std::vector<SoundDevice>& sound_devices)
@@ -188,12 +222,20 @@ namespace FxSound::OutputDeviceSelection
 				continue;
 			}
 
-			PriorityEntry entry { sound_device.pwszID, sound_device.deviceFriendlyName };
+			PriorityEntry entry { sound_device.pwszID, sound_device.deviceFriendlyName, sound_device.containerId };
 			auto duplicate = std::find_if(priorities.begin(), priorities.end(),
 				[&entry](const PriorityEntry& existing_entry)
 				{
 					return (!entry.device_id.empty() && existing_entry.device_id == entry.device_id) ||
-						(!entry.device_name.empty() && existing_entry.device_name == entry.device_name);
+						(!entry.container_id.empty() &&
+						 !existing_entry.container_id.empty() &&
+						 entry.container_id == existing_entry.container_id &&
+						 !entry.device_name.empty() &&
+						 existing_entry.device_name == entry.device_name) ||
+						(entry.container_id.empty() &&
+						 existing_entry.container_id.empty() &&
+						 !entry.device_name.empty() &&
+						 existing_entry.device_name == entry.device_name);
 				});
 
 			if (duplicate == priorities.end())
@@ -211,18 +253,33 @@ namespace FxSound::OutputDeviceSelection
 		PriorityMergeResult result;
 		result.priorities.reserve(existing_priorities.size());
 
-		auto matchesPriorityEntry = [](const PriorityEntry& entry, const SoundDevice& sound_device)
+		auto findMatchingEntry = [&result](const SoundDevice& sound_device)
 		{
-			return (!entry.device_id.empty() && entry.device_id == sound_device.pwszID) ||
-				(!entry.device_name.empty() && entry.device_name == sound_device.deviceFriendlyName);
+			auto exact_match = std::find_if(result.priorities.begin(), result.priorities.end(),
+				[&sound_device](const PriorityEntry& entry)
+				{
+					return matchesPriorityEntryExactly(entry, sound_device);
+				});
+			if (exact_match != result.priorities.end())
+			{
+				return exact_match;
+			}
+
+			return std::find_if(result.priorities.begin(), result.priorities.end(),
+				[&sound_device](const PriorityEntry& entry)
+				{
+					return matchesPriorityEntryByContainer(entry, sound_device);
+				});
 		};
 
 		for (const auto& existing_entry : existing_priorities)
 		{
 			auto known_device = std::find_if(sound_devices.begin(), sound_devices.end(),
-				[&existing_entry, &matchesPriorityEntry](const SoundDevice& sound_device)
+				[&existing_entry](const SoundDevice& sound_device)
 				{
-					return sound_device.isRealDevice && matchesPriorityEntry(existing_entry, sound_device);
+					return sound_device.isRealDevice &&
+						(matchesPriorityEntryExactly(existing_entry, sound_device) ||
+						 matchesPriorityEntryByContainer(existing_entry, sound_device));
 				});
 
 			if (known_device != sound_devices.end() && known_device->deviceNumChannel < 2)
@@ -241,24 +298,22 @@ namespace FxSound::OutputDeviceSelection
 				continue;
 			}
 
-			auto existing_entry = std::find_if(result.priorities.begin(), result.priorities.end(),
-				[&sound_device, &matchesPriorityEntry](const PriorityEntry& entry)
-				{
-					return matchesPriorityEntry(entry, sound_device);
-				});
+			auto existing_entry = findMatchingEntry(sound_device);
 
 			if (existing_entry == result.priorities.end())
 			{
-				result.priorities.push_back({ sound_device.pwszID, sound_device.deviceFriendlyName });
+				result.priorities.push_back({ sound_device.pwszID, sound_device.deviceFriendlyName, sound_device.containerId });
 				result.changed = true;
 				continue;
 			}
 
 			if (existing_entry->device_id != sound_device.pwszID ||
-				existing_entry->device_name != sound_device.deviceFriendlyName)
+				existing_entry->device_name != sound_device.deviceFriendlyName ||
+				existing_entry->container_id != sound_device.containerId)
 			{
 				existing_entry->device_id = sound_device.pwszID;
 				existing_entry->device_name = sound_device.deviceFriendlyName;
+				existing_entry->container_id = sound_device.containerId;
 				result.changed = true;
 			}
 		}
@@ -338,13 +393,24 @@ namespace FxSound::OutputDeviceSelection
 	{
 		for (const auto& priority : priorities)
 		{
-			for (const auto& device : output_devices)
-			{
-				if ((!priority.device_id.empty() && priority.device_id == device.pwszID) ||
-					(!priority.device_name.empty() && priority.device_name == device.deviceFriendlyName))
+			auto exact_match = std::find_if(output_devices.begin(), output_devices.end(),
+				[&priority](const SoundDevice& device)
 				{
-					return device;
-				}
+					return matchesPriorityEntryExactly(priority, device);
+				});
+			if (exact_match != output_devices.end())
+			{
+				return *exact_match;
+			}
+
+			auto container_match = std::find_if(output_devices.begin(), output_devices.end(),
+				[&priority](const SoundDevice& device)
+				{
+					return matchesPriorityEntryByContainer(priority, device);
+				});
+			if (container_match != output_devices.end())
+			{
+				return *container_match;
 			}
 		}
 

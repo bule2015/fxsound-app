@@ -127,9 +127,8 @@ public:
 
 	juce::Array<DeviceConfig> getDeviceConfigs();
     void saveDeviceConfigs(const juce::Array<DeviceConfig>& device_configs);
-	bool isOutputDeviceConnected(const String& output_device_name);
+	bool isOutputDeviceConnected(const DeviceConfig& device_config);
 	SoundDevice getPreferredOutput();
-	int compareOutputDevicePriority(const String& output_device_name1, const String& output_device_name2);
 	const String& getOutputName();
     void setOutputName(const String& output_device_name);
 
@@ -223,11 +222,11 @@ private:
 	void beginAudioProcessingGracePeriod();
 	bool isAudioProcessingGracePeriodActive() const;
 	
-    void initOutputs(std::vector<SoundDevice>& sound_devices);
+    void initOutputs(const std::vector<SoundDevice>& sound_devices);
 	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
-	void updateOutputs(std::vector<SoundDevice>& sound_devices);
-	void selectProcessingOutput(std::vector<SoundDevice>& sound_devices);
-	void syncOutputWithSystemDefault(std::vector<SoundDevice>& sound_devices);
+	void updateOutputs(const std::vector<SoundDevice>& sound_devices);
+	void selectProcessingOutput(const std::vector<SoundDevice>& sound_devices);
+	void syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);

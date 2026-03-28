@@ -677,6 +677,19 @@ void testBuildInitialOutputPrioritiesDropsDuplicatesByName()
 	expect(priorities[0].device_name == L"USB DAC", "initial priorities should preserve the device name");
 }
 
+void testBuildInitialOutputPrioritiesKeepsSameNameDifferentContainers()
+{
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"dac-a", L"USB DAC", L"USB Audio", true, false, false, L"c-dac-a"),
+		makeOutput(L"dac-b", L"USB DAC", L"USB Audio", true, false, false, L"c-dac-b")
+	};
+
+	auto priorities = FxSound::OutputDeviceSelection::buildInitialOutputPriorities(sound_devices);
+
+	expect(priorities.size() == 2, "initial priorities should keep same-name devices from different containers");
+	expect(priorities[0].container_id != priorities[1].container_id, "priority entries should preserve distinct container ids");
+}
+
 void testBuildInitialOutputPrioritiesSkipsMonoDevices()
 {
 	auto mono_output = makeOutput(L"chat", L"Headset Chat", L"Chat", true, false, false, L"c-chat");
@@ -713,7 +726,7 @@ void testMergeOutputPrioritiesAppendsNewOutputs()
 void testMergeOutputPrioritiesRefreshesReconnectedIds()
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
-		{L"dac-old", L"USB DAC"}
+		{L"dac-old", L"USB DAC", L"c-dac"}
 	};
 	std::vector<SoundDevice> sound_devices {
 		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
@@ -724,6 +737,23 @@ void testMergeOutputPrioritiesRefreshesReconnectedIds()
 	expect(merge_result.changed, "merge should report changes when a known output reconnects with a new endpoint id");
 	expect(merge_result.priorities.size() == 1, "merge should preserve the original priority entry count");
 	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the stored endpoint id for the known output");
+}
+
+void testMergeOutputPrioritiesMatchesRenamedDeviceByContainer()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"}
+	};
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"dac-new", L"USB DAC 2", L"USB Audio", true, false, false, L"c-dac")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+
+	expect(merge_result.changed, "merge should report changes when a device reconnects with a renamed endpoint");
+	expect(merge_result.priorities.size() == 1, "merge should keep the existing priority entry when only the endpoint name changes");
+	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the endpoint id when matching by container id");
+	expect(merge_result.priorities[0].device_name == L"USB DAC 2", "merge should refresh the stored name for the renamed device");
 }
 
 void testMergeOutputPrioritiesDropsKnownMonoOutputs()
@@ -789,6 +819,22 @@ void testGetPreferredOutputUsesConfiguredPriority()
 
 	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
 	expect(preferred_output.pwszID == L"hdmi", "preferred output should follow configured priority");
+}
+
+void testGetPreferredOutputFallsBackToContainerWhenNameChanges()
+{
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC 2", L"USB Audio", true, false, true, L"c-dac")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
+
+	expect(preferred_output.pwszID == L"dac-new", "preferred output should keep following the same container when the friendly name changes");
 }
 
 void testShouldIgnoreDeviceChangeForUnselectedActiveDevice()
@@ -1358,13 +1404,16 @@ int main()
 		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);
 		runTest("build initial output priorities keeps default first", testBuildInitialOutputPrioritiesKeepsDefaultFirst);
 		runTest("build initial output priorities drops duplicates by name", testBuildInitialOutputPrioritiesDropsDuplicatesByName);
+		runTest("build initial output priorities keeps same-name different containers", testBuildInitialOutputPrioritiesKeepsSameNameDifferentContainers);
 		runTest("build initial output priorities skips mono devices", testBuildInitialOutputPrioritiesSkipsMonoDevices);
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
 		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
+		runTest("merge output priorities matches renamed device by container", testMergeOutputPrioritiesMatchesRenamedDeviceByContainer);
 		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
+		runTest("preferred output falls back to container when name changes", testGetPreferredOutputFallsBackToContainerWhenNameChanges);
 		runTest("ignore device change for unselected active device", testShouldIgnoreDeviceChangeForUnselectedActiveDevice);
 		runTest("do not ignore device change for selected output", testShouldNotIgnoreDeviceChangeForSelectedOutput);
 		runTest("do not ignore device change when selected output is inactive", testShouldNotIgnoreDeviceChangeWhenSelectedOutputIsInactive);

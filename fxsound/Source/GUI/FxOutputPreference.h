@@ -71,7 +71,7 @@ public:
 
     void modelChanged(FxModel::Event model_event);
 
-    void updateDeviceConfig(const DeviceConfig device_config);
+    void updateDeviceConfig(const DeviceConfig& device_config);
 
     std::function<void()> onModelChanged;
     std::function<void(int row_index)> onRowMoved;
