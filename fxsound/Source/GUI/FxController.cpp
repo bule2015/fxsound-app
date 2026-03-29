@@ -796,21 +796,9 @@ void FxController::setOutput(const String output_device_id, bool notify)
 		auto sound_device = decision.selected_output;
 		applySelectedOutput(sound_device, notify);
 
-		if (decision.should_retarget_playback)
+		if (applyRoutingActions(sound_device, decision.routing_actions))
 		{
-			audio_passthru_->setAsPlaybackDevice(sound_device);
 			output_changed_ = true;
-		}
-
-		if (decision.should_restart_processing)
-		{
-			audio_passthru_->restartProcessingForDeviceChange();
-			output_changed_ = true;
-		}
-
-		if (decision.should_begin_grace_period)
-		{
-			beginAudioProcessingGracePeriod();
 		}
 
 		String message = TRANS("Output: ") + sound_device.deviceFriendlyName.c_str();
@@ -1150,10 +1138,8 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
 
 		applySelectedOutput(synced_output, false, sync_decision.output_changed);
 
-		if (sync_decision.should_apply_routing)
+		if (applyRoutingActions(synced_output, sync_decision.routing_actions))
 		{
-			audio_passthru_->setAsPlaybackDevice(synced_output);
-			beginAudioProcessingGracePeriod();
 			output_changed_ = true;
 		}
 
@@ -1236,6 +1222,31 @@ void FxController::applySelectedOutput(const SoundDevice& sound_device, bool not
 	setOutputName(sound_device.deviceFriendlyName.c_str());
 	FxModel::getModel().setSelectedOutput(sound_device, notify || output_changed);
 	saveSelectedOutputToSettings(sound_device);
+}
+
+bool FxController::applyRoutingActions(const SoundDevice& sound_device,
+	const FxSound::OutputDeviceSelection::OutputRoutingActions& actions)
+{
+	auto routing_changed = false;
+
+	if (actions.should_retarget_playback)
+	{
+		audio_passthru_->setAsPlaybackDevice(sound_device);
+		routing_changed = true;
+	}
+
+	if (actions.should_restart_processing)
+	{
+		audio_passthru_->restartProcessingForDeviceChange();
+		routing_changed = true;
+	}
+
+	if (actions.should_begin_grace_period)
+	{
+		beginAudioProcessingGracePeriod();
+	}
+
+	return routing_changed;
 }
 
 String FxController::tryApplyAutoPresetForCurrentOutput(bool trigger_change)

@@ -225,7 +225,7 @@ void applyRefresh(ScenarioState& state,
 
 	state.selected_output = decision.resolved_output;
 	state.output_name = decision.resolved_output.deviceFriendlyName;
-	state.retargeted_playback = state.retargeted_playback || decision.should_apply_routing;
+	state.retargeted_playback = state.retargeted_playback || decision.routing_actions.should_retarget_playback;
 
 	if (decision.should_mute)
 	{
@@ -285,8 +285,8 @@ void applyManualSelection(ScenarioState& state,
 
 	state.selected_output = decision.selected_output;
 	state.output_name = decision.selected_output.deviceFriendlyName;
-	state.retargeted_playback = decision.should_retarget_playback;
-	state.restarted_processing = decision.should_restart_processing;
+	state.retargeted_playback = decision.routing_actions.should_retarget_playback;
+	state.restarted_processing = decision.routing_actions.should_restart_processing;
 
 	if (decision.should_sync_processing_state)
 	{
@@ -316,7 +316,7 @@ void refreshRuntime(RuntimeHarness& harness, bool include_selected_inactive = tr
 	harness.state.selected_output = decision.resolved_output;
 	harness.state.output_name = decision.resolved_output.deviceFriendlyName;
 
-	if (decision.should_apply_routing)
+	if (decision.routing_actions.should_retarget_playback)
 	{
 		harness.audio.setAsPlaybackDevice(decision.resolved_output);
 		harness.state.retargeted_playback = true;
@@ -475,13 +475,13 @@ void applyRuntimeManualSelection(RuntimeHarness& harness, const std::wstring& ou
 	harness.state.selected_output = decision.selected_output;
 	harness.state.output_name = decision.selected_output.deviceFriendlyName;
 
-	if (decision.should_retarget_playback)
+	if (decision.routing_actions.should_retarget_playback)
 	{
 		harness.audio.setAsPlaybackDevice(decision.selected_output);
 		harness.state.retargeted_playback = true;
 	}
 
-	if (decision.should_restart_processing)
+	if (decision.routing_actions.should_restart_processing)
 	{
 		harness.audio.restartProcessingForDeviceChange();
 		harness.state.restarted_processing = true;
@@ -905,7 +905,7 @@ void testBuildSyncDecisionRequestsRoutingForActiveUntargetedOutput()
 
 	expect(decision.has_resolved_output, "sync decision should resolve active output");
 	expect(decision.routing_changed, "untargeted active output should require routing");
-	expect(decision.should_apply_routing, "timer-running sync should apply routing when target differs");
+	expect(decision.routing_actions.should_retarget_playback, "timer-running sync should apply routing when target differs");
 	expect(!decision.should_mute, "active output should not be muted");
 }
 
@@ -922,7 +922,7 @@ void testBuildSyncDecisionMutesInactiveSelectedOutput()
 
 	expect(decision.has_resolved_output, "sync decision should preserve inactive selected output");
 	expect(decision.should_mute, "inactive selected output should mute processing");
-	expect(!decision.should_apply_routing, "inactive selected output should not retarget playback");
+	expect(!decision.routing_actions.should_retarget_playback, "inactive selected output should not retarget playback");
 }
 
 void testBuildSyncDecisionFallsBackToPreferredOutput()
@@ -945,7 +945,7 @@ void testBuildSyncDecisionFallsBackToPreferredOutput()
 	expect(decision.has_resolved_output, "sync decision should fall back to a preferred active output");
 	expect(decision.resolved_output.pwszID == L"spk", "fallback should follow configured priority");
 	expect(decision.output_changed, "fallback to another output should count as an output change");
-	expect(decision.should_apply_routing, "fallback to a new active output should apply routing");
+	expect(decision.routing_actions.should_retarget_playback, "fallback to a new active output should apply routing");
 }
 
 void testBuildInitDecisionKeepsSelectedInactiveOutput()
@@ -1066,9 +1066,9 @@ void testManualSelectionDecisionRestartsProcessingAfterInactiveSelection()
 		false);
 
 	expect(decision.found_output, "manual selection should find active speaker output");
-	expect(decision.should_retarget_playback, "manual selection should retarget untargeted output");
-	expect(decision.should_restart_processing, "manual selection should restart processing after inactive selection");
-	expect(decision.should_begin_grace_period, "manual selection should begin grace period when processing restarts");
+	expect(decision.routing_actions.should_retarget_playback, "manual selection should retarget untargeted output");
+	expect(decision.routing_actions.should_restart_processing, "manual selection should restart processing after inactive selection");
+	expect(decision.routing_actions.should_begin_grace_period, "manual selection should begin grace period when processing restarts");
 }
 
 void testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff()
@@ -1087,9 +1087,9 @@ void testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff(
 		true);
 
 	expect(decision.found_output, "manual selection should resolve default output");
-	expect(!decision.should_retarget_playback, "default output should not be retargeted while processing is off");
-	expect(!decision.should_restart_processing, "processing-off selection should not restart processing");
-	expect(!decision.should_begin_grace_period, "processing-off selection should not start a grace period");
+	expect(!decision.routing_actions.should_retarget_playback, "default output should not be retargeted while processing is off");
+	expect(!decision.routing_actions.should_restart_processing, "processing-off selection should not restart processing");
+	expect(!decision.routing_actions.should_begin_grace_period, "processing-off selection should not start a grace period");
 }
 
 void testManualSelectionDecisionPowersOffWhenOutputIsMissing()

@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxEffects.h"
 #include "../Source/Utils/Settings/Settings.h"
 #include "../Source/Utils/Settings/DeviceConfig.h"
+#include "OutputDeviceSelection.h"
 #include "AudioPassthru.h"
 #include "DfxDsp.h"
 #include <wtsapi32.h>
@@ -232,6 +233,7 @@ private:
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);
 	void applySelectedOutput(const SoundDevice& sound_device, bool notify = false, bool output_changed = false);
+	bool applyRoutingActions(const SoundDevice& sound_device, const FxSound::OutputDeviceSelection::OutputRoutingActions& actions);
 	String tryApplyAutoPresetForCurrentOutput(bool trigger_change);
 
 	void powerOn(bool on);

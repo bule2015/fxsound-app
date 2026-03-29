@@ -39,6 +39,13 @@ namespace FxSound::OutputDeviceSelection
 		bool changed = false;
 	};
 
+	struct OutputRoutingActions
+	{
+		bool should_retarget_playback = false;
+		bool should_restart_processing = false;
+		bool should_begin_grace_period = false;
+	};
+
 	struct SyncDecision
 	{
 		SoundDevice resolved_output;
@@ -46,7 +53,7 @@ namespace FxSound::OutputDeviceSelection
 		bool output_changed = false;
 		bool name_changed = false;
 		bool routing_changed = false;
-		bool should_apply_routing = false;
+		OutputRoutingActions routing_actions;
 		bool should_mute = false;
 	};
 
@@ -54,9 +61,7 @@ namespace FxSound::OutputDeviceSelection
 	{
 		SoundDevice selected_output;
 		bool found_output = false;
-		bool should_retarget_playback = false;
-		bool should_restart_processing = false;
-		bool should_begin_grace_period = false;
+		OutputRoutingActions routing_actions;
 		bool should_power_off = false;
 		bool should_sync_processing_state = false;
 	};
@@ -674,8 +679,9 @@ namespace FxSound::OutputDeviceSelection
 		}
 
 		decision.routing_changed = decision.resolved_output.isActive && !decision.resolved_output.isTargetedRealPlaybackDevice;
-		decision.should_apply_routing = timer_running && decision.resolved_output.isActive &&
+		decision.routing_actions.should_retarget_playback = timer_running && decision.resolved_output.isActive &&
 			(decision.output_changed || decision.routing_changed);
+		decision.routing_actions.should_begin_grace_period = decision.routing_actions.should_retarget_playback;
 		return decision;
 	}
 
@@ -704,16 +710,16 @@ namespace FxSound::OutputDeviceSelection
 				return decision;
 			}
 
-			decision.should_retarget_playback = !sound_device.isTargetedRealPlaybackDevice;
-			decision.should_restart_processing =
+			decision.routing_actions.should_retarget_playback = !sound_device.isTargetedRealPlaybackDevice;
+			decision.routing_actions.should_restart_processing =
 				timer_running &&
 				sound_device.isActive &&
 				(!sound_device.isTargetedRealPlaybackDevice ||
 					!previous_selected_output.isActive ||
 					!playback_device_available);
-			decision.should_begin_grace_period =
+			decision.routing_actions.should_begin_grace_period =
 				power_state &&
-				(decision.should_restart_processing || decision.should_retarget_playback);
+				(decision.routing_actions.should_restart_processing || decision.routing_actions.should_retarget_playback);
 			decision.should_sync_processing_state = power_state;
 			return decision;
 		}
