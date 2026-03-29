@@ -65,7 +65,6 @@ namespace FxSound::OutputDeviceSelection
 	{
 		SoundDevice resolved_output;
 		bool has_resolved_output = false;
-		bool name_changed = false;
 		bool should_apply_output = false;
 		bool should_mute = false;
 	};
@@ -83,8 +82,6 @@ namespace FxSound::OutputDeviceSelection
 	{
 		SoundDevice resolved_output;
 		bool has_resolved_output = false;
-		bool output_changed = false;
-		bool name_changed = false;
 		bool should_notify_error = false;
 	};
 
@@ -100,6 +97,22 @@ namespace FxSound::OutputDeviceSelection
 		SoundDevice synced_output;
 		bool has_synced_output = false;
 		bool dfx_enabled = false;
+	};
+
+	struct ResolvedOutputState
+	{
+		SoundDevice resolved_output;
+		bool has_resolved_output = false;
+		bool output_changed = false;
+		bool name_changed = false;
+		bool should_mute = false;
+	};
+
+	struct OutputResolutionContext
+	{
+		SoundDevice selected_output;
+		std::wstring output_name;
+		std::vector<PriorityEntry> priorities;
 	};
 
 	inline bool matchesPriorityEntryExactly(const PriorityEntry& entry, const SoundDevice& sound_device)
@@ -423,42 +436,60 @@ namespace FxSound::OutputDeviceSelection
 	}
 
 	inline SoundDevice resolveSelectedOutput(const std::vector<SoundDevice>& output_devices,
-		const SoundDevice& selected_output,
-		const std::wstring& output_name,
-		const std::vector<PriorityEntry>& priorities)
+		const OutputResolutionContext& context)
 	{
-		if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
+		if (!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty())
 		{
 			for (const auto& device : output_devices)
 			{
-				if (areSameOutputDevice(selected_output, device))
+				if (areSameOutputDevice(context.selected_output, device))
 				{
 					return device;
 				}
 			}
 		}
 
-		if (!output_name.empty())
+		if (!context.output_name.empty())
 		{
 			for (const auto& device : output_devices)
 			{
-				if (device.deviceFriendlyName == output_name)
+				if (device.deviceFriendlyName == context.output_name)
 				{
 					return device;
 				}
 			}
 		}
 
-		return getPreferredOutput(output_devices, priorities);
+		return getPreferredOutput(output_devices, context.priorities);
 	}
 
-	inline InitDecision buildInitDecision(const std::vector<SoundDevice>& sound_devices,
-		const std::vector<SoundDevice>& output_devices,
-		const SoundDevice& selected_output,
+	inline ResolvedOutputState buildResolvedOutputState(const SoundDevice& resolved_output,
+		const OutputResolutionContext& context)
+	{
+		ResolvedOutputState state;
+		state.resolved_output = resolved_output;
+		state.has_resolved_output = !resolved_output.pwszID.empty();
+
+		if (!state.has_resolved_output)
+		{
+			return state;
+		}
+
+		state.output_changed = context.selected_output.pwszID != resolved_output.pwszID;
+		state.name_changed = context.output_name != resolved_output.deviceFriendlyName;
+		state.should_mute = !resolved_output.isActive;
+		return state;
+	}
+
+	inline OutputResolutionContext makeOutputResolutionContext(const SoundDevice& selected_output,
 		const std::wstring& output_name,
 		const std::vector<PriorityEntry>& priorities)
 	{
-		InitDecision decision;
+		return { selected_output, output_name, priorities };
+	}
+
+	inline SoundDevice findDefaultProcessingOutput(const std::vector<SoundDevice>& sound_devices)
+	{
 		SoundDevice default_output;
 
 		for (const auto& sound_device : sound_devices)
@@ -475,39 +506,47 @@ namespace FxSound::OutputDeviceSelection
 			}
 		}
 
-		decision.resolved_output = default_output;
+		return default_output;
+	}
 
-		if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
+	inline InitDecision buildInitDecision(const std::vector<SoundDevice>& sound_devices,
+		const std::vector<SoundDevice>& output_devices,
+		const OutputResolutionContext& context)
+	{
+		InitDecision decision;
+		decision.resolved_output = findDefaultProcessingOutput(sound_devices);
+
+		if (!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty())
 		{
 			for (const auto& output_device : output_devices)
 			{
-				if (areSameOutputDevice(selected_output, output_device))
+				if (areSameOutputDevice(context.selected_output, output_device))
 				{
 					decision.resolved_output = output_device;
 					break;
 				}
 			}
 
-			if (decision.resolved_output.pwszID.empty() && selected_output.deviceNumChannel >= 2)
+			if (decision.resolved_output.pwszID.empty() && context.selected_output.deviceNumChannel >= 2)
 			{
-				decision.resolved_output = selected_output;
+				decision.resolved_output = context.selected_output;
 			}
 		}
 
 		if (decision.resolved_output.pwszID.empty() && !output_devices.empty())
 		{
-			decision.resolved_output = resolveSelectedOutput(output_devices, selected_output, output_name, priorities);
+			decision.resolved_output = resolveSelectedOutput(output_devices, context);
 		}
 
-		decision.has_resolved_output = !decision.resolved_output.pwszID.empty();
-		if (!decision.has_resolved_output)
+		auto resolved_state = buildResolvedOutputState(decision.resolved_output, context);
+		decision.has_resolved_output = resolved_state.has_resolved_output;
+		decision.should_mute = resolved_state.should_mute;
+		if (!resolved_state.has_resolved_output)
 		{
 			return decision;
 		}
 
-		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
 		decision.should_apply_output = decision.resolved_output.isActive;
-		decision.should_mute = !decision.resolved_output.isActive;
 		return decision;
 	}
 
@@ -548,22 +587,21 @@ namespace FxSound::OutputDeviceSelection
 	}
 
 	inline IdleSyncDecision buildIdleSyncDecision(const std::vector<SoundDevice>& output_devices,
-		const SoundDevice& selected_output,
-		const std::wstring& output_name,
-		const std::vector<PriorityEntry>& priorities)
+		const OutputResolutionContext& context)
 	{
 		IdleSyncDecision decision;
-		decision.resolved_output = resolveSelectedOutput(output_devices, selected_output, output_name, priorities);
-		decision.has_resolved_output = !decision.resolved_output.pwszID.empty();
+		auto resolved_state = buildResolvedOutputState(
+			resolveSelectedOutput(output_devices, context),
+			context);
+		decision.resolved_output = resolved_state.resolved_output;
+		decision.has_resolved_output = resolved_state.has_resolved_output;
 
-		if (!decision.has_resolved_output)
+		if (!resolved_state.has_resolved_output)
 		{
 			return decision;
 		}
 
-		decision.output_changed = selected_output.pwszID != decision.resolved_output.pwszID;
-		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
-		decision.should_notify_error = !decision.resolved_output.isActive;
+		decision.should_notify_error = resolved_state.should_mute;
 		return decision;
 	}
 
@@ -617,26 +655,27 @@ namespace FxSound::OutputDeviceSelection
 	}
 
 	inline SyncDecision buildSyncDecision(const std::vector<SoundDevice>& output_devices,
-		const SoundDevice& selected_output,
-		const std::wstring& output_name,
-		const std::vector<PriorityEntry>& priorities,
+		const OutputResolutionContext& context,
 		bool timer_running)
 	{
 		SyncDecision decision;
-		decision.resolved_output = resolveSelectedOutput(output_devices, selected_output, output_name, priorities);
-		decision.has_resolved_output = !decision.resolved_output.pwszID.empty();
+		auto resolved_state = buildResolvedOutputState(
+			resolveSelectedOutput(output_devices, context),
+			context);
+		decision.resolved_output = resolved_state.resolved_output;
+		decision.has_resolved_output = resolved_state.has_resolved_output;
+		decision.output_changed = resolved_state.output_changed;
+		decision.name_changed = resolved_state.name_changed;
+		decision.should_mute = resolved_state.should_mute;
 
-		if (!decision.has_resolved_output)
+		if (!resolved_state.has_resolved_output)
 		{
 			return decision;
 		}
 
-		decision.output_changed = selected_output.pwszID != decision.resolved_output.pwszID;
-		decision.name_changed = output_name != decision.resolved_output.deviceFriendlyName;
 		decision.routing_changed = decision.resolved_output.isActive && !decision.resolved_output.isTargetedRealPlaybackDevice;
 		decision.should_apply_routing = timer_running && decision.resolved_output.isActive &&
 			(decision.output_changed || decision.routing_changed);
-		decision.should_mute = !decision.resolved_output.isActive;
 		return decision;
 	}
 

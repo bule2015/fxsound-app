@@ -72,6 +72,31 @@ std::vector<FxSound::OutputDeviceSelection::PriorityEntry> loadOutputPriorities(
 	return priorities;
 }
 
+FxSound::OutputDeviceSelection::OutputResolutionContext buildOutputResolutionContext(
+	FxSound::Settings& settings,
+	const SoundDevice& selected_output,
+	const String& output_name)
+{
+	return FxSound::OutputDeviceSelection::makeOutputResolutionContext(
+		selected_output,
+		output_name.toWideCharPointer(),
+		loadOutputPriorities(settings));
+}
+
+void notifyPlaybackUnavailable(IAudioPassthru& audio_passthru,
+	bool& playback_device_available,
+	FxModel& model,
+	bool mute_audio = true)
+{
+	playback_device_available = false;
+	if (mute_audio)
+	{
+		audio_passthru.mute(true);
+	}
+
+	model.notifyOutputError();
+}
+
 bool matchesConfiguredOutput(const DeviceConfig& device_config, const SoundDevice& sound_device)
 {
 	if (!device_config.device_id.isEmpty() &&
@@ -1065,13 +1090,14 @@ void FxController::initOutputs(const std::vector<SoundDevice>& sound_devices)
 	dfx_enabled_ = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices).dfx_enabled;
 
 	rebuildOutputDeviceList(sound_devices, true);
-	auto priorities = loadOutputPriorities(settings_);
+	auto output_resolution = buildOutputResolutionContext(
+		settings_,
+		FxModel::getModel().getSelectedOutput(),
+		getOutputName());
 	auto init_decision = FxSound::OutputDeviceSelection::buildInitDecision(
 		sound_devices,
 		active_output_devices_,
-		FxModel::getModel().getSelectedOutput(),
-		getOutputName().toWideCharPointer(),
-		priorities);
+		output_resolution);
 
 	FxModel::getModel().initOutputs(active_output_devices_);
 	if (init_decision.has_resolved_output)
@@ -1085,9 +1111,7 @@ void FxController::initOutputs(const std::vector<SoundDevice>& sound_devices)
 		}
 		else if (init_decision.should_mute)
 		{
-			playback_device_available_ = false;
-			audio_passthru_->mute(true);
-			FxModel::getModel().notifyOutputError();
+			notifyPlaybackUnavailable(*audio_passthru_, playback_device_available_, FxModel::getModel());
 		}
 	}
 }
@@ -1110,11 +1134,13 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
 
 	rebuildOutputDeviceList(sound_devices);
 	FxModel::getModel().initOutputs(active_output_devices_);
+	auto output_resolution = buildOutputResolutionContext(
+		settings_,
+		FxModel::getModel().getSelectedOutput(),
+		getOutputName());
 	auto sync_decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		active_output_devices_,
-		FxModel::getModel().getSelectedOutput(),
-		getOutputName().toWideCharPointer(),
-		loadOutputPriorities(settings_),
+		output_resolution,
 		isTimerRunning());
 
 	if (sync_decision.has_resolved_output)
@@ -1133,9 +1159,7 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
 
 		if (sync_decision.should_mute)
 		{
-			playback_device_available_ = false;
-			audio_passthru_->mute(true);
-			model.notifyOutputError();
+			notifyPlaybackUnavailable(*audio_passthru_, playback_device_available_, model);
 		}
 		else
 		{
@@ -1184,11 +1208,13 @@ void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& s
 	}
 
 	auto& model = FxModel::getModel();
+	auto output_resolution = buildOutputResolutionContext(
+		settings_,
+		model.getSelectedOutput(),
+		getOutputName());
 	auto idle_sync_decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		active_output_devices_,
-		model.getSelectedOutput(),
-		getOutputName().toWideCharPointer(),
-		loadOutputPriorities(settings_));
+		output_resolution);
 
 	if (idle_sync_decision.has_resolved_output)
 	{
@@ -1197,8 +1223,7 @@ void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& s
 
 		if (idle_sync_decision.should_notify_error)
 		{
-			playback_device_available_ = false;
-			model.notifyOutputError();
+			notifyPlaybackUnavailable(*audio_passthru_, playback_device_available_, model, false);
 			return;
 		}
 
@@ -1664,9 +1689,7 @@ void FxController::handleSoundDeviceChange()
 
 	if (refreshed_selected_output_it == sound_devices.end() || !refreshed_selected_output_it->isActive)
 	{
-		playback_device_available_ = false;
-		audio_passthru_->mute(true);
-		FxModel::getModel().notifyOutputError();
+		notifyPlaybackUnavailable(*audio_passthru_, playback_device_available_, FxModel::getModel());
 		system_tray_view_->setStatus(FxModel::getModel().getPowerState(), false);
 	}
 }

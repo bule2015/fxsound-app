@@ -10,6 +10,7 @@
 namespace
 {
 using FxSound::OutputDeviceSelection::PriorityEntry;
+using FxSound::OutputDeviceSelection::OutputResolutionContext;
 
 struct ScenarioState
 {
@@ -164,6 +165,19 @@ SoundDevice makeOutput(const wchar_t* id,
 	return sound_device;
 }
 
+OutputResolutionContext makeTestOutputResolutionContext(const SoundDevice& selected_output,
+	const std::wstring& output_name,
+	const std::vector<PriorityEntry>& priorities)
+{
+	return FxSound::OutputDeviceSelection::makeOutputResolutionContext(selected_output, output_name, priorities);
+}
+
+OutputResolutionContext makeTestOutputResolutionContext(const ScenarioState& state,
+	const std::vector<PriorityEntry>& priorities)
+{
+	return makeTestOutputResolutionContext(state.selected_output, state.output_name, priorities);
+}
+
 void expect(bool condition, const std::string& message)
 {
 	if (!condition)
@@ -201,9 +215,7 @@ void applyRefresh(ScenarioState& state,
 
 	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		state.visible_outputs,
-		state.selected_output,
-		state.output_name,
-		priorities,
+		makeTestOutputResolutionContext(state, priorities),
 		state.timer_running);
 
 	if (!decision.has_resolved_output)
@@ -293,9 +305,7 @@ void refreshRuntime(RuntimeHarness& harness, bool include_selected_inactive = tr
 
 	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		harness.state.visible_outputs,
-		harness.state.selected_output,
-		harness.state.output_name,
-		harness.priorities,
+		makeTestOutputResolutionContext(harness.state, harness.priorities),
 		harness.state.timer_running);
 
 	if (!decision.has_resolved_output)
@@ -339,9 +349,7 @@ void applyRuntimeStartup(RuntimeHarness& harness)
 	auto init_decision = FxSound::OutputDeviceSelection::buildInitDecision(
 		harness.audio.getSoundDevices(false),
 		harness.state.visible_outputs,
-		harness.state.selected_output,
-		harness.state.output_name,
-		harness.priorities);
+		makeTestOutputResolutionContext(harness.state, harness.priorities));
 
 	if (!init_decision.has_resolved_output)
 	{
@@ -376,9 +384,7 @@ void applyRuntimeIdleSync(RuntimeHarness& harness)
 
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		harness.state.visible_outputs,
-		harness.state.selected_output,
-		harness.state.output_name,
-		harness.priorities);
+		makeTestOutputResolutionContext(harness.state, harness.priorities));
 
 	if (!decision.has_resolved_output)
 	{
@@ -799,9 +805,7 @@ void testResolveSelectedOutputReturnsReconnectedDevice()
 
 	auto resolved_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
 		output_devices,
-		selected_output,
-		L"Speakers",
-		priorities);
+		makeTestOutputResolutionContext(selected_output, L"Speakers", priorities));
 
 	expect(resolved_output.pwszID == L"dac-new", "reconnected selected output should win over output name fallback");
 }
@@ -896,9 +900,7 @@ void testBuildSyncDecisionRequestsRoutingForActiveUntargetedOutput()
 
 	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		output_devices,
-		selected_output,
-		L"Speakers",
-		priorities,
+		makeTestOutputResolutionContext(selected_output, L"Speakers", priorities),
 		true);
 
 	expect(decision.has_resolved_output, "sync decision should resolve active output");
@@ -915,9 +917,7 @@ void testBuildSyncDecisionMutesInactiveSelectedOutput()
 
 	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		output_devices,
-		selected_output,
-		L"USB DAC",
-		priorities,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", priorities),
 		true);
 
 	expect(decision.has_resolved_output, "sync decision should preserve inactive selected output");
@@ -939,9 +939,7 @@ void testBuildSyncDecisionFallsBackToPreferredOutput()
 
 	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		output_devices,
-		selected_output,
-		L"",
-		priorities,
+		makeTestOutputResolutionContext(selected_output, L"", priorities),
 		true);
 
 	expect(decision.has_resolved_output, "sync decision should fall back to a preferred active output");
@@ -965,9 +963,7 @@ void testBuildInitDecisionKeepsSelectedInactiveOutput()
 	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
 		sound_devices,
 		output_devices,
-		selected_output,
-		L"USB DAC",
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
 
 	expect(decision.has_resolved_output, "init should resolve the selected inactive output");
 	expect(decision.resolved_output.pwszID == L"dac-old", "init should preserve the selected inactive output");
@@ -990,9 +986,7 @@ void testBuildInitDecisionFallsBackToActiveDefaultOutput()
 	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
 		sound_devices,
 		output_devices,
-		SoundDevice(),
-		L"",
-		{{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}});
+		makeTestOutputResolutionContext(SoundDevice(), L"", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}}));
 
 	expect(decision.has_resolved_output, "init should resolve a startup output");
 	expect(decision.resolved_output.pwszID == L"spk", "init should prefer the active default output when nothing is selected");
@@ -1015,9 +1009,7 @@ void testBuildInitDecisionResolvesReconnectedSelectedOutput()
 	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
 		sound_devices,
 		output_devices,
-		selected_output,
-		L"USB DAC",
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
 
 	expect(decision.has_resolved_output, "init should resolve a reconnected selected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "init should pick the reconnected endpoint for the selected output");
@@ -1034,9 +1026,7 @@ void testBuildIdleSyncDecisionKeepsInactiveSelectedOutput()
 
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		output_devices,
-		selected_output,
-		L"USB DAC",
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
 
 	expect(decision.has_resolved_output, "idle sync should resolve the selected inactive output");
 	expect(decision.resolved_output.pwszID == L"dac-old", "idle sync should preserve the selected inactive output");
@@ -1053,9 +1043,7 @@ void testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput()
 
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		output_devices,
-		selected_output,
-		L"USB DAC",
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}});
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
 
 	expect(decision.has_resolved_output, "idle sync should resolve a reconnected selected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "idle sync should resolve to the reconnected endpoint");
