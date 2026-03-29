@@ -58,6 +58,7 @@ FxSystemTrayView::~FxSystemTrayView()
     if (icon_added_)
     {
         NOTIFYICONDATA nid = { sizeof(nid) };
+        nid.hWnd = hWnd;
         setNotifyIconIdentity(nid, use_guid_registration_);
         Shell_NotifyIcon(NIM_DELETE, &nid);
     }
@@ -86,8 +87,10 @@ void FxSystemTrayView::setStatus(bool power, bool processing)
 	wcscat_s(tool_tip, 1024, output_device_name.toWideCharPointer());
 
     NOTIFYICONDATA nid = { sizeof(nid) };
+    auto hWnd = (HWND)getWindowHandle();
 
     nid.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    nid.hWnd = hWnd;
     setNotifyIconIdentity(nid, use_guid_registration_);
     nid.hIcon = getTrayIconHandle(power, processing);
 
@@ -100,7 +103,17 @@ void FxSystemTrayView::setStatus(bool power, bool processing)
 
     if (!Shell_NotifyIcon(NIM_MODIFY, &nid))
     {
-        addIcon();
+        if (icon_added_)
+        {
+            NOTIFYICONDATA delete_nid = { sizeof(delete_nid) };
+            delete_nid.hWnd = hWnd;
+            setNotifyIconIdentity(delete_nid, use_guid_registration_);
+            Shell_NotifyIcon(NIM_DELETE, &delete_nid);
+            icon_added_ = false;
+        }
+
+        addIcon(power, processing);
+        nid.hWnd = hWnd;
         setNotifyIconIdentity(nid, use_guid_registration_);
         Shell_NotifyIcon(NIM_MODIFY, &nid);
     }
@@ -156,12 +169,15 @@ Point<int> FxSystemTrayView::getSystemTrayWindowPosition(int width, int height)
 }
 
 void FxSystemTrayView::addIcon()
+{    
+    addIcon(FxModel::getModel().getPowerState(), FxController::getInstance().isAudioProcessing());
+}
+
+void FxSystemTrayView::addIcon(bool power, bool processing)
 {
     NOTIFYICONDATA nid = { sizeof(nid) };
 
     HWND hWnd = (HWND)getWindowHandle();
-    bool power = FxModel::getModel().getPowerState();
-    bool processing = FxController::getInstance().isAudioProcessing();
 
     nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
     nid.uCallbackMessage = WMAPP_FXTRAYICON;
@@ -448,6 +464,7 @@ void FxSystemTrayView::showNotification()
             NOTIFYICONDATA nid = { sizeof(nid) };
 
             nid.uFlags = NIF_INFO | NIF_REALTIME;
+            nid.hWnd = (HWND)getWindowHandle();
             setNotifyIconIdentity(nid, use_guid_registration_);
             nid.dwInfoFlags = NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
 
@@ -505,8 +522,9 @@ LRESULT CALLBACK FxSystemTrayView::wndProc(HWND hwnd, UINT message, WPARAM wPara
         case NIN_BALLOONUSERCLICK:
         {
             NOTIFYICONDATA nid = { sizeof(nid) };
-            nid.uFlags = NIF_SHOWTIP | NIF_GUID;
-            nid.guidItem = trayIconGuid_;
+            nid.hWnd = hwnd;
+            nid.uFlags = NIF_SHOWTIP;
+            tray_view->setNotifyIconIdentity(nid, tray_view->use_guid_registration_);
             Shell_NotifyIcon(NIM_MODIFY, &nid);
         }
         break;

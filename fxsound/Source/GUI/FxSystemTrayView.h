@@ -54,6 +54,7 @@ private:
 	static LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 	void addIcon();
+	void addIcon(bool power, bool processing);
 	void setNotifyIconIdentity(NOTIFYICONDATA& nid, bool use_guid) const;
 	void setNotifyIconIdentity(NOTIFYICONIDENTIFIER& icon_id) const;
 	HICON getTrayIconHandle(bool power, bool processing) const;
