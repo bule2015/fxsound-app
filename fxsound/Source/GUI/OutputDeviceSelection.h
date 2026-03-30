@@ -26,6 +26,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace FxSound::OutputDeviceSelection
 {
+	// Pure helpers that resolve output-device state transitions for both runtime code
+	// and tests. The controller uses these helpers to decide what to show, select,
+	// persist, or re-route without mixing those decisions with UI side effects.
 	struct PriorityEntry
 	{
 		std::wstring device_id;
@@ -46,6 +49,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_begin_grace_period = false;
 	};
 
+	// Result of re-evaluating the selected output while audio processing is running.
 	struct SyncDecision
 	{
 		SoundDevice resolved_output;
@@ -57,6 +61,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	// Result of a user-driven output change request from the UI.
 	struct ManualSelectionDecision
 	{
 		SoundDevice selected_output;
@@ -66,6 +71,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_sync_processing_state = false;
 	};
 
+	// Result of choosing the startup output before any routing side effects are applied.
 	struct InitDecision
 	{
 		SoundDevice resolved_output;
@@ -74,6 +80,8 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	// Persisted identity for the last selected output so reconnects and restarts can
+	// restore the same device even when endpoint ids change.
 	struct PersistedOutputState
 	{
 		std::wstring device_id;
@@ -83,6 +91,7 @@ namespace FxSound::OutputDeviceSelection
 		int device_num_channel = 2;
 	};
 
+	// Result of updating the selected output while processing is idle.
 	struct IdleSyncDecision
 	{
 		SoundDevice resolved_output;
@@ -90,6 +99,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_notify_error = false;
 	};
 
+	// Decision about whether a device change should auto-apply a device preset.
 	struct AutoPresetDecision
 	{
 		std::wstring preset_name;
@@ -97,6 +107,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_announce = false;
 	};
 
+	// Snapshot of the live playback path as reported by the audio backend.
 	struct ProcessingDeviceSnapshot
 	{
 		SoundDevice synced_output;
@@ -104,6 +115,7 @@ namespace FxSound::OutputDeviceSelection
 		bool dfx_enabled = false;
 	};
 
+	// Common output-resolution result shared by startup, live sync, and idle sync.
 	struct ResolvedOutputState
 	{
 		SoundDevice resolved_output;
@@ -113,6 +125,7 @@ namespace FxSound::OutputDeviceSelection
 		bool should_mute = false;
 	};
 
+	// Inputs required to resolve a selected output against the current device list.
 	struct OutputResolutionContext
 	{
 		SoundDevice selected_output;
@@ -120,6 +133,8 @@ namespace FxSound::OutputDeviceSelection
 		std::vector<PriorityEntry> priorities;
 	};
 
+	// Matches a persisted priority entry to a live device using the strongest
+	// identifiers first and falling back to the legacy name-only form.
 	inline bool matchesPriorityEntryExactly(const PriorityEntry& entry, const SoundDevice& sound_device)
 	{
 		if (!entry.device_id.empty() && entry.device_id == sound_device.pwszID)
@@ -148,6 +163,7 @@ namespace FxSound::OutputDeviceSelection
 			entry.container_id == sound_device.containerId;
 	}
 
+	// Compares two outputs across reconnects where endpoint ids may change.
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
 		if (!lhs.pwszID.empty() && !rhs.pwszID.empty() && lhs.pwszID == rhs.pwszID)
@@ -199,6 +215,8 @@ namespace FxSound::OutputDeviceSelection
 		return persisted_output;
 	}
 
+	// Returns the saved priority index for a live output. Unknown outputs sort after
+	// everything already persisted.
 	inline int getOutputDevicePriority(const std::vector<PriorityEntry>& priorities, const SoundDevice& sound_device)
 	{
 		for (int i = 0; i < static_cast<int>(priorities.size()); ++i)
@@ -221,6 +239,7 @@ namespace FxSound::OutputDeviceSelection
 		return static_cast<int>(priorities.size());
 	}
 
+	// Builds the initial priority order from the currently known stereo outputs.
 	inline std::vector<PriorityEntry> buildInitialOutputPriorities(const std::vector<SoundDevice>& sound_devices)
 	{
 		std::vector<SoundDevice> sorted_devices = sound_devices;
@@ -265,6 +284,8 @@ namespace FxSound::OutputDeviceSelection
 		return priorities;
 	}
 
+	// Merges newly discovered devices into the saved priority list while keeping the
+	// original ordering stable across reconnects and endpoint id changes.
 	inline PriorityMergeResult mergeOutputPriorities(const std::vector<PriorityEntry>& existing_priorities,
 		const std::vector<SoundDevice>& sound_devices)
 	{
@@ -339,6 +360,7 @@ namespace FxSound::OutputDeviceSelection
 		return result;
 	}
 
+	// Applies the saved priority order to the list shown in the UI.
 	inline void sortOutputDevicesByPriority(std::vector<SoundDevice>& output_devices, const std::vector<PriorityEntry>& priorities)
 	{
 		std::stable_sort(output_devices.begin(), output_devices.end(),
@@ -360,6 +382,8 @@ namespace FxSound::OutputDeviceSelection
 			});
 	}
 
+	// Builds the visible output list for the UI, optionally keeping the current
+	// inactive selection visible so the user can see what went away.
 	inline std::vector<SoundDevice> buildVisibleOutputDevices(const std::vector<SoundDevice>& sound_devices,
 		const SoundDevice& selected_output,
 		const std::vector<PriorityEntry>& priorities,
@@ -407,6 +431,7 @@ namespace FxSound::OutputDeviceSelection
 		return output_devices;
 	}
 
+	// Chooses the highest-priority active output from the visible list.
 	inline SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices, const std::vector<PriorityEntry>& priorities)
 	{
 		for (const auto& priority : priorities)
@@ -440,6 +465,8 @@ namespace FxSound::OutputDeviceSelection
 		return {};
 	}
 
+	// Resolves the best output candidate by checking the explicit selection first,
+	// then the last stored name, then the configured priority order.
 	inline SoundDevice resolveSelectedOutput(const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context)
 	{
@@ -468,6 +495,8 @@ namespace FxSound::OutputDeviceSelection
 		return getPreferredOutput(output_devices, context.priorities);
 	}
 
+	// Computes the common change flags that later decisions use to decide whether to
+	// re-route playback, update settings, or mute the backend.
 	inline ResolvedOutputState buildResolvedOutputState(const SoundDevice& resolved_output,
 		const OutputResolutionContext& context)
 	{
@@ -493,6 +522,8 @@ namespace FxSound::OutputDeviceSelection
 		return { selected_output, output_name, priorities };
 	}
 
+	// Finds the active playback output that the backend is currently synced to, with
+	// the system default as a fallback when the targeted device is not marked yet.
 	inline SoundDevice findDefaultProcessingOutput(const std::vector<SoundDevice>& sound_devices)
 	{
 		SoundDevice default_output;
@@ -514,6 +545,7 @@ namespace FxSound::OutputDeviceSelection
 		return default_output;
 	}
 
+	// Decides which output should be restored during startup.
 	inline InitDecision buildInitDecision(const std::vector<SoundDevice>& sound_devices,
 		const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context)
@@ -555,6 +587,8 @@ namespace FxSound::OutputDeviceSelection
 		return decision;
 	}
 
+	// Returns true when a device callback can be ignored because it does not affect
+	// the currently selected active playback device.
 	inline bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind,
 		const std::wstring& device_id,
 		const SoundDevice& selected_output,
@@ -591,6 +625,8 @@ namespace FxSound::OutputDeviceSelection
 		return true;
 	}
 
+	// Re-evaluates the selected output while processing is idle. This keeps the UI
+	// state correct without forcing backend routing changes.
 	inline IdleSyncDecision buildIdleSyncDecision(const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context)
 	{
@@ -610,6 +646,7 @@ namespace FxSound::OutputDeviceSelection
 		return decision;
 	}
 
+	// Decides whether a device-driven output change should auto-apply a preset.
 	inline AutoPresetDecision buildAutoPresetDecision(bool preset_modified,
 		bool trigger_change,
 		const std::wstring& configured_preset,
@@ -627,6 +664,8 @@ namespace FxSound::OutputDeviceSelection
 		return decision;
 	}
 
+	// Extracts the currently targeted playback output and whether the FxSound virtual
+	// endpoint is still present in the backend device snapshot.
 	inline ProcessingDeviceSnapshot scanProcessingOutputs(const std::vector<SoundDevice>& sound_devices)
 	{
 		ProcessingDeviceSnapshot snapshot;
@@ -659,6 +698,8 @@ namespace FxSound::OutputDeviceSelection
 		return snapshot;
 	}
 
+	// Re-evaluates the selected output while processing is running and determines
+	// whether routing must be re-applied.
 	inline SyncDecision buildSyncDecision(const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context,
 		bool timer_running)
@@ -685,6 +726,7 @@ namespace FxSound::OutputDeviceSelection
 		return decision;
 	}
 
+	// Resolves a user-selected output id into routing actions and power-state changes.
 	inline ManualSelectionDecision buildManualSelectionDecision(const std::vector<SoundDevice>& sound_devices,
 		const std::wstring& output_device_id,
 		const SoundDevice& previous_selected_output,

@@ -224,16 +224,24 @@ private:
 	void beginAudioProcessingGracePeriod();
 	bool isAudioProcessingGracePeriodActive() const;
 	
+	// Startup path that restores the last selected output and builds the initial UI list.
     void initOutputs(const std::vector<SoundDevice>& sound_devices);
+	// Rebuilds the visible output list while optionally keeping the inactive selection visible.
 	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
+	// Processing-on sync path used after device callbacks or backend refreshes.
 	void updateOutputs(const std::vector<SoundDevice>& sound_devices);
+	// Chooses the live processing output after the backend restarts.
 	void selectProcessingOutput(const std::vector<SoundDevice>& sound_devices);
+	// Keeps the selected output in sync with the system while processing is idle.
 	void syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);
+	// Applies the resolved output to the model, settings, and visible output name.
 	void applySelectedOutput(const SoundDevice& sound_device, bool notify = false, bool output_changed = false);
+	// Executes backend side effects requested by the pure decision helpers.
 	bool applyRoutingActions(const SoundDevice& sound_device, const FxSound::OutputDeviceSelection::OutputRoutingActions& actions);
+	// Applies a configured device preset when an output change warrants it.
 	String tryApplyAutoPresetForCurrentOutput(bool trigger_change);
 
 	void powerOn(bool on);

@@ -54,6 +54,7 @@ int findPresetIndexByName(const FxModel& model, const String& preset_name)
     return -1;
 }
 
+// Loads the persisted UI priority order into the pure helper representation.
 std::vector<FxSound::OutputDeviceSelection::PriorityEntry> loadOutputPriorities(FxSound::Settings& settings)
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> priorities;
@@ -72,6 +73,7 @@ std::vector<FxSound::OutputDeviceSelection::PriorityEntry> loadOutputPriorities(
 	return priorities;
 }
 
+// Builds the shared resolution context passed into startup, live sync, and idle sync decisions.
 FxSound::OutputDeviceSelection::OutputResolutionContext buildOutputResolutionContext(
 	FxSound::Settings& settings,
 	const SoundDevice& selected_output,
@@ -83,6 +85,8 @@ FxSound::OutputDeviceSelection::OutputResolutionContext buildOutputResolutionCon
 		loadOutputPriorities(settings));
 }
 
+// Centralizes the side effects for an unavailable playback path so the different
+// controller flows report and mute consistently.
 void notifyPlaybackUnavailable(IAudioPassthru& audio_passthru,
 	bool& playback_device_available,
 	FxModel& model,
@@ -97,6 +101,8 @@ void notifyPlaybackUnavailable(IAudioPassthru& audio_passthru,
 	model.notifyOutputError();
 }
 
+// Matches a saved device configuration to a live output while tolerating endpoint
+// id churn across reconnects.
 bool matchesConfiguredOutput(const DeviceConfig& device_config, const SoundDevice& sound_device)
 {
 	if (!device_config.device_id.isEmpty() &&
