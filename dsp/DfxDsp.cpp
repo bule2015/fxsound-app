@@ -145,6 +145,16 @@ void DfxDsp::setVolumeLeveling(float gain_db)
 	data_->setVolumeLeveling(gain_db);
 }
 
+bool DfxDsp::getAutoEqEnabled()
+{
+	return data_->getAutoEqEnabled();
+}
+
+void DfxDsp::setAutoEqEnabled(bool enabled)
+{
+	data_->setAutoEqEnabled(enabled);
+}
+
 float DfxDsp::getMasterGain()
 {
 	return data_->getMasterGain();

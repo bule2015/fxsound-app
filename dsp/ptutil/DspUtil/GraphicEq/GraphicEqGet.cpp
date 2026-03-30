@@ -170,6 +170,20 @@ int PT_DECLSPEC GraphicEqGetVolumeLeveling(PT_HANDLE* hp_GraphicEq, float* gain_
 	return(OKAY);
 }
 
+int PT_DECLSPEC GraphicEqGetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int* enabled)
+{
+	struct GraphicEqHdlType* cast_handle;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+
+	if (cast_handle == NULL)
+		return(NOT_OKAY);
+
+	*enabled = cast_handle->auto_eq_enabled;
+
+	return(OKAY);
+}
+
 
 int PT_DECLSPEC GraphicEqGetFilterQ(PT_HANDLE* hp_GraphicEq, float* q_multiplier)
 {

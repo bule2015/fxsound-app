@@ -93,8 +93,22 @@ private:
         int band_;
     };
 
+    class FxAutoEqButton : public Button
+    {
+    public:
+        FxAutoEqButton();
+        ~FxAutoEqButton() = default;
+
+    private:
+        void paintButton(Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+        bool keyPressed(const KeyPress& key) override;
+    };
+
 	static constexpr int WIDTH = 776;
 	static constexpr int HEIGHT = 242;
+	static constexpr int AUTO_EQ_BUTTON_WIDTH = 18;
+	static constexpr int AUTO_EQ_BUTTON_HEIGHT = 18;
+	static constexpr int AUTO_EQ_RIGHT_MARGIN = 20;
 	static constexpr int SLIDER_HEIGHT = 170;
 	static constexpr int LABEL_HEIGHT = 12;
 	static constexpr int SMALL_FONT = 10;
@@ -106,11 +120,13 @@ private:
 
 	void resized() override;
 	void paint(Graphics& g) override;
+	void refreshAutoEqToggle();
 
 	std::vector<std::unique_ptr<Label>> labels_;
     std::vector<std::unique_ptr<FxEqSlider>> band_boosts_;
     std::vector<std::unique_ptr<FxBandCenterFreqSlider>> center_frequencies_;
     std::vector<float> band_gain_values_;
+    FxAutoEqButton auto_eq_button_;
 
     bool highlight_mode_;
     int ui_sync_tick_;

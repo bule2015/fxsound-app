@@ -412,6 +412,24 @@ void DfxDspPrivate::setVolumeLeveling(float gain_db)
 	GraphicEqSetVolumeLeveling(graphic_eq_handle, gain_db);
 }
 
+bool DfxDspPrivate::getAutoEqEnabled()
+{
+	int enabled = IS_TRUE;
+
+	PT_HANDLE* graphic_eq_handle;
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	GraphicEqGetAutoEqEnabled(graphic_eq_handle, &enabled);
+
+	return enabled == IS_TRUE;
+}
+
+void DfxDspPrivate::setAutoEqEnabled(bool enabled)
+{
+	PT_HANDLE* graphic_eq_handle;
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	GraphicEqSetAutoEqEnabled(graphic_eq_handle, enabled ? IS_TRUE : IS_FALSE);
+}
+
 float DfxDspPrivate::getMasterGain()
 {
 	float gain_db;

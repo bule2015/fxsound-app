@@ -384,6 +384,8 @@ void FxController::config(const String& commandline)
 	if (vl < 0 || vl > 4) vl = DEFAULT_VOLUME_LEVELING;
 	setVolumeLeveling(vl);
 
+	setAutoEqEnabled(settings_.getBool("auto_eq_enabled", DEFAULT_AUTO_EQ_ENABLED));
+
 	float bl = 0;
 	if (balance == "")
 	{
@@ -959,6 +961,7 @@ void FxController::resetPresets()
 	setNumEqBands(DEFAULT_NUM_EQ_BANDS);
 	setNormalization(DEFAULT_NORMALIZATION);
 	setVolumeLeveling(DEFAULT_VOLUME_LEVELING);
+	setAutoEqEnabled(DEFAULT_AUTO_EQ_ENABLED);
 	setBalance(DEFAULT_BALANCE);
 	setFilterQ(DEFAULT_FILTER_Q);
 	setMasterGain(DEFAULT_MASTER_GAIN);
@@ -1348,6 +1351,17 @@ void FxController::setVolumeLeveling(float gain_db)
 {
 	dfx_dsp_.setVolumeLeveling(gain_db);
 	settings_.setDouble("volume_leveling", gain_db);
+}
+
+bool FxController::isAutoEqEnabled()
+{
+	return dfx_dsp_.getAutoEqEnabled();
+}
+
+void FxController::setAutoEqEnabled(bool enabled)
+{
+	dfx_dsp_.setAutoEqEnabled(enabled);
+	settings_.setBool("auto_eq_enabled", enabled);
 }
 
 float FxController::getBalance()

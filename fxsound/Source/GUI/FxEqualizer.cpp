@@ -23,10 +23,79 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxController.h"
 #include "FxTheme.h"
 
+#include <unordered_map>
+
+namespace
+{
+std::unique_ptr<Drawable> createCircleAIconDrawable(Colour colour)
+{
+    auto svg = String(
+        R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18">
+<circle cx="9" cy="9" r="7.1" fill="none" stroke="#ff00ff" stroke-width="1.1"/>
+<path d="M9 5.05L11.55 12.75H10.3L9.77 11.08H8.22L7.69 12.75H6.45L9 5.05ZM8.52 10.0H9.47L8.99 8.42L8.52 10.0Z"
+      fill="#ff00ff"/>
+</svg>)svg");
+
+    auto xml = XmlDocument::parse(svg);
+    if (xml == nullptr)
+    {
+        return {};
+    }
+
+    auto drawable = Drawable::createFromSVG(*xml);
+    if (drawable != nullptr)
+    {
+        drawable->replaceColour(Colour(0xffff00ff), colour);
+    }
+
+    return drawable;
+}
+
+Drawable* getCircleAIconDrawable(Colour colour)
+{
+    static std::unordered_map<juce::uint32, std::unique_ptr<Drawable>> cache;
+
+    auto key = colour.getARGB();
+    auto it = cache.find(key);
+    if (it != cache.end())
+    {
+        return it->second.get();
+    }
+
+    auto drawable = createCircleAIconDrawable(colour);
+    auto* drawable_ptr = drawable.get();
+    if (drawable_ptr == nullptr)
+    {
+        return nullptr;
+    }
+
+    cache.emplace(key, std::move(drawable));
+    return drawable_ptr;
+}
+
+void drawCircleAIcon(Graphics& g, juce::Rectangle<float> bounds, Colour colour)
+{
+    auto* drawable = getCircleAIconDrawable(colour);
+    if (drawable == nullptr)
+    {
+        return;
+    }
+
+    drawable->drawWithin(g, bounds.reduced(1.0f), RectanglePlacement::centred, 1.0f);
+}
+}
+
 FxEqualizer::FxEqualizer()
 {
-    auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
     auto& controller = FxController::getInstance();
+
+    addAndMakeVisible(auto_eq_button_);
+    auto_eq_button_.setMouseCursor(MouseCursor::PointingHandCursor);
+    auto_eq_button_.setClickingTogglesState(true);
+    auto_eq_button_.onClick = [this]() {
+        FxController::getInstance().setAutoEqEnabled(auto_eq_button_.getToggleState());
+    };
+    refreshAutoEqToggle();
 
     int num_bands = controller.getNumEqBands();
     labels_.resize(num_bands);
@@ -71,6 +140,8 @@ void FxEqualizer::reinit(int num_bands)
     auto& controller = FxController::getInstance();
 
     removeAllChildren();
+    addAndMakeVisible(auto_eq_button_);
+    refreshAutoEqToggle();
 
     // ------------------------------------------------------------ clear and reinitialize arrays
     labels_.clear();
@@ -233,6 +304,8 @@ void FxEqualizer::update()
 {
     auto& controller = FxController::getInstance();
 
+    refreshAutoEqToggle();
+
     for (auto i = 0; i<band_boosts_.size(); i++)
     {
         auto value = controller.getEqBandBoostCut(i);
@@ -268,9 +341,13 @@ void FxEqualizer::resized()
 
     auto bounds = getLocalBounds();
 
-    int x = X_MARGIN;
-    int width = (bounds.getWidth() - X_MARGIN*2) / labels_.size();
-    int rotary_width = jmin(ROTARY_SLIDER_HEIGHT, width);
+    auto_eq_button_.setBounds(bounds.getWidth() - X_MARGIN - AUTO_EQ_BUTTON_WIDTH,
+        13,
+        AUTO_EQ_BUTTON_WIDTH,
+        AUTO_EQ_BUTTON_HEIGHT);
+    auto_eq_button_.toFront(false);
+
+    auto band_area_width = bounds.getWidth() - X_MARGIN * 2;
 
     bool show_center_frequencies = true;
     if (labels_.size() > 10)
@@ -281,22 +358,31 @@ void FxEqualizer::resized()
     auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
     for (auto i=0; i<labels_.size(); i++)
     {
+        auto x = roundToInt(X_MARGIN + (float)i * band_area_width / (float)labels_.size());
+        auto next_x = roundToInt(X_MARGIN + (float)(i + 1) * band_area_width / (float)labels_.size());
+        auto width = next_x - x;
+        auto rotary_width = jmin(ROTARY_SLIDER_HEIGHT, width);
+
         center_frequencies_[i]->setVisible(show_center_frequencies);
         if (show_center_frequencies)
         {
             labels_[i]->setFont(theme.getNormalFont().withHeight(LABEL_HEIGHT));
-            band_boosts_[i]->setBounds(x + (width - FxTheme::SLIDER_THUMB_RADIUS * 4) / 2, Y_MARGIN, FxTheme::SLIDER_THUMB_RADIUS * 4, SLIDER_HEIGHT );
+            band_boosts_[i]->setBounds(x + (width - FxTheme::SLIDER_THUMB_RADIUS * 4) / 2,
+                Y_MARGIN,
+                FxTheme::SLIDER_THUMB_RADIUS * 4,
+                SLIDER_HEIGHT);
             labels_[i]->setBounds(x, band_boosts_[i]->getBottom() + 6, width, LABEL_HEIGHT);
             center_frequencies_[i]->setBounds(x + (width - rotary_width) / 2, labels_[i]->getBottom() + 4, rotary_width, rotary_width);
         }
         else
         {
             labels_[i]->setFont(theme.getNormalFont().withHeight(SMALL_FONT));
-            band_boosts_[i]->setBounds(x + (width - FxTheme::SLIDER_THUMB_RADIUS * 4) / 2, Y_MARGIN, FxTheme::SLIDER_THUMB_RADIUS * 4, SLIDER_HEIGHT + ROTARY_SLIDER_HEIGHT);
+            band_boosts_[i]->setBounds(x + (width - FxTheme::SLIDER_THUMB_RADIUS * 4) / 2,
+                Y_MARGIN,
+                FxTheme::SLIDER_THUMB_RADIUS * 4,
+                SLIDER_HEIGHT + ROTARY_SLIDER_HEIGHT);
             labels_[i]->setBounds(x, band_boosts_[i]->getBottom() + 6, width, LABEL_HEIGHT*2);
         }
-               
-        x += width;
     }
 }
 
@@ -319,6 +405,7 @@ void FxEqualizer::paint(Graphics& g)
                                    "a portion of your audio's frequencies, without modifying the rest of your sound.");
 
     auto& controller = FxController::getInstance();
+    refreshAutoEqToggle();
 
     int num_bands = controller.getNumEqBands();
 
@@ -369,8 +456,8 @@ void FxEqualizer::paint(Graphics& g)
 
     for (auto i = 0; i < band_boosts_.size() - 1; i++) 
     {
-        auto y0 = band_boosts_[i]->getPositionOfValue(band_boosts_[i]->getValue()) + Y_MARGIN;
-        auto y1 = band_boosts_[i + 1]->getPositionOfValue(band_boosts_[i + 1]->getValue()) + Y_MARGIN;
+        auto y0 = band_boosts_[i]->getPositionOfValue(band_boosts_[i]->getValue()) + band_boosts_[i]->getY();
+        auto y1 = band_boosts_[i + 1]->getPositionOfValue(band_boosts_[i + 1]->getValue()) + band_boosts_[i + 1]->getY();
 
         auto x0 = band_boosts_[i]->getX() + band_boosts_[i]->getWidth() / 2;
         auto x1 = band_boosts_[i + 1]->getX() + band_boosts_[i + 1]->getWidth() / 2;
@@ -392,7 +479,7 @@ void FxEqualizer::paint(Graphics& g)
     for (auto i = 0; i < band_boosts_.size(); i++) 
     {
         auto x = band_boosts_[i]->getX() + band_boosts_[i]->getWidth() / 2;
-        auto y = band_boosts_[i]->getPositionOfValue(band_boosts_[i]->getValue()) + Y_MARGIN;
+        auto y = band_boosts_[i]->getPositionOfValue(band_boosts_[i]->getValue()) + band_boosts_[i]->getY();
 
         if (i == 0)                                           
         {
@@ -411,6 +498,72 @@ void FxEqualizer::paint(Graphics& g)
     auto gradient = ColourGradient(gradient_colour_1, 0, band_boosts_[1]->getY(), gradient_colour_2, 0, band_boosts_[1]->getBottom(), false);
     g.setFillType(FillType(gradient));
     g.fillPath(path);
+}
+
+void FxEqualizer::refreshAutoEqToggle()
+{
+    auto& controller = FxController::getInstance();
+
+    auto_eq_button_.setButtonText(TRANS("Auto EQ"));
+    auto_eq_button_.setToggleState(controller.isAutoEqEnabled(), NotificationType::dontSendNotification);
+
+    if (!controller.isHelpTooltipsHidden())
+    {
+        auto_eq_button_.setTooltip(TRANS("Automatically adjusts EQ balance over time within a +/-3 dB range."));
+    }
+    else
+    {
+        auto_eq_button_.setTooltip("");
+    }
+}
+
+FxEqualizer::FxAutoEqButton::FxAutoEqButton() : Button("autoEqButton")
+{
+    setWantsKeyboardFocus(true);
+}
+
+void FxEqualizer::FxAutoEqButton::paintButton(Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
+{
+    auto bounds = getLocalBounds().toFloat();
+    auto enabled = getToggleState();
+
+    Colour colour;
+
+    if (enabled)
+    {
+        colour = Colour(FXCOLOR(ImageButton)).withAlpha(1.0f);
+    }
+    else
+    {
+        colour = Colour(FXCOLOR(DefaultText)).withAlpha(0.65f);
+    }
+
+    if (shouldDrawButtonAsDown)
+    {
+        colour = colour.darker(0.15f);
+    }
+    else if (shouldDrawButtonAsHighlighted)
+    {
+        colour = colour.brighter(0.08f);
+    }
+
+    if (!isEnabled())
+    {
+        colour = colour.withSaturation(0.0f).withAlpha(0.55f);
+    }
+
+    drawCircleAIcon(g, bounds, colour);
+}
+
+bool FxEqualizer::FxAutoEqButton::keyPressed(const KeyPress& key)
+{
+    if (isEnabled() && key.isKeyCode(KeyPress::spaceKey))
+    {
+        triggerClick();
+        return true;
+    }
+
+    return false;
 }
 
 FxEqualizer::FxEqSlider::FxEqSlider(int band, float max_gain)

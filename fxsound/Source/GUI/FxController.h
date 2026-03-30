@@ -48,6 +48,7 @@ public:
 	static constexpr int DEFAULT_NUM_EQ_BANDS = 10;
 	static constexpr float DEFAULT_NORMALIZATION = 0.0f;
 	static constexpr float DEFAULT_VOLUME_LEVELING = 0.0f;
+	static constexpr bool DEFAULT_AUTO_EQ_ENABLED = true;
 	static constexpr float DEFAULT_BALANCE = 0.0f;
 	static constexpr float DEFAULT_FILTER_Q = 1.0f;
 	static constexpr float DEFAULT_MASTER_GAIN = 0.0f;
@@ -107,6 +108,8 @@ public:
 	void setNormalization(float gain_db);
 	float getVolumeLeveling();
 	void setVolumeLeveling(float gain_db);
+	bool isAutoEqEnabled();
+	void setAutoEqEnabled(bool enabled);
 	void setBalance(float gain_db);
 	float getBalance();
 	void setMasterGain(float gain_db);

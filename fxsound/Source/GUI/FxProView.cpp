@@ -87,10 +87,10 @@ void FxProView::resized()
         visualizer_offset = visualizer_.getHeight() + 20;
     }
 
-    auto bounds = getLocalBounds();
+	auto bounds = getLocalBounds();
 
 	effects_.setBounds(effects_.getBounds().withX(EFFECTS_X).withY(EFFECTS_Y+visualizer_offset));
-	equalizer_.setBounds(equalizer_.getBounds().withX(effects_.getRight() + 16).withY(EFFECTS_Y+visualizer_offset));
+	equalizer_.setBounds(equalizer_.getBounds().withX(effects_.getRight() + 16).withY(EFFECTS_Y + visualizer_offset));
 }
 
 void FxProView::paint(Graphics& g)
@@ -107,7 +107,7 @@ void FxProView::paint(Graphics& g)
 	g.fillAll();
 
 	g.setFillType(FillType(Colour(FXCOLOR(PanelBackground)).withAlpha(0.2f)));
-	g.fillRoundedRectangle(20, 16, 1000, 330+visualizer_offset, 8);
+	g.fillRoundedRectangle(20, 16, 1000, 330 + visualizer_offset, 8);
 
     auto enable_controls = FxModel::getModel().getPowerState();
 

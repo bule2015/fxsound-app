@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #include "filt.h"
 #include "codedefs.h"
@@ -28,6 +29,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "u_GraphicEq.h"
 
 #include "dfxpDefs.h"
+
+static void resetAutoEqAnalysisState(struct GraphicEqHdlType* cast_handle)
+{
+	cast_handle->auto_eq_bucket_index = 0;
+	cast_handle->auto_eq_bucket_count = 0;
+	cast_handle->auto_eq_buckets_since_update = 0;
+	cast_handle->auto_eq_samples_per_bucket = 0.0f;
+	cast_handle->auto_eq_samples_in_bucket = 0.0f;
+	cast_handle->auto_eq_bucket_low_energy = 0.0f;
+	cast_handle->auto_eq_bucket_mid_energy = 0.0f;
+	cast_handle->auto_eq_bucket_high_energy = 0.0f;
+	cast_handle->auto_eq_low_energy_sum = 0.0f;
+	cast_handle->auto_eq_mid_energy_sum = 0.0f;
+	cast_handle->auto_eq_high_energy_sum = 0.0f;
+
+	memset(cast_handle->auto_eq_low_energy_buckets, 0, sizeof(cast_handle->auto_eq_low_energy_buckets));
+	memset(cast_handle->auto_eq_mid_energy_buckets, 0, sizeof(cast_handle->auto_eq_mid_energy_buckets));
+	memset(cast_handle->auto_eq_high_energy_buckets, 0, sizeof(cast_handle->auto_eq_high_energy_buckets));
+	memset(cast_handle->auto_eq_lp_low_state, 0, sizeof(cast_handle->auto_eq_lp_low_state));
+	memset(cast_handle->auto_eq_lp_mid_state, 0, sizeof(cast_handle->auto_eq_lp_mid_state));
+	memset(cast_handle->auto_eq_dynamic_offset, 0, sizeof(cast_handle->auto_eq_dynamic_offset));
+}
 
 void PT_DECLSPEC GraphicEqSetBalance(PT_HANDLE* hp_GraphicEq, float balance_db)
 {
@@ -81,6 +104,37 @@ void PT_DECLSPEC GraphicEqSetVolumeLeveling(PT_HANDLE* hp_GraphicEq, float gain_
 		target_rms = 0.125f + (gain_db / 4.0f) * (0.5f - 0.125f);
 
 	sosSetVolumeLeveling((PT_HANDLE*)(cast_handle->sos_hdl), target_rms);
+}
+
+void PT_DECLSPEC GraphicEqSetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int enabled)
+{
+	struct GraphicEqHdlType* cast_handle;
+	realtype* rp_boost_array = NULL;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+	if (cast_handle == NULL)
+		return;
+
+	enabled = enabled ? IS_TRUE : IS_FALSE;
+	if (cast_handle->auto_eq_enabled == enabled)
+		return;
+
+	if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_boost_array) == OKAY)
+	{
+		for (int i = 0; i < cast_handle->num_bands; ++i)
+		{
+			realtype user_base = rp_boost_array[i] - cast_handle->auto_eq_dynamic_offset[i];
+			cast_handle->auto_eq_user_base_boost[i] = user_base;
+
+			if (!enabled)
+			{
+				GraphicEqSetBandBoostCut(hp_GraphicEq, i + 1, user_base);
+			}
+		}
+	}
+
+	cast_handle->auto_eq_enabled = enabled;
+	resetAutoEqAnalysisState(cast_handle);
 }
 
 void PT_DECLSPEC GraphicEqSetMasterGain(PT_HANDLE* hp_GraphicEq, float gain_db)

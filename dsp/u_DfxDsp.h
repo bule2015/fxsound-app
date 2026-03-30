@@ -94,6 +94,8 @@ public:
 	void setNormalization(float gain_db);
 	float getVolumeLeveling();
 	void setVolumeLeveling(float gain_db);
+	bool getAutoEqEnabled();
+	void setAutoEqEnabled(bool enabled);
 	float getMasterGain();
 	void setMasterGain(float gain_db);
 	float getFilterQ();
