@@ -146,6 +146,175 @@ sequenceDiagram
     end
 ```
 
+## Scenario Flows
+
+The sections below show the concrete method-call flow for the main scenarios that
+the extracted helpers are meant to cover.
+
+### 1. Startup Restores the Last Selected Output
+
+```mermaid
+sequenceDiagram
+    participant App as "FxController::init(...)"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+    participant M as "FxModel"
+
+    App->>A: init()
+    App->>A: getSoundDevices(false)
+    App->>C: loadSelectedOutputFromSettings()
+    App->>C: initOutputs(sound_devices)
+    C->>O: buildVisibleOutputDevices(...)
+    C->>O: makeOutputResolutionContext(...)
+    C->>O: buildInitDecision(sound_devices, output_devices, context)
+    O-->>C: InitDecision
+    C->>C: rebuildOutputDeviceList(...)
+    C->>C: applySelectedOutput(resolved_output)
+
+    alt "Resolved output is active"
+        C->>A: setAsPlaybackDevice(...)
+        C->>M: setSelectedOutput(...)
+    else "Resolved output is inactive"
+        C->>M: setSelectedOutput(...)
+        Note over C,A: Selected output stays visible but muted/inactive
+    end
+```
+
+### 2. User Manually Selects an Active Output
+
+```mermaid
+sequenceDiagram
+    participant UI as "Main window / tray"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+    participant M as "FxModel"
+
+    UI->>C: setOutput(output_device_id, notify)
+    C->>A: getSoundDevices(false)
+    C->>O: buildManualSelectionDecision(...)
+    O-->>C: ManualSelectionDecision
+
+    alt "Output id resolves to a stereo device"
+        C->>C: applySelectedOutput(selected_output, notify, true)
+        C->>C: applyRoutingActions(selected_output, routing_actions)
+        C->>C: tryApplyAutoPresetForCurrentOutput(true)
+        C->>M: pushMessage("Output: ...")
+    else "Output id is missing or invalid"
+        C->>A: mute(true)
+        C->>C: powerOn(false)
+        C->>M: notifyOutputError()
+    end
+```
+
+### 3. Unrelated Device Change Is Ignored While the Selected Output Stays Active
+
+```mermaid
+sequenceDiagram
+    participant OS as "Windows callback"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+
+    OS->>C: onSoundDeviceChange(change_kind, device_id)
+    C->>C: handleSoundDeviceChange()
+    C->>A: getSoundDevices(false)
+    C->>O: shouldIgnoreDeviceChange(...)
+    O-->>C: true
+    C->>C: updateOutputs(sound_devices)
+    C->>O: scanProcessingOutputs(...)
+    C->>O: buildVisibleOutputDevices(...)
+    C->>O: makeOutputResolutionContext(...)
+    C->>O: buildSyncDecision(...)
+    O-->>C: SyncDecision
+    C->>C: applySelectedOutput(...)
+    Note over C,A: No restart or retarget occurs
+```
+
+### 4. The Selected Output Becomes Inactive
+
+```mermaid
+sequenceDiagram
+    participant OS as "Windows callback"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+    participant M as "FxModel"
+
+    OS->>C: onSoundDeviceChange(change_kind, selected_device_id)
+    C->>C: handleSoundDeviceChange()
+    C->>A: getSoundDevices(false)
+    C->>O: shouldIgnoreDeviceChange(...)
+    O-->>C: false
+    C->>C: beginAudioProcessingGracePeriod()
+    C->>A: restartProcessingForDeviceChange()
+    C->>A: getSoundDevices(false)
+    C->>C: updateOutputs(sound_devices)
+    C->>O: buildVisibleOutputDevices(..., include_selected_inactive=true)
+    C->>O: buildSyncDecision(...)
+    O-->>C: SyncDecision{should_mute=true}
+    C->>C: applySelectedOutput(inactive_selected_output)
+    C->>A: mute(true)
+    C->>M: notifyOutputError()
+    Note over C,M: The inactive selected output stays visible and greyed out
+```
+
+### 5. An Inactive Selected Output Reconnects
+
+```mermaid
+sequenceDiagram
+    participant OS as "Windows callback"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+    participant M as "FxModel"
+
+    OS->>C: onSoundDeviceChange(change_kind, reconnected_device_id)
+    C->>C: handleSoundDeviceChange()
+    C->>A: getSoundDevices(false)
+    C->>O: shouldIgnoreDeviceChange(...)
+    O-->>C: false
+    C->>A: restartProcessingForDeviceChange()
+    C->>A: getSoundDevices(false)
+    C->>C: updateOutputs(sound_devices)
+    C->>O: buildVisibleOutputDevices(...)
+    C->>O: makeOutputResolutionContext(...)
+    C->>O: buildSyncDecision(...)
+    O-->>C: SyncDecision
+    C->>C: applySelectedOutput(reconnected_output)
+    C->>C: applyRoutingActions(reconnected_output, routing_actions)
+    C->>C: tryApplyAutoPresetForCurrentOutput(true)
+    C->>M: setSelectedOutput(reconnected_output, ...)
+    Note over C,O: Matching uses device_id, then container_id, then legacy name fallback
+```
+
+### 6. Idle Sync While Processing Is Off
+
+```mermaid
+sequenceDiagram
+    participant Timer as "FxController::timerCallback()"
+    participant C as "FxController"
+    participant O as "OutputDeviceSelection"
+    participant A as "IAudioPassthru"
+    participant M as "FxModel"
+
+    Timer->>A: getSoundDevices(false)
+    Timer->>C: syncOutputWithSystemDefault(sound_devices)
+    C->>O: buildVisibleOutputDevices(...)
+    C->>O: makeOutputResolutionContext(...)
+    C->>O: buildIdleSyncDecision(...)
+    O-->>C: IdleSyncDecision
+    C->>C: applySelectedOutput(resolved_output)
+
+    alt "Resolved output is inactive"
+        C->>M: notifyOutputError()
+        Note over C,A: No backend restart while processing is off
+    else "Resolved output is active"
+        C->>C: tryApplyAutoPresetForCurrentOutput(true)
+    end
+```
+
 ## Scenario Summary
 
 - Selected active output stays selected across unrelated device reconnects.
