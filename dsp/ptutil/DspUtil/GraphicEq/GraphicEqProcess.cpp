@@ -38,6 +38,13 @@ namespace
 	constexpr realtype kAutoEqEpsilon = 1e-12f;
 	constexpr realtype kPi = 3.14159265358979323846f;
 
+	struct AdaptiveEqTargetOffsets
+	{
+		realtype low;
+		realtype mid;
+		realtype high;
+	};
+
 	static realtype clampReal(realtype value, realtype min_value, realtype max_value)
 	{
 		return (value < min_value) ? min_value : ((value > max_value) ? max_value : value);
@@ -52,11 +59,8 @@ namespace
 		return target;
 	}
 
-	static void updateAdaptiveEqBands(struct GraphicEqHdlType* cast_handle)
+	static AdaptiveEqTargetOffsets computeAdaptiveEqTargetOffsets(const struct GraphicEqHdlType* cast_handle)
 	{
-		if (cast_handle->auto_eq_bucket_count <= 0)
-			return;
-
 		realtype avg_low = cast_handle->auto_eq_low_energy_sum / cast_handle->auto_eq_bucket_count;
 		realtype avg_mid = cast_handle->auto_eq_mid_energy_sum / cast_handle->auto_eq_bucket_count;
 		realtype avg_high = cast_handle->auto_eq_high_energy_sum / cast_handle->auto_eq_bucket_count;
@@ -67,10 +71,34 @@ namespace
 		realtype high_delta_db = (realtype)(10.0f * log10((double)((avg_high + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
 
 		realtype band_limit_db = cast_handle->auto_eq_range_db;
-		realtype low_target = clampReal(-low_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
-		realtype mid_target = clampReal(-mid_delta_db * kAutoEqMidStrength, -band_limit_db, band_limit_db);
-		realtype high_target = clampReal(-high_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
+		AdaptiveEqTargetOffsets targets{};
+		targets.low = clampReal(-low_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
+		targets.mid = clampReal(-mid_delta_db * kAutoEqMidStrength, -band_limit_db, band_limit_db);
+		targets.high = clampReal(-high_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
 
+		return targets;
+	}
+
+	static realtype getAdaptiveEqTargetOffset(realtype center_freq, const AdaptiveEqTargetOffsets& targets)
+	{
+		if (center_freq <= kAutoEqLowCutHz)
+			return targets.low;
+
+		if (center_freq >= kAutoEqMidCutHz)
+			return targets.high;
+
+		realtype t = (center_freq - kAutoEqLowCutHz) / (kAutoEqMidCutHz - kAutoEqLowCutHz);
+		realtype low_to_mid = targets.low + (targets.mid - targets.low) * t;
+		realtype mid_to_high = targets.mid + (targets.high - targets.mid) * t;
+		return (low_to_mid + mid_to_high) * 0.5f;
+	}
+
+	static void updateAdaptiveEqBands(struct GraphicEqHdlType* cast_handle)
+	{
+		if (cast_handle->auto_eq_bucket_count <= 0)
+			return;
+
+		AdaptiveEqTargetOffsets targets = computeAdaptiveEqTargetOffsets(cast_handle);
 		realtype* rp_freq_array = NULL;
 		realtype* rp_boost_array = NULL;
 		if (sosGetCenterFreqArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_freq_array) != OKAY)
@@ -81,29 +109,48 @@ namespace
 		for (int i = 0; i < cast_handle->num_bands; i++)
 		{
 			realtype center_freq = rp_freq_array[i];
-			realtype target_offset = mid_target;
-
-			if (center_freq <= kAutoEqLowCutHz)
-			{
-				target_offset = low_target;
-			}
-			else if (center_freq >= kAutoEqMidCutHz)
-			{
-				target_offset = high_target;
-			}
-			else
-			{
-				realtype t = (center_freq - kAutoEqLowCutHz) / (kAutoEqMidCutHz - kAutoEqLowCutHz);
-				realtype low_to_mid = low_target + (mid_target - low_target) * t;
-				realtype mid_to_high = mid_target + (high_target - mid_target) * t;
-				target_offset = (low_to_mid + mid_to_high) * 0.5f;
-			}
+			realtype target_offset = getAdaptiveEqTargetOffset(center_freq, targets);
 
 			realtype user_base = rp_boost_array[i] - cast_handle->auto_eq_dynamic_offset[i];
 			cast_handle->auto_eq_user_base_boost[i] = user_base;
 			realtype new_offset = stepToward(cast_handle->auto_eq_dynamic_offset[i], target_offset, kAutoEqBandStepDb);
 			cast_handle->auto_eq_dynamic_offset[i] = new_offset;
 			GraphicEqSetBandBoostCut((PT_HANDLE*)cast_handle, i + 1, user_base + new_offset);
+		}
+	}
+
+	static void commitAdaptiveEqBucket(struct GraphicEqHdlType* cast_handle)
+	{
+		int write_index = cast_handle->auto_eq_bucket_index;
+		if (cast_handle->auto_eq_bucket_count == GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS)
+		{
+			cast_handle->auto_eq_low_energy_sum -= cast_handle->auto_eq_low_energy_buckets[write_index];
+			cast_handle->auto_eq_mid_energy_sum -= cast_handle->auto_eq_mid_energy_buckets[write_index];
+			cast_handle->auto_eq_high_energy_sum -= cast_handle->auto_eq_high_energy_buckets[write_index];
+		}
+		else
+		{
+			cast_handle->auto_eq_bucket_count++;
+		}
+
+		cast_handle->auto_eq_low_energy_buckets[write_index] = cast_handle->auto_eq_bucket_low_energy;
+		cast_handle->auto_eq_mid_energy_buckets[write_index] = cast_handle->auto_eq_bucket_mid_energy;
+		cast_handle->auto_eq_high_energy_buckets[write_index] = cast_handle->auto_eq_bucket_high_energy;
+		cast_handle->auto_eq_low_energy_sum += cast_handle->auto_eq_bucket_low_energy;
+		cast_handle->auto_eq_mid_energy_sum += cast_handle->auto_eq_bucket_mid_energy;
+		cast_handle->auto_eq_high_energy_sum += cast_handle->auto_eq_bucket_high_energy;
+
+		cast_handle->auto_eq_bucket_index = (write_index + 1) % GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS;
+		cast_handle->auto_eq_buckets_since_update++;
+		cast_handle->auto_eq_samples_in_bucket = 0.0f;
+		cast_handle->auto_eq_bucket_low_energy = 0.0f;
+		cast_handle->auto_eq_bucket_mid_energy = 0.0f;
+		cast_handle->auto_eq_bucket_high_energy = 0.0f;
+
+		if (cast_handle->auto_eq_buckets_since_update >= kAutoEqBucketsPerUpdate)
+		{
+			cast_handle->auto_eq_buckets_since_update = 0;
+			updateAdaptiveEqBands(cast_handle);
 		}
 	}
 
@@ -160,37 +207,7 @@ namespace
 			cast_handle->auto_eq_samples_in_bucket += 1.0f;
 			if (cast_handle->auto_eq_samples_in_bucket >= cast_handle->auto_eq_samples_per_bucket)
 			{
-				int write_index = cast_handle->auto_eq_bucket_index;
-				if (cast_handle->auto_eq_bucket_count == GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS)
-				{
-					cast_handle->auto_eq_low_energy_sum -= cast_handle->auto_eq_low_energy_buckets[write_index];
-					cast_handle->auto_eq_mid_energy_sum -= cast_handle->auto_eq_mid_energy_buckets[write_index];
-					cast_handle->auto_eq_high_energy_sum -= cast_handle->auto_eq_high_energy_buckets[write_index];
-				}
-				else
-				{
-					cast_handle->auto_eq_bucket_count++;
-				}
-
-				cast_handle->auto_eq_low_energy_buckets[write_index] = cast_handle->auto_eq_bucket_low_energy;
-				cast_handle->auto_eq_mid_energy_buckets[write_index] = cast_handle->auto_eq_bucket_mid_energy;
-				cast_handle->auto_eq_high_energy_buckets[write_index] = cast_handle->auto_eq_bucket_high_energy;
-				cast_handle->auto_eq_low_energy_sum += cast_handle->auto_eq_bucket_low_energy;
-				cast_handle->auto_eq_mid_energy_sum += cast_handle->auto_eq_bucket_mid_energy;
-				cast_handle->auto_eq_high_energy_sum += cast_handle->auto_eq_bucket_high_energy;
-
-				cast_handle->auto_eq_bucket_index = (write_index + 1) % GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS;
-				cast_handle->auto_eq_buckets_since_update++;
-				cast_handle->auto_eq_samples_in_bucket = 0.0f;
-				cast_handle->auto_eq_bucket_low_energy = 0.0f;
-				cast_handle->auto_eq_bucket_mid_energy = 0.0f;
-				cast_handle->auto_eq_bucket_high_energy = 0.0f;
-
-				if (cast_handle->auto_eq_buckets_since_update >= kAutoEqBucketsPerUpdate)
-				{
-					cast_handle->auto_eq_buckets_since_update = 0;
-					updateAdaptiveEqBands(cast_handle);
-				}
+				commitAdaptiveEqBucket(cast_handle);
 			}
 
 			index += i_num_channels;

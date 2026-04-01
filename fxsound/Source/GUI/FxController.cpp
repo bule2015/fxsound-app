@@ -1386,6 +1386,15 @@ void FxController::disableAutoEqPreservingCurrentEq()
 	settings_.setBool("auto_eq_enabled", false);
 }
 
+bool FxController::prepareForManualEqEdit(FxSound::AutoEqPolicy::Change change)
+{
+	if (!isAutoEqEnabled() || !FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(change))
+		return false;
+
+	disableAutoEqPreservingCurrentEq();
+	return true;
+}
+
 float FxController::getBalance()
 {
 	return dfx_dsp_.getBalance();

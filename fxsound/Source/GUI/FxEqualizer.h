@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <JuceHeader.h>
+#include "AutoEqPolicy.h"
 
 //==============================================================================
 /*
@@ -40,7 +41,7 @@ public:
 
     void reinit(int num_bands);
 
-    void sliderValueChanged(Slider*slider) override;
+    void sliderValueChanged(Slider*) override;
     void sliderDragStarted(Slider* slider) override;
     void sliderDragEnded(Slider* slider) override;
 
@@ -53,7 +54,7 @@ private:
     class FxEqSlider : public Slider
     {
     public:
-        FxEqSlider(int band, float max_gain);
+        FxEqSlider(int band, float);
         ~FxEqSlider() = default;
 
         void enablementChanged() override;
@@ -121,6 +122,7 @@ private:
 	void resized() override;
 	void paint(Graphics& g) override;
 	void refreshAutoEqToggle();
+	void handleManualEqEdit(FxSound::AutoEqPolicy::Change change);
 
 	std::vector<std::unique_ptr<Label>> labels_;
     std::vector<std::unique_ptr<FxEqSlider>> band_boosts_;

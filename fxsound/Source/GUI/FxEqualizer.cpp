@@ -22,7 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxEqualizer.h"
 #include "FxController.h"
 #include "FxTheme.h"
-#include "AutoEqPolicy.h"
 
 #include <unordered_map>
 
@@ -156,7 +155,6 @@ void FxEqualizer::reinit(int num_bands)
     band_gain_values_.resize(num_bands);
 
     // ------------------------------------------------------------ recreate all controls
-    auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
     float min_freq, max_freq;
 
     for (int i = 0; i < num_bands; i++)
@@ -188,7 +186,7 @@ void FxEqualizer::reinit(int num_bands)
     FxController::getInstance().undoPreset();
 }
 
-void FxEqualizer::sliderValueChanged(Slider* slider)
+void FxEqualizer::sliderValueChanged(Slider*)
 {
 
 }
@@ -203,13 +201,7 @@ void FxEqualizer::sliderDragStarted(Slider* slider)
     if (ModifierKeys::getCurrentModifiersRealtime().isAltDown())
     {
         auto& controller = FxController::getInstance();
-
-        if (controller.isAutoEqEnabled() &&
-            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandGainChanged))
-        {
-            controller.disableAutoEqPreservingCurrentEq();
-            refreshAutoEqToggle();
-        }
+        handleManualEqEdit(FxSound::AutoEqPolicy::Change::ManualBandGainChanged);
 
         highlight_mode_ = true;
 
@@ -439,9 +431,6 @@ void FxEqualizer::paint(Graphics& g)
     }
     else
     {
-        auto& controller = FxController::getInstance();
-
-        int num_bands = controller.getNumEqBands();
         for (int i = 0; i < num_bands; i++)
         {
             if (!controller.isHelpTooltipsHidden())
@@ -528,6 +517,14 @@ void FxEqualizer::refreshAutoEqToggle()
     }
 }
 
+void FxEqualizer::handleManualEqEdit(FxSound::AutoEqPolicy::Change change)
+{
+    if (FxController::getInstance().prepareForManualEqEdit(change))
+    {
+        update();
+    }
+}
+
 FxEqualizer::FxAutoEqButton::FxAutoEqButton() : Button("autoEqButton")
 {
     setWantsKeyboardFocus(true);
@@ -577,7 +574,7 @@ bool FxEqualizer::FxAutoEqButton::keyPressed(const KeyPress& key)
     return false;
 }
 
-FxEqualizer::FxEqSlider::FxEqSlider(int band, float max_gain)
+FxEqualizer::FxEqSlider::FxEqSlider(int band, float)
 {
     band_ = band;
 
@@ -633,12 +630,7 @@ void FxEqualizer::FxEqSlider::valueChanged()
     auto value = getValue();
     if (value != controller.getEqBandBoostCut(band_))
     {
-        if (controller.isAutoEqEnabled() &&
-            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandGainChanged))
-        {
-            controller.disableAutoEqPreservingCurrentEq();
-            FxEqualizer::getInstance().update();
-        }
+        FxEqualizer::getInstance().handleManualEqEdit(FxSound::AutoEqPolicy::Change::ManualBandGainChanged);
 
         controller.setEqBandBoostCut(band_, value);
 
@@ -754,12 +746,7 @@ void FxEqualizer::FxBandCenterFreqSlider::valueChanged()
 
     if (freq != controller.getEqBandFrequency(band_))
     {
-        if (controller.isAutoEqEnabled() &&
-            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandFrequencyChanged))
-        {
-            controller.disableAutoEqPreservingCurrentEq();
-            FxEqualizer::getInstance().update();
-        }
+        FxEqualizer::getInstance().handleManualEqEdit(FxSound::AutoEqPolicy::Change::ManualBandFrequencyChanged);
 
         controller.setEqBandFrequency(band_, freq);
 

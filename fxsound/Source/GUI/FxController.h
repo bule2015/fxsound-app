@@ -28,6 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../Source/Utils/Settings/Settings.h"
 #include "../Source/Utils/Settings/DeviceConfig.h"
 #include "OutputDeviceSelection.h"
+#include "AutoEqPolicy.h"
 #include "AudioPassthru.h"
 #include "DfxDsp.h"
 #include <wtsapi32.h>
@@ -114,6 +115,7 @@ public:
 	float getAutoEqRange();
 	void setAutoEqRange(float range_db);
 	void disableAutoEqPreservingCurrentEq();
+	bool prepareForManualEqEdit(FxSound::AutoEqPolicy::Change change);
 	void setBalance(float gain_db);
 	float getBalance();
 	void setMasterGain(float gain_db);
