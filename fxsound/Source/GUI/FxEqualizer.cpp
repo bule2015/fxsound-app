@@ -203,6 +203,12 @@ void FxEqualizer::sliderDragStarted(Slider* slider)
     {
         auto& controller = FxController::getInstance();
 
+        if (controller.isAutoEqEnabled())
+        {
+            controller.disableAutoEqPreservingCurrentEq();
+            refreshAutoEqToggle();
+        }
+
         highlight_mode_ = true;
 
         startTimerHz(30);
@@ -618,10 +624,17 @@ void FxEqualizer::FxEqSlider::resized()
 
 void FxEqualizer::FxEqSlider::valueChanged()
 {
+    auto& controller = FxController::getInstance();
     auto value = getValue();
-    if (value != FxController::getInstance().getEqBandBoostCut(band_))
+    if (value != controller.getEqBandBoostCut(band_))
     {
-        FxController::getInstance().setEqBandBoostCut(band_, value);
+        if (controller.isAutoEqEnabled())
+        {
+            controller.disableAutoEqPreservingCurrentEq();
+            FxEqualizer::getInstance().update();
+        }
+
+        controller.setEqBandBoostCut(band_, value);
 
         auto text = String::formatted(value == 0.0 ? "%.0f" : "%+.0f", value);
         gain_label_.setText(text, NotificationType::dontSendNotification);

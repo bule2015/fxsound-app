@@ -110,6 +110,7 @@ public:
 	void setVolumeLeveling(float gain_db);
 	bool isAutoEqEnabled();
 	void setAutoEqEnabled(bool enabled);
+	void disableAutoEqPreservingCurrentEq();
 	void setBalance(float gain_db);
 	float getBalance();
 	void setMasterGain(float gain_db);

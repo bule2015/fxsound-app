@@ -155,6 +155,11 @@ void DfxDsp::setAutoEqEnabled(bool enabled)
 	data_->setAutoEqEnabled(enabled);
 }
 
+void DfxDsp::disableAutoEqPreservingCurrentEq()
+{
+	data_->disableAutoEqPreservingCurrentEq();
+}
+
 float DfxDsp::getMasterGain()
 {
 	return data_->getMasterGain();

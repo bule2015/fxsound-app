@@ -241,6 +241,13 @@ int DfxDspPrivate::getGraphicEqInfoFromVals(PT_HANDLE *hp_vals)
 			}
 		}
 	}
+
+	/*
+	* A preset replaces the user EQ baseline. Reset adaptive EQ history and offsets so
+	* the next auto-EQ update starts from the newly loaded preset instead of carrying
+	* over tonal analysis from the previous preset.
+	*/
+	GraphicEqResetAutoEqState(graphic_eq_handle);
 	
 	return(OKAY);
 
@@ -428,6 +435,23 @@ void DfxDspPrivate::setAutoEqEnabled(bool enabled)
 	PT_HANDLE* graphic_eq_handle;
 	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
 	GraphicEqSetAutoEqEnabled(graphic_eq_handle, enabled ? IS_TRUE : IS_FALSE);
+}
+
+void DfxDspPrivate::disableAutoEqPreservingCurrentEq()
+{
+	PT_HANDLE* graphic_eq_handle;
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	GraphicEqDisableAutoEqPreservingCurrentEq(graphic_eq_handle);
+
+	/*
+	* Auto EQ offsets live only in memory. When manual editing turns Auto EQ off while
+	* preserving the current effective curve, mirror the full curve into the registry as
+	* well so the next processTimer sync does not restore the old preset values.
+	*/
+	for (int band_num = 0; band_num < DFXP_GRAPHIC_EQ_NUM_BANDS; ++band_num)
+	{
+		dfxpEqSetBandBoostCut(dfxp_handle_, DFXP_STORAGE_TYPE_REGISTRY, band_num + 1, getEqBandBoostCut(band_num));
+	}
 }
 
 float DfxDspPrivate::getMasterGain()

@@ -58,6 +58,8 @@ void PT_DECLSPEC GraphicEqSetBalance(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetNormalization(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetVolumeLeveling(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int enabled);
+void PT_DECLSPEC GraphicEqResetAutoEqState(PT_HANDLE* hp_GraphicEq);
+void PT_DECLSPEC GraphicEqDisableAutoEqPreservingCurrentEq(PT_HANDLE* hp_GraphicEq);
 
 /* GraphicEqSet.cpp */
 int PT_DECLSPEC GraphicEqSetBandBoostCut(PT_HANDLE *hp_GraphicEq, int i_band_num, realtype r_boost_cut);

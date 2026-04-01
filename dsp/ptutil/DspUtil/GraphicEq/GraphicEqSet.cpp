@@ -137,6 +137,47 @@ void PT_DECLSPEC GraphicEqSetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int enabled)
 	resetAutoEqAnalysisState(cast_handle);
 }
 
+void PT_DECLSPEC GraphicEqResetAutoEqState(PT_HANDLE* hp_GraphicEq)
+{
+	struct GraphicEqHdlType* cast_handle;
+	realtype* rp_boost_array = NULL;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+	if (cast_handle == NULL)
+		return;
+
+	resetAutoEqAnalysisState(cast_handle);
+
+	if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_boost_array) == OKAY)
+	{
+		for (int i = 0; i < cast_handle->num_bands; ++i)
+		{
+			cast_handle->auto_eq_user_base_boost[i] = rp_boost_array[i];
+		}
+	}
+}
+
+void PT_DECLSPEC GraphicEqDisableAutoEqPreservingCurrentEq(PT_HANDLE* hp_GraphicEq)
+{
+	struct GraphicEqHdlType* cast_handle;
+	realtype* rp_boost_array = NULL;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+	if (cast_handle == NULL)
+		return;
+
+	if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_boost_array) == OKAY)
+	{
+		for (int i = 0; i < cast_handle->num_bands; ++i)
+		{
+			cast_handle->auto_eq_user_base_boost[i] = rp_boost_array[i];
+		}
+	}
+
+	cast_handle->auto_eq_enabled = IS_FALSE;
+	resetAutoEqAnalysisState(cast_handle);
+}
+
 void PT_DECLSPEC GraphicEqSetMasterGain(PT_HANDLE* hp_GraphicEq, float gain_db)
 {
 	struct GraphicEqHdlType* cast_handle;

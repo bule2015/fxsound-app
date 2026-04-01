@@ -1364,6 +1364,12 @@ void FxController::setAutoEqEnabled(bool enabled)
 	settings_.setBool("auto_eq_enabled", enabled);
 }
 
+void FxController::disableAutoEqPreservingCurrentEq()
+{
+	dfx_dsp_.disableAutoEqPreservingCurrentEq();
+	settings_.setBool("auto_eq_enabled", false);
+}
+
 float FxController::getBalance()
 {
 	return dfx_dsp_.getBalance();
