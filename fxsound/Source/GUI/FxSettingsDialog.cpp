@@ -113,7 +113,14 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 	addChildComponent(general_settings_pane_);
 	addChildComponent(help_settings_pane_);
 
-    setSize(WIDTH, HEIGHT);
+    setSize(WIDTH, getPreferredHeight());
+}
+
+int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
+{
+	return jmax(HEIGHT,
+		jmax(audio_settings_pane_.getPreferredHeight(),
+			jmax(general_settings_pane_.getPreferredHeight(), help_settings_pane_.getPreferredHeight())));
 }
 
 void FxSettingsDialog::SettingsComponent::resized()
@@ -188,6 +195,7 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	master_gain_slider_("%0.0f dB", 0.0f), 
 	normalizer_slider_("%0.0f dB", 0.0f),
 	volume_leveling_slider_("%.1f dB", 0.0f),
+	auto_eq_range_slider_("%0.0f dB", 0.0f),
 	filter_q_slider_("%.1fx", 1.0f), balance_slider_(0.0f),
 	restore_defaults_button_(TRANS("Restore Defaults")),
 	reset_presets_button_(TRANS("Reset presets to factory defaults"))
@@ -210,6 +218,9 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 
 	volume_leveling_title_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	volume_leveling_title_.setJustificationType(Justification::centredLeft);
+
+	auto_eq_range_title_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	auto_eq_range_title_.setJustificationType(Justification::centredLeft);
 
 	filter_q_title_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	filter_q_title_.setJustificationType(Justification::centredLeft);
@@ -288,6 +299,18 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 		if (controller.getVolumeLeveling() != value)
 			controller.setVolumeLeveling((float)value);
 		};
+
+	auto_eq_range_slider_.setSliderStyle(Slider::LinearHorizontal);
+	auto_eq_range_slider_.setRange(1, 12, 1);
+	auto_eq_range_slider_.setValue(controller.getAutoEqRange());
+	auto_eq_range_slider_.setTextBoxStyle(Slider::NoTextBox, false, 0, 0);
+	auto_eq_range_slider_.onValueChange = [this]() {
+		auto value = auto_eq_range_slider_.getValue();
+		auto& controller = FxController::getInstance();
+
+		if (controller.getAutoEqRange() != value)
+			controller.setAutoEqRange((float)value);
+		};
 	
 	filter_q_slider_.setSliderStyle(Slider::LinearHorizontal);
 	filter_q_slider_.setRange(1, 3, 0.5);
@@ -330,6 +353,8 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	addAndMakeVisible(&normalizer_slider_);
 	addAndMakeVisible(&volume_leveling_title_);
 	addAndMakeVisible(&volume_leveling_slider_);
+	addAndMakeVisible(&auto_eq_range_title_);
+	addAndMakeVisible(&auto_eq_range_slider_);
 	addAndMakeVisible(&filter_q_title_);
 	addAndMakeVisible(&filter_q_slider_);
 	addAndMakeVisible(&balance_title_);
@@ -346,9 +371,28 @@ FxSettingsDialog::AudioSettingsPane::~AudioSettingsPane()
 	master_gain_slider_.onValueChange = nullptr;
 	normalizer_slider_.onValueChange = nullptr;
 	volume_leveling_slider_.onValueChange = nullptr;
+	auto_eq_range_slider_.onValueChange = nullptr;
 	filter_q_slider_.onValueChange = nullptr;
 
 	FxModel::getModel().removeListener(this);
+}
+
+int FxSettingsDialog::AudioSettingsPane::getPreferredHeight() const
+{
+	int y = ENDPOINT_Y;
+	y += LABEL_HEIGHT + 8 + OUTPUT_PREFERENCE_HEIGHT + 30;
+	y += COMBOBOX_HEIGHT + 20;
+	y += SLIDER_HEIGHT + 20; // master gain
+	y += SLIDER_HEIGHT + 20; // normalization
+	y += SLIDER_HEIGHT + 20; // volume leveling
+	y += SLIDER_HEIGHT + 20; // auto eq range
+	y += SLIDER_HEIGHT + 20; // filter q
+	y += SLIDER_HEIGHT;      // balance
+	y += LABEL_HEIGHT + 20;
+	y += BUTTON_HEIGHT;
+	y += 30 + reset_presets_button_.getHeight();
+
+	return y + GROUP_MARGIN + Y_MARGIN + 20;
 }
 
 void FxSettingsDialog::AudioSettingsPane::resized()
@@ -382,6 +426,11 @@ void FxSettingsDialog::AudioSettingsPane::resized()
 	volume_leveling_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, width, SLIDER_HEIGHT);
 
 	y = volume_leveling_slider_.getBottom() + 20;
+
+	auto_eq_range_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
+	auto_eq_range_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, width, SLIDER_HEIGHT);
+
+	y = auto_eq_range_slider_.getBottom() + 20;
 
 	filter_q_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
 	filter_q_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, width, SLIDER_HEIGHT);
@@ -446,6 +495,8 @@ void FxSettingsDialog::AudioSettingsPane::setText()
 	normalizer_title_.setText(TRANS("Normalization:"), NotificationType::dontSendNotification);
 	volume_leveling_title_.setFont(theme.getNormalFont());
 	volume_leveling_title_.setText(TRANS("Volume Leveling:"), NotificationType::dontSendNotification);
+	auto_eq_range_title_.setFont(theme.getNormalFont());
+	auto_eq_range_title_.setText(TRANS("Auto EQ Range:"), NotificationType::dontSendNotification);
 	filter_q_title_.setFont(theme.getNormalFont());
 	filter_q_title_.setText(TRANS("Filter Q:"), NotificationType::dontSendNotification);	
 	balance_title_.setFont(theme.getNormalFont());
@@ -524,6 +575,7 @@ void FxSettingsDialog::AudioSettingsPane::restoreDefaults()
 	controller.setNumEqBands(FxController::DEFAULT_NUM_EQ_BANDS);
 	controller.setNormalization(FxController::DEFAULT_NORMALIZATION);
 	controller.setVolumeLeveling(FxController::DEFAULT_VOLUME_LEVELING);
+	controller.setAutoEqRange(FxController::DEFAULT_AUTO_EQ_RANGE);
 	controller.setBalance(FxController::DEFAULT_BALANCE);
 	controller.setFilterQ(FxController::DEFAULT_FILTER_Q);
 	controller.setMasterGain(FxController::DEFAULT_MASTER_GAIN);
@@ -532,6 +584,7 @@ void FxSettingsDialog::AudioSettingsPane::restoreDefaults()
 	master_gain_slider_.setValue(controller.getMasterGain());
 	normalizer_slider_.setValue(controller.getNormalization());
 	volume_leveling_slider_.setValue(controller.getVolumeLeveling());
+	auto_eq_range_slider_.setValue(controller.getAutoEqRange());
 	filter_q_slider_.setValue(controller.getFilterQ());
 	balance_slider_.setValue(controller.getBalance());
 }
@@ -670,6 +723,23 @@ FxSettingsDialog::GeneralSettingsPane::~GeneralSettingsPane()
 {
 }
 
+int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
+{
+	int y = LANGUAGE_SWITCH_Y + FxLanguage::HEIGHT + 20;
+
+	if (launch_toggle_.isVisible())
+	{
+		y += TOGGLE_BUTTON_HEIGHT + 20;
+	}
+
+	y += TOGGLE_BUTTON_HEIGHT + 10;
+	y += TOGGLE_BUTTON_HEIGHT + 10;
+	y += TOGGLE_BUTTON_HEIGHT + 5;
+	y += hotkey_labels_.size() * (HOTKEY_LABEL_HEIGHT + 10);
+
+	return y + Y_MARGIN + 20;
+}
+
 void FxSettingsDialog::GeneralSettingsPane::resized()
 {
 	auto bounds = getLocalBounds().withLeft(X_MARGIN).withTop(Y_MARGIN).withHeight(TITLE_HEIGHT);
@@ -711,9 +781,6 @@ void FxSettingsDialog::GeneralSettingsPane::paint(Graphics& g)
 
 void FxSettingsDialog::GeneralSettingsPane::setText()
 {
-    auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
-
-    int height = FxSettingsDialog::SettingsComponent::HEIGHT;
     launch_toggle_.setButtonText(TRANS("Launch on system startup"));
     hide_help_tips_toggle_.setButtonText(TRANS("Hide help tips for audio controls"));
 	hide_notifications_toggle_.setButtonText(TRANS("Hide notifications"));
@@ -760,6 +827,20 @@ FxSettingsDialog::HelpSettingsPane::HelpSettingsPane() : SettingsPane("Help"), a
 	addChildComponent(submitlogs_link_);
 	addAndMakeVisible(helpcenter_link_);
 	addAndMakeVisible(auto_updates_toggle_);
+}
+
+int FxSettingsDialog::HelpSettingsPane::getPreferredHeight() const
+{
+	int y = TEXT_Y;
+	y += TITLE_HEIGHT;
+	y += 10 + TEXT_HEIGHT;
+	y += 10 + HYPERLINK_HEIGHT;
+	y += 20 + TITLE_HEIGHT;
+	y += 10 + HYPERLINK_HEIGHT;
+	y += 20 + TITLE_HEIGHT;
+	y += 10 + TOGGLE_BUTTON_HEIGHT;
+
+	return y + Y_MARGIN + 20;
 }
 
 void FxSettingsDialog::HelpSettingsPane::resized()

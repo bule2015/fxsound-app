@@ -513,10 +513,13 @@ void FxEqualizer::refreshAutoEqToggle()
     auto_eq_button_.setButtonText(TRANS("Auto EQ"));
     auto_eq_button_.setToggleState(controller.isAutoEqEnabled(), NotificationType::dontSendNotification);
 
-    if (!controller.isHelpTooltipsHidden())
-    {
-        auto_eq_button_.setTooltip(TRANS("Automatically adjusts EQ balance over time within a +/-3 dB range."));
-    }
+	if (!controller.isHelpTooltipsHidden())
+	{
+		auto_eq_button_.setTooltip(
+			TRANS("Automatically adjusts EQ balance over time within a +/-")
+			+ String(controller.getAutoEqRange(), 0)
+			+ TRANS(" dB range."));
+	}
     else
     {
         auto_eq_button_.setTooltip("");

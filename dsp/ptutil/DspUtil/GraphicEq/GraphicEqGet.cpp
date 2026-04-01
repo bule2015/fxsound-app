@@ -184,6 +184,20 @@ int PT_DECLSPEC GraphicEqGetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int* enabled)
 	return(OKAY);
 }
 
+int PT_DECLSPEC GraphicEqGetAutoEqRange(PT_HANDLE* hp_GraphicEq, float* range_db)
+{
+	struct GraphicEqHdlType* cast_handle;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+
+	if (cast_handle == NULL)
+		return(NOT_OKAY);
+
+	*range_db = cast_handle->auto_eq_range_db;
+
+	return(OKAY);
+}
+
 
 int PT_DECLSPEC GraphicEqGetFilterQ(PT_HANDLE* hp_GraphicEq, float* q_multiplier)
 {

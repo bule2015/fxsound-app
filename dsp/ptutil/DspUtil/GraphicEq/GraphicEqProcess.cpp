@@ -32,7 +32,6 @@ namespace
 	constexpr int kAutoEqBucketsPerUpdate = 100; // 10 seconds
 	constexpr realtype kAutoEqLowCutHz = 250.0f;
 	constexpr realtype kAutoEqMidCutHz = 4000.0f;
-	constexpr realtype kAutoEqBandLimitDb = 3.0f;
 	constexpr realtype kAutoEqBandStepDb = 0.30f;
 	constexpr realtype kAutoEqStrength = 0.70f;
 	constexpr realtype kAutoEqMidStrength = 0.40f;
@@ -67,9 +66,10 @@ namespace
 		realtype mid_delta_db = (realtype)(10.0f * log10((double)((avg_mid + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
 		realtype high_delta_db = (realtype)(10.0f * log10((double)((avg_high + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
 
-		realtype low_target = clampReal(-low_delta_db * kAutoEqStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
-		realtype mid_target = clampReal(-mid_delta_db * kAutoEqMidStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
-		realtype high_target = clampReal(-high_delta_db * kAutoEqStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
+		realtype band_limit_db = cast_handle->auto_eq_range_db;
+		realtype low_target = clampReal(-low_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
+		realtype mid_target = clampReal(-mid_delta_db * kAutoEqMidStrength, -band_limit_db, band_limit_db);
+		realtype high_target = clampReal(-high_delta_db * kAutoEqStrength, -band_limit_db, band_limit_db);
 
 		realtype* rp_freq_array = NULL;
 		realtype* rp_boost_array = NULL;

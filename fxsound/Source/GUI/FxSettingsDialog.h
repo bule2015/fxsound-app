@@ -94,6 +94,7 @@ private:
 		AudioSettingsPane();
 		~AudioSettingsPane();
 
+		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -130,6 +131,7 @@ private:
 		Label master_gain_title_;
 		Label normalizer_title_;
 		Label volume_leveling_title_;
+		Label auto_eq_range_title_;
 		Label filter_q_title_;
 		Label balance_title_;
 		Label left_label_;
@@ -141,6 +143,7 @@ private:
 		FxAudioSlider master_gain_slider_;
 		FxAudioSlider normalizer_slider_;
 		FxAudioSlider volume_leveling_slider_;
+		FxAudioSlider auto_eq_range_slider_;
 		FxAudioSlider filter_q_slider_;
 		FxBalanceSlider balance_slider_;
 		TextButton restore_defaults_button_;
@@ -156,6 +159,7 @@ private:
 		GeneralSettingsPane();
 		~GeneralSettingsPane();
 
+		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -184,6 +188,7 @@ private:
 		HelpSettingsPane();
 		~HelpSettingsPane() = default;
 
+		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -219,6 +224,7 @@ private:
 		SettingsComponent();
         ~SettingsComponent() = default;
 
+		int getPreferredHeight() const;
 		void resized() override;
 
 		void buttonClicked(Button* button) override;

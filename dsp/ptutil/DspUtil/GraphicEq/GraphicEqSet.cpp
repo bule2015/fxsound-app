@@ -52,6 +52,17 @@ static void resetAutoEqAnalysisState(struct GraphicEqHdlType* cast_handle)
 	memset(cast_handle->auto_eq_dynamic_offset, 0, sizeof(cast_handle->auto_eq_dynamic_offset));
 }
 
+static realtype clampAutoEqRange(realtype range_db)
+{
+	if (range_db < 1.0f)
+		return 1.0f;
+
+	if (range_db > 12.0f)
+		return 12.0f;
+
+	return range_db;
+}
+
 void PT_DECLSPEC GraphicEqSetBalance(PT_HANDLE* hp_GraphicEq, float balance_db)
 {
 	struct GraphicEqHdlType* cast_handle;
@@ -135,6 +146,39 @@ void PT_DECLSPEC GraphicEqSetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int enabled)
 
 	cast_handle->auto_eq_enabled = enabled;
 	resetAutoEqAnalysisState(cast_handle);
+}
+
+void PT_DECLSPEC GraphicEqSetAutoEqRange(PT_HANDLE* hp_GraphicEq, float range_db)
+{
+	struct GraphicEqHdlType* cast_handle;
+	realtype* rp_boost_array = NULL;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+	if (cast_handle == NULL)
+		return;
+
+	cast_handle->auto_eq_range_db = clampAutoEqRange(range_db);
+
+	if (!cast_handle->auto_eq_enabled)
+		return;
+
+	if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_boost_array) != OKAY)
+		return;
+
+	for (int i = 0; i < cast_handle->num_bands; ++i)
+	{
+		realtype user_base = rp_boost_array[i] - cast_handle->auto_eq_dynamic_offset[i];
+		realtype clamped_offset = cast_handle->auto_eq_dynamic_offset[i];
+
+		if (clamped_offset > cast_handle->auto_eq_range_db)
+			clamped_offset = cast_handle->auto_eq_range_db;
+		else if (clamped_offset < -cast_handle->auto_eq_range_db)
+			clamped_offset = -cast_handle->auto_eq_range_db;
+
+		cast_handle->auto_eq_user_base_boost[i] = user_base;
+		cast_handle->auto_eq_dynamic_offset[i] = clamped_offset;
+		GraphicEqSetBandBoostCut(hp_GraphicEq, i + 1, user_base + clamped_offset);
+	}
 }
 
 void PT_DECLSPEC GraphicEqResetAutoEqState(PT_HANDLE* hp_GraphicEq)

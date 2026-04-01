@@ -32,6 +32,7 @@ FxSound::Settings::Settings()
 			<VALUE name="hotkeys" val="1"/>
 			<VALUE name="preset" val="General"/>
 			<VALUE name="auto_eq_enabled" val="1"/>
+			<VALUE name="auto_eq_range" val="3"/>
 			<VALUE name="cmd_on_off" val="393297"/>
 			<VALUE name="cmd_open_close" val="393285"/>
 			<VALUE name="cmd_next_preset" val="393281"/>

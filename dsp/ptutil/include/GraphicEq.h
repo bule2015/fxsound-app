@@ -58,6 +58,7 @@ void PT_DECLSPEC GraphicEqSetBalance(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetNormalization(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetVolumeLeveling(PT_HANDLE* hp_GraphicEq, float gain_db);
 void PT_DECLSPEC GraphicEqSetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int enabled);
+void PT_DECLSPEC GraphicEqSetAutoEqRange(PT_HANDLE* hp_GraphicEq, float range_db);
 void PT_DECLSPEC GraphicEqResetAutoEqState(PT_HANDLE* hp_GraphicEq);
 void PT_DECLSPEC GraphicEqDisableAutoEqPreservingCurrentEq(PT_HANDLE* hp_GraphicEq);
 
@@ -76,6 +77,7 @@ int PT_DECLSPEC GraphicEqGetMasterGain(PT_HANDLE* hp_GraphicEq, float* gain_db);
 int PT_DECLSPEC GraphicEqGetNormalization(PT_HANDLE* hp_GraphicEq, float* gain_db);
 int PT_DECLSPEC GraphicEqGetVolumeLeveling(PT_HANDLE* hp_GraphicEq, float* gain_db);
 int PT_DECLSPEC GraphicEqGetAutoEqEnabled(PT_HANDLE* hp_GraphicEq, int* enabled);
+int PT_DECLSPEC GraphicEqGetAutoEqRange(PT_HANDLE* hp_GraphicEq, float* range_db);
 int PT_DECLSPEC GraphicEqGetFilterQ(PT_HANDLE* hp_GraphicEq, float* q_multiplier);
 int PT_DECLSPEC GraphicEqGetBalance(PT_HANDLE* hp_GraphicEq, float* balance_db);
 

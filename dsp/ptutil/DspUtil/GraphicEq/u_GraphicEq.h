@@ -66,6 +66,7 @@ struct GraphicEqHdlType
 
 	/* Adaptive EQ state (60 s analysis, 10 s updates). */
 	int auto_eq_enabled;
+	realtype auto_eq_range_db;
 	int auto_eq_bucket_index;
 	int auto_eq_bucket_count;
 	int auto_eq_buckets_since_update;

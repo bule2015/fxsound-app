@@ -437,6 +437,24 @@ void DfxDspPrivate::setAutoEqEnabled(bool enabled)
 	GraphicEqSetAutoEqEnabled(graphic_eq_handle, enabled ? IS_TRUE : IS_FALSE);
 }
 
+float DfxDspPrivate::getAutoEqRange()
+{
+	float range_db = 3.0f;
+
+	PT_HANDLE* graphic_eq_handle;
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	GraphicEqGetAutoEqRange(graphic_eq_handle, &range_db);
+
+	return range_db;
+}
+
+void DfxDspPrivate::setAutoEqRange(float range_db)
+{
+	PT_HANDLE* graphic_eq_handle;
+	dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+	GraphicEqSetAutoEqRange(graphic_eq_handle, range_db);
+}
+
 void DfxDspPrivate::disableAutoEqPreservingCurrentEq()
 {
 	PT_HANDLE* graphic_eq_handle;

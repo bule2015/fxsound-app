@@ -155,6 +155,16 @@ void DfxDsp::setAutoEqEnabled(bool enabled)
 	data_->setAutoEqEnabled(enabled);
 }
 
+float DfxDsp::getAutoEqRange()
+{
+	return data_->getAutoEqRange();
+}
+
+void DfxDsp::setAutoEqRange(float range_db)
+{
+	data_->setAutoEqRange(range_db);
+}
+
 void DfxDsp::disableAutoEqPreservingCurrentEq()
 {
 	data_->disableAutoEqPreservingCurrentEq();
