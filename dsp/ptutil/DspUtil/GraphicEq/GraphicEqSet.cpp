@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "filt.h"
 #include "codedefs.h"
 #include "GraphicEq.h"
+#include "AutoEqPolicy.h"
 #include "u_GraphicEq.h"
 
 #include "dfxpDefs.h"
@@ -62,6 +63,8 @@ static realtype clampAutoEqRange(realtype range_db)
 
 	return range_db;
 }
+
+static int setBandFreqInternal(PT_HANDLE* hp_GraphicEq, int i_band_num, realtype r_band_freq, bool reset_auto_eq_state);
 
 void PT_DECLSPEC GraphicEqSetBalance(PT_HANDLE* hp_GraphicEq, float balance_db)
 {
@@ -246,6 +249,11 @@ void PT_DECLSPEC GraphicEqSetFilterQ(PT_HANDLE* hp_GraphicEq, float q_multiplier
 	cast_handle->Q_multiplier = q_multiplier;
 
 	GraphicEq_InitSections(hp_GraphicEq);
+
+	if (FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::FilterQChanged))
+	{
+		GraphicEqResetAutoEqState(hp_GraphicEq);
+	}
 }
 
 int PT_DECLSPEC GraphicEqSetNumBands(PT_HANDLE* hp_GraphicEq, int num_bands)
@@ -317,6 +325,11 @@ int PT_DECLSPEC GraphicEqSetNumBands(PT_HANDLE* hp_GraphicEq, int num_bands)
 	{
 		if (GraphicEq_InitSections(hp_GraphicEq) != OKAY)
 			return(NOT_OKAY);
+	}
+
+	if (FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::BandCountChanged))
+	{
+		GraphicEqResetAutoEqState(hp_GraphicEq);
 	}
 
 	return(OKAY);
@@ -463,7 +476,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 		cast_handle->Q = (realtype)1.0;
 		center_freq = r_min_band_freq;
 
-		if( GraphicEqSetBandFreq(hp_GraphicEq, 1, center_freq) != OKAY )
+		if( setBandFreqInternal(hp_GraphicEq, 1, center_freq, false) != OKAY )
 			return(NOT_OKAY);
 	}
 	else
@@ -509,7 +522,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 			realtype fCenter[] = { 62.5f, 250.0f, 1000.0f, 4000.0f, 16000.0f };
 			for (int i = 0; i < cast_handle->num_bands; i++)
 			{
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), fCenter[i]) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), fCenter[i], false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -520,7 +533,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 			realtype fCenter[] = { 31.25f, 62.5f, 125.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f };
 			for (int i = 0; i < cast_handle->num_bands; i++)
 			{
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), fCenter[i]) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), fCenter[i], false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -532,7 +545,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 				                   2500.0f, 4000.0f, 6300.0f, 10000.0f, 16000.0f };
 			for (int i = 0; i < cast_handle->num_bands; i++)
 			{
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), fCenter[i]) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), fCenter[i], false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -544,7 +557,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 								   630.0f, 1000.0f, 1250.0f, 2000.0f, 2500.0f, 4000.0f, 5000.0f, 8000.0f, 10000.0f, 16000.0f };
 			for (int i = 0; i < cast_handle->num_bands; i++)
 			{
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), fCenter[i]) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), fCenter[i], false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -557,7 +570,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 				                   2000.0f, 2500.0f, 3150.0f, 4000.0f, 5000.0f, 6300.0f, 8000.0f, 10000.0f, 12500.0f, 16000.0f, 20000.0f };
 			for (int i = 0; i < cast_handle->num_bands; i++)
 			{
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), fCenter[i]) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), fCenter[i], false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -574,7 +587,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
 
 				center_freq = (realtype)(d_min_freq * d_factor);
 
-				if (GraphicEqSetBandFreq(hp_GraphicEq, (i + 1), center_freq) != OKAY)
+				if (setBandFreqInternal(hp_GraphicEq, (i + 1), center_freq, false) != OKAY)
 					return(NOT_OKAY);
 			}
 		}
@@ -605,7 +618,7 @@ int PT_DECLSPEC GraphicEqReSetAllBandFreqs(PT_HANDLE *hp_GraphicEq, realtype r_m
  *
  *  Note; The band_num starts at 1. (i.e. to set the first band use i_band_num = 1) 
  */
-int PT_DECLSPEC GraphicEqSetBandFreq(PT_HANDLE *hp_GraphicEq, int i_band_num, realtype r_band_freq)
+static int setBandFreqInternal(PT_HANDLE* hp_GraphicEq, int i_band_num, realtype r_band_freq, bool reset_auto_eq_state)
 {
 	struct GraphicEqHdlType *cast_handle;
 	realtype *rp_freq_array, *rp_boost_array;
@@ -645,5 +658,16 @@ int PT_DECLSPEC GraphicEqSetBandFreq(PT_HANDLE *hp_GraphicEq, int i_band_num, re
 	if( GraphicEqSetBandBoostCut(hp_GraphicEq, i_band_num, original_boost) != OKAY )
 		return(NOT_OKAY);
 
+	if (reset_auto_eq_state &&
+		FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::BandFrequencyChanged))
+	{
+		GraphicEqResetAutoEqState(hp_GraphicEq);
+	}
+
 	return(OKAY);
+}
+
+int PT_DECLSPEC GraphicEqSetBandFreq(PT_HANDLE *hp_GraphicEq, int i_band_num, realtype r_band_freq)
+{
+	return setBandFreqInternal(hp_GraphicEq, i_band_num, r_band_freq, true);
 }

@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "DfxSdk.h"
 #include "vals.h"
 #include "GraphicEq.h"
+#include "AutoEqPolicy.h"
 #include "reg.h"
 #include "mth.h"
 #include "ptutil/dfxp/u_dfxp.h"
@@ -247,7 +248,10 @@ int DfxDspPrivate::getGraphicEqInfoFromVals(PT_HANDLE *hp_vals)
 	* the next auto-EQ update starts from the newly loaded preset instead of carrying
 	* over tonal analysis from the previous preset.
 	*/
-	GraphicEqResetAutoEqState(graphic_eq_handle);
+	if (FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::PresetLoaded))
+	{
+		GraphicEqResetAutoEqState(graphic_eq_handle);
+	}
 	
 	return(OKAY);
 

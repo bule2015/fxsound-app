@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
+#include "../../dsp/include/AutoEqPolicy.h"
 
 namespace
 {
@@ -608,6 +609,42 @@ void testAutoPresetDecisionSkipsEmptyPreset()
 		true);
 
 	expect(!decision.should_apply, "auto preset should not apply when no preset is configured");
+}
+
+void testAutoEqPolicyResetsAnalysisAfterPresetLoad()
+{
+	expect(FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::PresetLoaded),
+		"preset loads should reset auto eq analysis state");
+}
+
+void testAutoEqPolicyResetsAnalysisAfterFilterQChange()
+{
+	expect(FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::FilterQChanged),
+		"filter Q changes should reset auto eq analysis state");
+}
+
+void testAutoEqPolicyResetsAnalysisAfterBandCountChange()
+{
+	expect(FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::BandCountChanged),
+		"band count changes should reset auto eq analysis state");
+}
+
+void testAutoEqPolicyResetsAnalysisAfterBandFrequencyChange()
+{
+	expect(FxSound::AutoEqPolicy::shouldResetAnalysisState(FxSound::AutoEqPolicy::Change::BandFrequencyChanged),
+		"band frequency changes should reset auto eq analysis state");
+}
+
+void testAutoEqPolicyDisablesAfterManualBandGainEdit()
+{
+	expect(FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandGainChanged),
+		"manual band gain edits should disable auto eq while preserving the current curve");
+}
+
+void testAutoEqPolicyDisablesAfterManualBandFrequencyEdit()
+{
+	expect(FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandFrequencyChanged),
+		"manual band frequency edits should disable auto eq while preserving the current curve");
 }
 
 void testScanProcessingOutputsPrefersTargetedOutput()
@@ -1387,6 +1424,12 @@ int main()
 		runTest("auto preset decision skips modified preset", testAutoPresetDecisionSkipsModifiedPreset);
 		runTest("auto preset decision skips when not triggered", testAutoPresetDecisionSkipsWhenNotTriggered);
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
+		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
+		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);
+		runTest("auto eq policy resets after band count change", testAutoEqPolicyResetsAnalysisAfterBandCountChange);
+		runTest("auto eq policy resets after band frequency change", testAutoEqPolicyResetsAnalysisAfterBandFrequencyChange);
+		runTest("auto eq policy disables after manual band gain edit", testAutoEqPolicyDisablesAfterManualBandGainEdit);
+		runTest("auto eq policy disables after manual band frequency edit", testAutoEqPolicyDisablesAfterManualBandFrequencyEdit);
 		runTest("processing scan prefers targeted output", testScanProcessingOutputsPrefersTargetedOutput);
 		runTest("processing scan skips mono default without fallback", testScanProcessingOutputsSkipsMonoDefaultWithoutFallback);
 		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);

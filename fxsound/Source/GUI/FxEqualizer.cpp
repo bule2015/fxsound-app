@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxEqualizer.h"
 #include "FxController.h"
 #include "FxTheme.h"
+#include "AutoEqPolicy.h"
 
 #include <unordered_map>
 
@@ -203,7 +204,8 @@ void FxEqualizer::sliderDragStarted(Slider* slider)
     {
         auto& controller = FxController::getInstance();
 
-        if (controller.isAutoEqEnabled())
+        if (controller.isAutoEqEnabled() &&
+            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandGainChanged))
         {
             controller.disableAutoEqPreservingCurrentEq();
             refreshAutoEqToggle();
@@ -631,7 +633,8 @@ void FxEqualizer::FxEqSlider::valueChanged()
     auto value = getValue();
     if (value != controller.getEqBandBoostCut(band_))
     {
-        if (controller.isAutoEqEnabled())
+        if (controller.isAutoEqEnabled() &&
+            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandGainChanged))
         {
             controller.disableAutoEqPreservingCurrentEq();
             FxEqualizer::getInstance().update();
@@ -746,11 +749,19 @@ void FxEqualizer::FxBandCenterFreqSlider::enablementChanged()
 
 void FxEqualizer::FxBandCenterFreqSlider::valueChanged()
 {
+    auto& controller = FxController::getInstance();
     auto freq = getValue();
 
-    if (freq != FxController::getInstance().getEqBandFrequency(band_))
+    if (freq != controller.getEqBandFrequency(band_))
     {
-        FxController::getInstance().setEqBandFrequency(band_, freq);
+        if (controller.isAutoEqEnabled() &&
+            FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandFrequencyChanged))
+        {
+            controller.disableAutoEqPreservingCurrentEq();
+            FxEqualizer::getInstance().update();
+        }
+
+        controller.setEqBandFrequency(band_, freq);
 
         setFrequency(freq);
     }
