@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sos.h"
 
 #define GRAPHIC_EQ_MAX_NUM_BANDS SOS_MAX_NUM_SOS_SECTIONS
+#define GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS 600
 
 /* GraphicEq Handle definition */
 struct GraphicEqHdlType
@@ -62,6 +63,27 @@ struct GraphicEqHdlType
 
 	/* SOS sections and parameters for each band */
 	PT_HANDLE *sos_hdl;
+
+	/* Adaptive EQ state (60 s analysis, 10 s updates). */
+	int auto_eq_enabled;
+	int auto_eq_bucket_index;
+	int auto_eq_bucket_count;
+	int auto_eq_buckets_since_update;
+	realtype auto_eq_samples_per_bucket;
+	realtype auto_eq_samples_in_bucket;
+	realtype auto_eq_bucket_low_energy;
+	realtype auto_eq_bucket_mid_energy;
+	realtype auto_eq_bucket_high_energy;
+	realtype auto_eq_low_energy_buckets[GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS];
+	realtype auto_eq_mid_energy_buckets[GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS];
+	realtype auto_eq_high_energy_buckets[GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS];
+	realtype auto_eq_low_energy_sum;
+	realtype auto_eq_mid_energy_sum;
+	realtype auto_eq_high_energy_sum;
+	realtype auto_eq_lp_low_state[8];
+	realtype auto_eq_lp_mid_state[8];
+	realtype auto_eq_user_base_boost[GRAPHIC_EQ_MAX_NUM_BANDS];
+	realtype auto_eq_dynamic_offset[GRAPHIC_EQ_MAX_NUM_BANDS];
 
 };
 

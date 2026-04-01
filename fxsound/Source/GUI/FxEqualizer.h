@@ -113,6 +113,7 @@ private:
     std::vector<float> band_gain_values_;
 
     bool highlight_mode_;
+    int ui_sync_tick_;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxEqualizer)
 };

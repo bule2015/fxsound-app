@@ -19,11 +19,184 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "codedefs.h"
 #include "sos.h"
 #include "GraphicEq.h"
 #include "u_GraphicEq.h"
+
+namespace
+{
+	constexpr realtype kAutoEqBucketSeconds = 0.1f;
+	constexpr int kAutoEqBucketsPerUpdate = 100; // 10 seconds
+	constexpr realtype kAutoEqLowCutHz = 250.0f;
+	constexpr realtype kAutoEqMidCutHz = 4000.0f;
+	constexpr realtype kAutoEqBandLimitDb = 3.0f;
+	constexpr realtype kAutoEqBandStepDb = 0.30f;
+	constexpr realtype kAutoEqStrength = 0.70f;
+	constexpr realtype kAutoEqMidStrength = 0.40f;
+	constexpr realtype kAutoEqEpsilon = 1e-12f;
+	constexpr realtype kPi = 3.14159265358979323846f;
+
+	static realtype clampReal(realtype value, realtype min_value, realtype max_value)
+	{
+		return (value < min_value) ? min_value : ((value > max_value) ? max_value : value);
+	}
+
+	static realtype stepToward(realtype current, realtype target, realtype step)
+	{
+		if (target > current + step)
+			return current + step;
+		if (target < current - step)
+			return current - step;
+		return target;
+	}
+
+	static void updateAdaptiveEqBands(struct GraphicEqHdlType* cast_handle)
+	{
+		if (cast_handle->auto_eq_bucket_count <= 0)
+			return;
+
+		realtype avg_low = cast_handle->auto_eq_low_energy_sum / cast_handle->auto_eq_bucket_count;
+		realtype avg_mid = cast_handle->auto_eq_mid_energy_sum / cast_handle->auto_eq_bucket_count;
+		realtype avg_high = cast_handle->auto_eq_high_energy_sum / cast_handle->auto_eq_bucket_count;
+		realtype avg_ref = (avg_low + avg_mid + avg_high) / 3.0f;
+
+		realtype low_delta_db = (realtype)(10.0f * log10((double)((avg_low + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
+		realtype mid_delta_db = (realtype)(10.0f * log10((double)((avg_mid + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
+		realtype high_delta_db = (realtype)(10.0f * log10((double)((avg_high + kAutoEqEpsilon) / (avg_ref + kAutoEqEpsilon))));
+
+		realtype low_target = clampReal(-low_delta_db * kAutoEqStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
+		realtype mid_target = clampReal(-mid_delta_db * kAutoEqMidStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
+		realtype high_target = clampReal(-high_delta_db * kAutoEqStrength, -kAutoEqBandLimitDb, kAutoEqBandLimitDb);
+
+		realtype* rp_freq_array = NULL;
+		realtype* rp_boost_array = NULL;
+		if (sosGetCenterFreqArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_freq_array) != OKAY)
+			return;
+		if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), &rp_boost_array) != OKAY)
+			return;
+
+		for (int i = 0; i < cast_handle->num_bands; i++)
+		{
+			realtype center_freq = rp_freq_array[i];
+			realtype target_offset = mid_target;
+
+			if (center_freq <= kAutoEqLowCutHz)
+			{
+				target_offset = low_target;
+			}
+			else if (center_freq >= kAutoEqMidCutHz)
+			{
+				target_offset = high_target;
+			}
+			else
+			{
+				realtype t = (center_freq - kAutoEqLowCutHz) / (kAutoEqMidCutHz - kAutoEqLowCutHz);
+				realtype low_to_mid = low_target + (mid_target - low_target) * t;
+				realtype mid_to_high = mid_target + (high_target - mid_target) * t;
+				target_offset = (low_to_mid + mid_to_high) * 0.5f;
+			}
+
+			realtype user_base = rp_boost_array[i] - cast_handle->auto_eq_dynamic_offset[i];
+			cast_handle->auto_eq_user_base_boost[i] = user_base;
+			realtype new_offset = stepToward(cast_handle->auto_eq_dynamic_offset[i], target_offset, kAutoEqBandStepDb);
+			cast_handle->auto_eq_dynamic_offset[i] = new_offset;
+			GraphicEqSetBandBoostCut((PT_HANDLE*)cast_handle, i + 1, user_base + new_offset);
+		}
+	}
+
+	static void analyzeAndUpdateAdaptiveEq(struct GraphicEqHdlType* cast_handle,
+		realtype* rp_signal_in,
+		int i_num_sample_sets,
+		int i_num_channels,
+		realtype r_samp_freq)
+	{
+		if (!cast_handle->auto_eq_enabled || i_num_sample_sets <= 0 || i_num_channels <= 0 || i_num_channels > 8)
+			return;
+
+		realtype sample_rate = (r_samp_freq > 1000.0f) ? r_samp_freq : 48000.0f;
+		cast_handle->auto_eq_samples_per_bucket = sample_rate * kAutoEqBucketSeconds;
+
+		realtype dt = 1.0f / sample_rate;
+		realtype low_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqLowCutHz)) + dt);
+		realtype mid_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqMidCutHz)) + dt);
+
+		int index = 0;
+		for (int sample = 0; sample < i_num_sample_sets; sample++)
+		{
+			realtype low_energy = 0.0f;
+			realtype mid_energy = 0.0f;
+			realtype high_energy = 0.0f;
+			int analyzed_channels = 0;
+
+			for (int channel = 0; channel < i_num_channels; channel++)
+			{
+				realtype x = rp_signal_in[index + channel];
+				realtype low_lp = cast_handle->auto_eq_lp_low_state[channel] + low_alpha * (x - cast_handle->auto_eq_lp_low_state[channel]);
+				realtype mid_lp = cast_handle->auto_eq_lp_mid_state[channel] + mid_alpha * (x - cast_handle->auto_eq_lp_mid_state[channel]);
+				cast_handle->auto_eq_lp_low_state[channel] = low_lp;
+				cast_handle->auto_eq_lp_mid_state[channel] = mid_lp;
+
+				realtype low_band = low_lp;
+				realtype mid_band = mid_lp - low_lp;
+				realtype high_band = x - mid_lp;
+
+				low_energy += low_band * low_band;
+				mid_energy += mid_band * mid_band;
+				high_energy += high_band * high_band;
+				analyzed_channels++;
+			}
+
+			if (analyzed_channels > 0)
+			{
+				realtype inv_channels = 1.0f / analyzed_channels;
+				cast_handle->auto_eq_bucket_low_energy += low_energy * inv_channels;
+				cast_handle->auto_eq_bucket_mid_energy += mid_energy * inv_channels;
+				cast_handle->auto_eq_bucket_high_energy += high_energy * inv_channels;
+			}
+
+			cast_handle->auto_eq_samples_in_bucket += 1.0f;
+			if (cast_handle->auto_eq_samples_in_bucket >= cast_handle->auto_eq_samples_per_bucket)
+			{
+				int write_index = cast_handle->auto_eq_bucket_index;
+				if (cast_handle->auto_eq_bucket_count == GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS)
+				{
+					cast_handle->auto_eq_low_energy_sum -= cast_handle->auto_eq_low_energy_buckets[write_index];
+					cast_handle->auto_eq_mid_energy_sum -= cast_handle->auto_eq_mid_energy_buckets[write_index];
+					cast_handle->auto_eq_high_energy_sum -= cast_handle->auto_eq_high_energy_buckets[write_index];
+				}
+				else
+				{
+					cast_handle->auto_eq_bucket_count++;
+				}
+
+				cast_handle->auto_eq_low_energy_buckets[write_index] = cast_handle->auto_eq_bucket_low_energy;
+				cast_handle->auto_eq_mid_energy_buckets[write_index] = cast_handle->auto_eq_bucket_mid_energy;
+				cast_handle->auto_eq_high_energy_buckets[write_index] = cast_handle->auto_eq_bucket_high_energy;
+				cast_handle->auto_eq_low_energy_sum += cast_handle->auto_eq_bucket_low_energy;
+				cast_handle->auto_eq_mid_energy_sum += cast_handle->auto_eq_bucket_mid_energy;
+				cast_handle->auto_eq_high_energy_sum += cast_handle->auto_eq_bucket_high_energy;
+
+				cast_handle->auto_eq_bucket_index = (write_index + 1) % GRAPHIC_EQ_AUTO_EQ_NUM_BUCKETS;
+				cast_handle->auto_eq_buckets_since_update++;
+				cast_handle->auto_eq_samples_in_bucket = 0.0f;
+				cast_handle->auto_eq_bucket_low_energy = 0.0f;
+				cast_handle->auto_eq_bucket_mid_energy = 0.0f;
+				cast_handle->auto_eq_bucket_high_energy = 0.0f;
+
+				if (cast_handle->auto_eq_buckets_since_update >= kAutoEqBucketsPerUpdate)
+				{
+					cast_handle->auto_eq_buckets_since_update = 0;
+					updateAdaptiveEqBands(cast_handle);
+				}
+			}
+
+			index += i_num_channels;
+		}
+	}
+}
 
 /*
  * FUNCTION: GraphicEqProcess()
@@ -52,6 +225,9 @@ int PT_DECLSPEC GraphicEqProcess(PT_HANDLE *hp_GraphicEq,
 		if( GraphicEqReCalcAllBandCoeffs( hp_GraphicEq ) != OKAY )
 			return(NOT_OKAY);
 	}
+
+	/* Call processing function */
+	analyzeAndUpdateAdaptiveEq(cast_handle, rp_signal_in, i_num_sample_sets, i_num_channels, r_samp_freq);
 
 	/* Call processing function */
 	if( i_num_channels <= 2 )

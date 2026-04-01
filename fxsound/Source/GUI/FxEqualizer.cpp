@@ -60,8 +60,10 @@ FxEqualizer::FxEqualizer()
     }
     
     highlight_mode_ = false;
+    ui_sync_tick_ = 0;
 
     setSize(WIDTH, HEIGHT);
+    startTimerHz(10);
 }
 
 void FxEqualizer::reinit(int num_bands)
@@ -199,12 +201,31 @@ void FxEqualizer::timerCallback()
 
         if (!done)
         {
-            stopTimer();
+            startTimerHz(10);
+        }
+
+        return;
+    }
+
+    bool user_dragging = false;
+    for (auto i = 0; i < band_boosts_.size(); i++)
+    {
+        if ((band_boosts_[i] != nullptr && band_boosts_[i]->isMouseButtonDown()) ||
+            (center_frequencies_[i] != nullptr && center_frequencies_[i]->isMouseButtonDown()))
+        {
+            user_dragging = true;
+            break;
         }
     }
-    else
+
+    if (user_dragging)
+        return;
+
+    ui_sync_tick_++;
+    if (ui_sync_tick_ >= 2)
     {
-        stopTimer();
+        ui_sync_tick_ = 0;
+        update();
     }
 }
 
