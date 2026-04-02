@@ -231,12 +231,11 @@ void DfxDspPrivate::processTimer()
 		anything_changed = true;
 	}
 
-	logEqFlatTransition(L"processTimer");
-
 	/* If any settings have been changed, communicate all the changes to the DSP module */
 	// NOTE: I find that without this if condition and call dfxpCOmmunicateAll() repeatedly will mess up the audio.
 	if (anything_changed)
 	{
+		logEqFlatTransition(L"processTimer");
 		dfxpCommunicateAll(dfxp_handle_);
 	}
 }

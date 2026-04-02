@@ -50,6 +50,18 @@ namespace
 		return (value < min_value) ? min_value : ((value > max_value) ? max_value : value);
 	}
 
+	static void updateAdaptiveEqCoefficients(struct GraphicEqHdlType* cast_handle, realtype sample_rate)
+	{
+		if (cast_handle->auto_eq_alpha_sample_rate == sample_rate)
+			return;
+
+		realtype dt = 1.0f / sample_rate;
+		cast_handle->auto_eq_samples_per_bucket = sample_rate * kAutoEqBucketSeconds;
+		cast_handle->auto_eq_low_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqLowCutHz)) + dt);
+		cast_handle->auto_eq_mid_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqMidCutHz)) + dt);
+		cast_handle->auto_eq_alpha_sample_rate = sample_rate;
+	}
+
 	static realtype stepToward(realtype current, realtype target, realtype step)
 	{
 		if (target > current + step)
@@ -164,11 +176,7 @@ namespace
 			return;
 
 		realtype sample_rate = (r_samp_freq > 1000.0f) ? r_samp_freq : 48000.0f;
-		cast_handle->auto_eq_samples_per_bucket = sample_rate * kAutoEqBucketSeconds;
-
-		realtype dt = 1.0f / sample_rate;
-		realtype low_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqLowCutHz)) + dt);
-		realtype mid_alpha = dt / ((1.0f / (2.0f * kPi * kAutoEqMidCutHz)) + dt);
+		updateAdaptiveEqCoefficients(cast_handle, sample_rate);
 
 		int index = 0;
 		for (int sample = 0; sample < i_num_sample_sets; sample++)
@@ -181,8 +189,8 @@ namespace
 			for (int channel = 0; channel < i_num_channels; channel++)
 			{
 				realtype x = rp_signal_in[index + channel];
-				realtype low_lp = cast_handle->auto_eq_lp_low_state[channel] + low_alpha * (x - cast_handle->auto_eq_lp_low_state[channel]);
-				realtype mid_lp = cast_handle->auto_eq_lp_mid_state[channel] + mid_alpha * (x - cast_handle->auto_eq_lp_mid_state[channel]);
+				realtype low_lp = cast_handle->auto_eq_lp_low_state[channel] + cast_handle->auto_eq_low_alpha * (x - cast_handle->auto_eq_lp_low_state[channel]);
+				realtype mid_lp = cast_handle->auto_eq_lp_mid_state[channel] + cast_handle->auto_eq_mid_alpha * (x - cast_handle->auto_eq_lp_mid_state[channel]);
 				cast_handle->auto_eq_lp_low_state[channel] = low_lp;
 				cast_handle->auto_eq_lp_mid_state[channel] = mid_lp;
 

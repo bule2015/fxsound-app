@@ -44,6 +44,9 @@ static void resetAutoEqAnalysisState(struct GraphicEqHdlType* cast_handle)
 	cast_handle->auto_eq_low_energy_sum = 0.0f;
 	cast_handle->auto_eq_mid_energy_sum = 0.0f;
 	cast_handle->auto_eq_high_energy_sum = 0.0f;
+	cast_handle->auto_eq_alpha_sample_rate = 0.0f;
+	cast_handle->auto_eq_low_alpha = 0.0f;
+	cast_handle->auto_eq_mid_alpha = 0.0f;
 
 	memset(cast_handle->auto_eq_low_energy_buckets, 0, sizeof(cast_handle->auto_eq_low_energy_buckets));
 	memset(cast_handle->auto_eq_mid_energy_buckets, 0, sizeof(cast_handle->auto_eq_mid_energy_buckets));

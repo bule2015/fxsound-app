@@ -54,6 +54,9 @@ int PT_DECLSPEC GraphicEqNew( PT_HANDLE **hpp_GraphicEq, int i_num_bands, int i_
 	cast_handle->balance = 0.0f;
 	cast_handle->auto_eq_enabled = IS_TRUE;
 	cast_handle->auto_eq_range_db = 3.0f;
+	cast_handle->auto_eq_alpha_sample_rate = 0.0f;
+	cast_handle->auto_eq_low_alpha = 0.0f;
+	cast_handle->auto_eq_mid_alpha = 0.0f;
 
 	if (i_trace_mode)
 	{

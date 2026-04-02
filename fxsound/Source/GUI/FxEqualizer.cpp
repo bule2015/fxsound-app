@@ -130,6 +130,8 @@ FxEqualizer::FxEqualizer()
     
     highlight_mode_ = false;
     ui_sync_tick_ = 0;
+    help_tooltips_hidden_ = false;
+    tooltip_band_count_ = -1;
 
     setSize(WIDTH, HEIGHT);
     startTimerHz(10);
@@ -182,6 +184,7 @@ void FxEqualizer::reinit(int num_bands)
     }
 
     resized();
+    refreshEqTooltips();
 
     FxController::getInstance().undoPreset();
 }
@@ -305,6 +308,7 @@ void FxEqualizer::update()
     auto& controller = FxController::getInstance();
 
     refreshAutoEqToggle();
+    refreshEqTooltips();
 
     for (auto i = 0; i<band_boosts_.size(); i++)
     {
@@ -316,6 +320,52 @@ void FxEqualizer::update()
 
         auto freq = controller.getEqBandFrequency(i);
         center_frequencies_[i]->setFrequency(freq);
+    }
+}
+
+void FxEqualizer::refreshEqTooltips()
+{
+    auto& controller = FxController::getInstance();
+    auto hide_help_tooltips = controller.isHelpTooltipsHidden();
+    auto num_bands = controller.getNumEqBands();
+
+    if (help_tooltips_hidden_ == hide_help_tooltips && tooltip_band_count_ == num_bands)
+        return;
+
+    help_tooltips_hidden_ = hide_help_tooltips;
+    tooltip_band_count_ = num_bands;
+
+    StringArray tool_tips = { TRANS("Hyper-low Bass - First band for very low frequencies down to 20 Hz."),
+                              TRANS("Super-low Bass. Increase this for more rumble and \"thump\", decrease if there's too much boominess."),
+                              TRANS("Center of your Bass sound. Increase this for a fuller low end, decrease if the bass sounds overwhelming."),
+                              TRANS("The low end of your mid-range. Increase this to make vocals sound rich and warm, decrease it to help control instruments that sound loud and muffled."),
+                              TRANS("A focal point of the low-mid-range. Increase this to bring out electric guitars and vocal volume, decrease it to reduce any \"boxy\" tones."),
+                              TRANS("The center mid-range band. Increase this to drastically boost rhythm instruments and snare hits, reduce it to cut out \"nasal\" tones."),
+                              TRANS("The high-mid-range. Increase this to get more instrumental harmonics, reduce it to improve drums that have too much \"clickiness\" or orchestral instruments that are piercing."),
+                              TRANS("The lower end of the high-end range. Increase this for more vocal clarity and articulation, reduce it and move the frequency wheel up and down to find and cut out overly loud \"S\" and \"T\" sounds."),
+                              TRANS("The core high-end range. Increase this to make your audio sound more like it's in an airy, large space, reduce it to help with room noises and unwanted echoing."),
+                              TRANS("The highest range of average human hearing. Increase this to give your sound more of a crisp tone, with lots of overtones. Reduce it to remove hiss or painfully high sounds.") };
+
+    String center_freq_tip = TRANS("This wheel allows you to adjust which frequencies this EQ band is affecting\r\n"
+                                   "up or down to target different frequencies/pitches. The EQ slider above\r\n"
+                                   "controls the volume of this EQ band. Increase or decrease to boost or cut\r\n"
+                                   "a portion of your audio's frequencies, without modifying the rest of your sound.");
+
+    for (int i = 0; i < static_cast<int>(band_boosts_.size()); ++i)
+    {
+        if (hide_help_tooltips)
+        {
+            band_boosts_[i]->setTooltip("");
+            center_frequencies_[i]->setTooltip("");
+            continue;
+        }
+
+        if (num_bands == 10 && i < tool_tips.size())
+            band_boosts_[i]->setTooltip(tool_tips[i]);
+        else
+            band_boosts_[i]->setTooltip("");
+
+        center_frequencies_[i]->setTooltip(center_freq_tip);
     }
 }
 
@@ -388,24 +438,7 @@ void FxEqualizer::resized()
 
 void FxEqualizer::paint(Graphics& g)
 {
-    StringArray tool_tips = { TRANS("Hyper-low Bass - First band for very low frequencies down to 20 Hz."),
-                              TRANS("Super-low Bass. Increase this for more rumble and \"thump\", decrease if there's too much boominess."),
-                              TRANS("Center of your Bass sound. Increase this for a fuller low end, decrease if the bass sounds overwhelming."),
-                              TRANS("The low end of your mid-range. Increase this to make vocals sound rich and warm, decrease it to help control instruments that sound loud and muffled."),
-                              TRANS("A focal point of the low-mid-range. Increase this to bring out electric guitars and vocal volume, decrease it to reduce any \"boxy\" tones."),
-                              TRANS("The center mid-range band. Increase this to drastically boost rhythm instruments and snare hits, reduce it to cut out \"nasal\" tones."),
-                              TRANS("The high-mid-range. Increase this to get more instrumental harmonics, reduce it to improve drums that have too much \"clickiness\" or orchestral instruments that are piercing."),
-                              TRANS("The lower end of the high-end range. Increase this for more vocal clarity and articulation, reduce it and move the frequency wheel up and down to find and cut out overly loud \"S\" and \"T\" sounds."),
-                              TRANS("The core high-end range. Increase this to make your audio sound more like it's in an airy, large space, reduce it to help with room noises and unwanted echoing."),
-                              TRANS("The highest range of average human hearing. Increase this to give your sound more of a crisp tone, with lots of overtones. Reduce it to remove hiss or painfully high sounds.") };
-
-    String center_freq_tip = TRANS("This wheel allows you to adjust which frequencies this EQ band is affecting\r\n"
-                                   "up or down to target different frequencies/pitches. The EQ slider above\r\n"
-                                   "controls the volume of this EQ band. Increase or decrease to boost or cut\r\n" 
-                                   "a portion of your audio's frequencies, without modifying the rest of your sound.");
-
     auto& controller = FxController::getInstance();
-    refreshAutoEqToggle();
 
     int num_bands = controller.getNumEqBands();
 
@@ -428,22 +461,6 @@ void FxEqualizer::paint(Graphics& g)
         line_colour = line_colour.withSaturation(0.0);
         gradient_colour_1 = gradient_colour_1.withSaturation(0.0);
         gradient_colour_2 = gradient_colour_2.withSaturation(0.0);
-    }
-    else
-    {
-        for (int i = 0; i < num_bands; i++)
-        {
-            if (!controller.isHelpTooltipsHidden())
-            {
-                if (num_bands == 10) band_boosts_[i]->setTooltip(tool_tips[i]);
-                center_frequencies_[i]->setTooltip(center_freq_tip);
-            }
-            else
-            {
-                band_boosts_[i]->setTooltip("");
-                center_frequencies_[i]->setTooltip("");
-            }
-        }
     }
 
     if (highlight_mode_)

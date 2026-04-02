@@ -122,6 +122,7 @@ private:
 	void resized() override;
 	void paint(Graphics& g) override;
 	void refreshAutoEqToggle();
+	void refreshEqTooltips();
 	void handleManualEqEdit(FxSound::AutoEqPolicy::Change change);
 
 	std::vector<std::unique_ptr<Label>> labels_;
@@ -132,6 +133,8 @@ private:
 
     bool highlight_mode_;
     int ui_sync_tick_;
+    bool help_tooltips_hidden_;
+    int tooltip_band_count_;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxEqualizer)
 };

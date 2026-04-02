@@ -81,6 +81,9 @@ struct GraphicEqHdlType
 	realtype auto_eq_low_energy_sum;
 	realtype auto_eq_mid_energy_sum;
 	realtype auto_eq_high_energy_sum;
+	realtype auto_eq_alpha_sample_rate;
+	realtype auto_eq_low_alpha;
+	realtype auto_eq_mid_alpha;
 	realtype auto_eq_lp_low_state[8];
 	realtype auto_eq_lp_mid_state[8];
 	realtype auto_eq_user_base_boost[GRAPHIC_EQ_MAX_NUM_BANDS];

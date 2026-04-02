@@ -84,6 +84,11 @@ struct sosHdlType {
    int volume_leveling_power_count; /* Number of valid entries in recent power history */
    realtype volume_leveling_previous_average_rms; /* Previous averaged rms used for gradient prediction */
    realtype volume_leveling_previous_predicted_rms; /* Previous predicted rms for miss detection */
+   realtype volume_leveling_alpha_sample_rate; /* Sample rate used for cached detector coefficients */
+   realtype volume_leveling_sc_hpf_alpha; /* Cached sidechain high-pass coefficient */
+   realtype volume_leveling_tone_low_alpha; /* Cached low-band detector coefficient */
+   realtype volume_leveling_tone_body_alpha; /* Cached body-band detector coefficient */
+   realtype volume_leveling_tone_presence_alpha; /* Cached presence-band detector coefficient */
    realtype volume_leveling_sc_prev_in[8]; /* Sidechain HPF previous input per channel */
    realtype volume_leveling_sc_prev_out[8]; /* Sidechain HPF previous output per channel */
    realtype volume_leveling_tone_lp_state[8][3]; /* Lowpass states used to estimate muffled vs clear balance */
