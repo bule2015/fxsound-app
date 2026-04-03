@@ -165,10 +165,21 @@ int PT_DECLSPEC sosZeroStateAllSections(PT_HANDLE *hp_sos)
 	cast_handle->volume_leveling_tone_presence_alpha = (realtype)0.0;
 	cast_handle->volume_leveling_tonality_score = (realtype)0.0;
 	cast_handle->volume_leveling_headroom_score = (realtype)0.0;
+	cast_handle->volume_leveling_quiet_duration_seconds = (realtype)0.0;
+	cast_handle->volume_leveling_quiet_gain_floor = (realtype)1.0;
+	cast_handle->volume_leveling_quiet_peak_bucket_max = (realtype)0.0;
+	cast_handle->volume_leveling_quiet_peak_bucket_seconds = (realtype)0.0;
+	cast_handle->volume_leveling_quiet_peak_history_index = 0;
+	cast_handle->volume_leveling_quiet_peak_history_count = 0;
 
 	for (i = 0; i < SOS_VOLUME_LEVELING_HISTORY_SIZE; i++)
 	{
 		cast_handle->volume_leveling_power_history[i] = (realtype)0.0;
+	}
+
+	for (i = 0; i < SOS_VOLUME_LEVELING_PEAK_WINDOW_SIZE; i++)
+	{
+		cast_handle->volume_leveling_quiet_peak_history[i] = (realtype)0.0;
 	}
 
 	for(i=0; i<8; i++)
@@ -293,10 +304,21 @@ int PT_DECLSPEC sosSetVolumeLeveling(PT_HANDLE* hp_sos, realtype r_target_rms)
 		cast_handle->volume_leveling_tone_presence_alpha = (realtype)0.0;
 		cast_handle->volume_leveling_tonality_score = (realtype)0.0;
 		cast_handle->volume_leveling_headroom_score = (realtype)0.0;
+		cast_handle->volume_leveling_quiet_duration_seconds = (realtype)0.0;
+		cast_handle->volume_leveling_quiet_gain_floor = (realtype)1.0;
+		cast_handle->volume_leveling_quiet_peak_bucket_max = (realtype)0.0;
+		cast_handle->volume_leveling_quiet_peak_bucket_seconds = (realtype)0.0;
+		cast_handle->volume_leveling_quiet_peak_history_index = 0;
+		cast_handle->volume_leveling_quiet_peak_history_count = 0;
 
 		for (int i = 0; i < SOS_VOLUME_LEVELING_HISTORY_SIZE; i++)
 		{
 			cast_handle->volume_leveling_power_history[i] = (realtype)0.0;
+		}
+
+		for (int i = 0; i < SOS_VOLUME_LEVELING_PEAK_WINDOW_SIZE; i++)
+		{
+			cast_handle->volume_leveling_quiet_peak_history[i] = (realtype)0.0;
 		}
 
 		for (int i = 0; i < 8; i++)
