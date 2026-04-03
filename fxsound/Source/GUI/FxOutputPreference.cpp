@@ -75,6 +75,24 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
             auto preset = preset_list_.getItemText(index);
             device_config_.preset = preset;
             output_preference_list_model_.updateDeviceConfig(device_config_);
+
+            auto selected_output = FxModel::getModel().getSelectedOutput();
+            auto selected_output_matches =
+                (!device_config_.device_id.isEmpty() &&
+                 device_config_.device_id == selected_output.pwszID.c_str()) ||
+                (!device_config_.container_id.isEmpty() &&
+                 !selected_output.containerId.empty() &&
+                 device_config_.container_id == selected_output.containerId.c_str() &&
+                 device_config_.device_name == selected_output.deviceFriendlyName.c_str()) ||
+                (device_config_.device_id.isEmpty() &&
+                 device_config_.container_id.isEmpty() &&
+                 device_config_.device_name == FxController::getInstance().getOutputName());
+
+            if (selected_output_matches)
+            {
+                auto selected_preset = FxModel::getModel().selectPreset(preset, false);
+                FxController::getInstance().setPreset(selected_preset);
+            }
         }
     };
 

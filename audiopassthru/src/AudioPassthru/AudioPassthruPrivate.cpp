@@ -65,6 +65,9 @@ AudioPassthruPrivate::~AudioPassthruPrivate()
 	if (i_timed_out)
 		return;
 
+	/* Restore the real default playback device before the virtual path disappears. */
+	sndDevicesRestoreDefaultDevice(hp_sndDevices_, &i_result_flag);
+
 	s_callback_ = nullptr;
 	s_sndDevices_.deviceChangeCallback = nullptr;
 	device_change_pending_ = false;
@@ -209,7 +212,8 @@ int AudioPassthruPrivate::sndDeviceHandleToSoundDevices(std::vector<SoundDevice>
 		{
 			sound_device.isUserSelectedPlaybackDevice = true;
 		}
-		if (sound_device.pwszID == wcp_targeted_real_playback_device_guid)
+		if (sound_device.pwszID == wcp_targeted_real_playback_device_guid &&
+			sound_device.pwszID != wcp_dfx_device_guid)
 		{
 			sound_device.isTargetedRealPlaybackDevice = true;
 		}
