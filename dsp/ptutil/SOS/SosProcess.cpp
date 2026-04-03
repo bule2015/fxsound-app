@@ -68,12 +68,7 @@ namespace
     constexpr realtype kVolumeLevelingQuietReleaseAlpha = 0.18f;
     constexpr realtype kVolumeLevelingQuietActivationSeconds = FxSound::VolumeLevelingQuietPolicy::kQuietActivationSeconds;
     constexpr realtype kVolumeLevelingQuietActivationRampSeconds = 2.0f;
-    constexpr realtype kVolumeLevelingQuietFloorReleaseRmsThreshold = FxSound::VolumeLevelingQuietPolicy::kQuietFloorReleaseRmsThreshold;
-    constexpr realtype kVolumeLevelingQuietFloorReleaseAlpha = FxSound::VolumeLevelingQuietPolicy::kQuietFloorReleaseAlpha;
-    constexpr realtype kVolumeLevelingQuietFloorSilenceDecayAlpha = FxSound::VolumeLevelingQuietPolicy::kQuietFloorSilenceDecayAlpha;
     constexpr realtype kVolumeLevelingQuietPeakBucketSeconds = 1.0f;
-    constexpr realtype kVolumeLevelingQuietPeakTargetRatio = FxSound::VolumeLevelingQuietPolicy::kQuietPeakTargetRatio;
-    constexpr realtype kVolumeLevelingQuietPeakFloorRaiseTimeSeconds = FxSound::VolumeLevelingQuietPolicy::kQuietPeakFloorRaiseTimeSeconds;
     constexpr realtype kPi = 3.14159265358979323846f;
 
     static realtype clampReal(realtype value, realtype min_value, realtype max_value)
@@ -242,7 +237,9 @@ namespace
             kVolumeLevelingCeiling * (1.0f - guarded_clear_score * kVolumeLevelingClearCeilingReduction),
             0.92f,
             kVolumeLevelingCeiling);
-        realtype max_gain_cap = std::fmax(effective_target_rms / 0.125f, quiet_gain_floor);
+        realtype max_gain_cap = std::fmax(
+            effective_target_rms / FxSound::VolumeLevelingQuietPolicy::kQuietGainReferenceRms,
+            quiet_gain_floor);
 
         if (cast_handle->volume_leveling_power_count == SOS_VOLUME_LEVELING_HISTORY_SIZE)
         {

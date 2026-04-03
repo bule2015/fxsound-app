@@ -654,9 +654,7 @@ void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
 	auto selected_output = makeOutput(L"usb-selected", L"USB DAC", L"USB Audio", true, false, true, L"container-selected");
 
 	auto should_apply = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
-		L"usb-other",
-		L"USB DAC",
-		L"container-other",
+		{L"usb-other", L"USB DAC", L"container-other"},
 		selected_output,
 		L"USB DAC");
 
@@ -669,9 +667,7 @@ void testPresetApplyUsesNameFallbackOnlyForLegacyEntries()
 	auto selected_output = makeOutput(L"usb-selected", L"USB DAC", L"USB Audio", true, false, true, L"container-selected");
 
 	auto should_apply = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
-		L"",
-		L"USB DAC",
-		L"",
+		{L"", L"USB DAC", L""},
 		selected_output,
 		L"USB DAC");
 
@@ -681,15 +677,13 @@ void testPresetApplyUsesNameFallbackOnlyForLegacyEntries()
 
 void testAudioPassthruCleanupContinuesAfterRestoreFailure()
 {
-	expect(FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true, false),
+	expect(FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, false),
 		"successful thread shutdown should allow destructor cleanup to continue");
-	expect(FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterRestoreAttempt(false),
-		"restore-default-device failure should not block callback cleanup and sndDevicesFree");
 }
 
 void testAudioPassthruCleanupStopsAfterThreadShutdownTimeout()
 {
-	expect(!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true, true),
+	expect(!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true),
 		"timed out thread shutdown should still abort the remaining teardown");
 }
 
@@ -709,8 +703,6 @@ void testQuietFloorRetainsBoostAfterProlongedLowOutput()
 		false
 	});
 
-	expect(result.post_gain_still_quiet, "prolonged low output should still be marked quiet");
-	expect(result.quiet_boost_had_authority, "quiet floor retention should only happen after quiet boost had authority");
 	expect(std::fabs(result.quiet_duration_after - 10.5f) < 1.0e-6f, "quiet duration should keep accumulating while output stays very quiet");
 	expect(std::fabs(result.quiet_gain_floor_after - 4.0f) < 1.0e-6f, "quiet floor should retain the gain reached by prolonged quiet boosting");
 }
@@ -731,7 +723,6 @@ void testQuietFloorRaiseStopsNearCeiling()
 		true
 	});
 
-	expect(!result.floor_raise_applied, "quiet floor raise should stop once the rolling peak is already near the ceiling target");
 	expect(std::fabs(result.quiet_gain_floor_after - 4.0f) < 1.0e-6f, "quiet floor should stay unchanged when the 30 second peak window has already reached the ceiling target");
 }
 
@@ -765,9 +756,7 @@ void testQuietFloorReleaseAndSilenceDecayWork()
 		false
 	});
 
-	expect(release_result.release_decay_applied, "quiet floor should release after sustained audible output");
 	expect(release_result.quiet_gain_floor_after < 4.0f, "release decay should reduce the retained quiet floor");
-	expect(silence_result.silence_decay_applied, "quiet floor should decay when the input falls back below the audible peak threshold");
 	expect(silence_result.quiet_gain_floor_after < 4.0f, "silence decay should reduce the retained quiet floor");
 }
 

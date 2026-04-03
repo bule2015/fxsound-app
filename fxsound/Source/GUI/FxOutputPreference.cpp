@@ -22,6 +22,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace
 {
+FxSound::OutputDeviceSelection::PresetApplyIdentity makePresetApplyIdentity(const DeviceConfig& device_config)
+{
+    return {
+        std::wstring(device_config.device_id.toWideCharPointer()),
+        std::wstring(device_config.device_name.toWideCharPointer()),
+        std::wstring(device_config.container_id.toWideCharPointer())
+    };
+}
+
 bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
 {
     if (!lhs.device_id.isEmpty() && !rhs.device_id.isEmpty() && lhs.device_id == rhs.device_id)
@@ -79,9 +88,7 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
             auto selected_output = FxModel::getModel().getSelectedOutput();
             auto selected_output_matches = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
-                std::wstring(device_config_.device_id.toWideCharPointer()),
-                std::wstring(device_config_.device_name.toWideCharPointer()),
-                std::wstring(device_config_.container_id.toWideCharPointer()),
+                makePresetApplyIdentity(device_config_),
                 selected_output,
                 std::wstring(FxController::getInstance().getOutputName().toWideCharPointer()));
 

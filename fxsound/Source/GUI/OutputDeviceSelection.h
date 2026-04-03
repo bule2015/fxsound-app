@@ -189,29 +189,34 @@ namespace FxSound::OutputDeviceSelection
 
 	// Used by output preferences to decide whether a preset change belongs to the
 	// currently selected output and should therefore be applied immediately.
-	inline bool shouldApplyPresetToSelectedOutput(const std::wstring& device_id,
-		const std::wstring& device_name,
-		const std::wstring& container_id,
+	struct PresetApplyIdentity
+	{
+		std::wstring device_id;
+		std::wstring device_name;
+		std::wstring container_id;
+	};
+
+	inline bool shouldApplyPresetToSelectedOutput(const PresetApplyIdentity& identity,
 		const SoundDevice& selected_output,
 		const std::wstring& current_output_name)
 	{
-		if (!device_id.empty() && device_id == selected_output.pwszID)
+		if (!identity.device_id.empty() && identity.device_id == selected_output.pwszID)
 		{
 			return true;
 		}
 
-		if (!container_id.empty() &&
+		if (!identity.container_id.empty() &&
 			!selected_output.containerId.empty() &&
-			container_id == selected_output.containerId &&
-			device_name == selected_output.deviceFriendlyName)
+			identity.container_id == selected_output.containerId &&
+			identity.device_name == selected_output.deviceFriendlyName)
 		{
 			return true;
 		}
 
-		return device_id.empty() &&
-			container_id.empty() &&
-			!device_name.empty() &&
-			device_name == current_output_name;
+		return identity.device_id.empty() &&
+			identity.container_id.empty() &&
+			!identity.device_name.empty() &&
+			identity.device_name == current_output_name;
 	}
 
 	inline SoundDevice restorePersistedOutput(const PersistedOutputState& persisted_output)

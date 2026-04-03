@@ -59,15 +59,13 @@ AudioPassthruPrivate::~AudioPassthruPrivate()
 
 	/* If the processing thread is running, kill it */
 	const bool thread_shutdown_succeeded = (killProcessingThread(&i_timed_out) == OKAY);
-	if (!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(hp_sndDevices_ != NULL,
+	if (!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(
 		thread_shutdown_succeeded,
 		i_timed_out != 0))
 		return;
 
 	/* Restore the real default playback device before the virtual path disappears. */
-	const bool restore_succeeded = (sndDevicesRestoreDefaultDevice(hp_sndDevices_, &i_result_flag) == OKAY);
-	if (!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterRestoreAttempt(restore_succeeded))
-		return;
+	sndDevicesRestoreDefaultDevice(hp_sndDevices_, &i_result_flag);
 
 	s_callback_ = nullptr;
 	s_sndDevices_.deviceChangeCallback = nullptr;

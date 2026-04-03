@@ -46,11 +46,6 @@ struct TransitionResult
 {
 	float quiet_duration_after = 0.0f;
 	float quiet_gain_floor_after = 1.0f;
-	bool post_gain_still_quiet = false;
-	bool quiet_boost_had_authority = false;
-	bool floor_raise_applied = false;
-	bool silence_decay_applied = false;
-	bool release_decay_applied = false;
 };
 
 inline TransitionResult applyTransition(const TransitionInput& input)
@@ -58,19 +53,19 @@ inline TransitionResult applyTransition(const TransitionInput& input)
 	TransitionResult result;
 	result.quiet_gain_floor_after = (input.quiet_gain_floor > 1.0f) ? input.quiet_gain_floor : 1.0f;
 
-	result.post_gain_still_quiet =
+	const bool post_gain_still_quiet =
 		input.peak > kQuietAudiblePeakThreshold &&
 		input.post_gain_rms < kVeryQuietRmsThreshold;
 
-	result.quiet_duration_after = result.post_gain_still_quiet
+	result.quiet_duration_after = post_gain_still_quiet
 		? input.quiet_duration_before + input.buffer_duration_seconds
 		: 0.0f;
 
-	result.quiet_boost_had_authority =
+	const bool quiet_boost_had_authority =
 		input.quiet_duration_before >= kQuietActivationSeconds &&
 		input.gain_end > (input.effective_target_rms / kQuietGainReferenceRms);
 
-	if (result.quiet_boost_had_authority && input.gain_end > result.quiet_gain_floor_after)
+	if (quiet_boost_had_authority && input.gain_end > result.quiet_gain_floor_after)
 	{
 		result.quiet_gain_floor_after = input.gain_end;
 	}
@@ -98,20 +93,17 @@ inline TransitionResult applyTransition(const TransitionInput& input)
 		result.quiet_gain_floor_after =
 			result.quiet_gain_floor_after * (1.0f - quiet_floor_raise_alpha) +
 			desired_quiet_floor * quiet_floor_raise_alpha;
-		result.floor_raise_applied = true;
 	}
 
 	if (input.peak <= kQuietAudiblePeakThreshold)
 	{
 		result.quiet_gain_floor_after +=
 			(1.0f - result.quiet_gain_floor_after) * kQuietFloorSilenceDecayAlpha;
-		result.silence_decay_applied = true;
 	}
 	else if (input.post_gain_rms > kQuietFloorReleaseRmsThreshold)
 	{
 		result.quiet_gain_floor_after +=
 			(1.0f - result.quiet_gain_floor_after) * kQuietFloorReleaseAlpha;
-		result.release_decay_applied = true;
 	}
 
 	if (result.quiet_gain_floor_after < 1.0001f)
