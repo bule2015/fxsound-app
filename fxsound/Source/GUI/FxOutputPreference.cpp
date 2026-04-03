@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "FxController.h"
 #include "FxOutputPreference.h"
+#include "OutputDeviceSelection.h"
 
 namespace
 {
@@ -77,16 +78,12 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
             output_preference_list_model_.updateDeviceConfig(device_config_);
 
             auto selected_output = FxModel::getModel().getSelectedOutput();
-            auto selected_output_matches =
-                (!device_config_.device_id.isEmpty() &&
-                 device_config_.device_id == selected_output.pwszID.c_str()) ||
-                (!device_config_.container_id.isEmpty() &&
-                 !selected_output.containerId.empty() &&
-                 device_config_.container_id == selected_output.containerId.c_str() &&
-                 device_config_.device_name == selected_output.deviceFriendlyName.c_str()) ||
-                (device_config_.device_id.isEmpty() &&
-                 device_config_.container_id.isEmpty() &&
-                 device_config_.device_name == FxController::getInstance().getOutputName());
+            auto selected_output_matches = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
+                std::wstring(device_config_.device_id.toWideCharPointer()),
+                std::wstring(device_config_.device_name.toWideCharPointer()),
+                std::wstring(device_config_.container_id.toWideCharPointer()),
+                selected_output,
+                std::wstring(FxController::getInstance().getOutputName().toWideCharPointer()));
 
             if (selected_output_matches)
             {

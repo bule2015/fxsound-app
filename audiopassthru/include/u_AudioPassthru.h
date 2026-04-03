@@ -75,3 +75,20 @@ private:
 	static AudioPassthruCallback *s_callback_;
 };
 
+namespace FxSound
+{
+	namespace AudioPassthruLifecycle
+	{
+		inline bool shouldContinueCleanupAfterThreadShutdown(bool has_handle, bool thread_shutdown_succeeded, bool timed_out)
+		{
+			return has_handle && thread_shutdown_succeeded && !timed_out;
+		}
+
+		inline bool shouldContinueCleanupAfterRestoreAttempt(bool restore_succeeded)
+		{
+			(void) restore_succeeded;
+			return true;
+		}
+	}
+}
+

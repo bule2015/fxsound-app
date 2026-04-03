@@ -7,6 +7,7 @@
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../dsp/include/AutoEqPolicy.h"
+#include "../../audiopassthru/include/u_AudioPassthru.h"
 
 namespace
 {
@@ -645,6 +646,50 @@ void testAutoEqPolicyDisablesAfterManualBandFrequencyEdit()
 {
 	expect(FxSound::AutoEqPolicy::shouldDisablePreservingCurrentEq(FxSound::AutoEqPolicy::Change::ManualBandFrequencyChanged),
 		"manual band frequency edits should disable auto eq while preserving the current curve");
+}
+
+void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
+{
+	auto selected_output = makeOutput(L"usb-selected", L"USB DAC", L"USB Audio", true, false, true, L"container-selected");
+
+	auto should_apply = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
+		L"usb-other",
+		L"USB DAC",
+		L"container-other",
+		selected_output,
+		L"USB DAC");
+
+	expect(!should_apply,
+		"preset application should not fall back to the current output name when a different device identity is present");
+}
+
+void testPresetApplyUsesNameFallbackOnlyForLegacyEntries()
+{
+	auto selected_output = makeOutput(L"usb-selected", L"USB DAC", L"USB Audio", true, false, true, L"container-selected");
+
+	auto should_apply = FxSound::OutputDeviceSelection::shouldApplyPresetToSelectedOutput(
+		L"",
+		L"USB DAC",
+		L"",
+		selected_output,
+		L"USB DAC");
+
+	expect(should_apply,
+		"preset application should still support legacy entries that only store the device name");
+}
+
+void testAudioPassthruCleanupContinuesAfterRestoreFailure()
+{
+	expect(FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true, false),
+		"successful thread shutdown should allow destructor cleanup to continue");
+	expect(FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterRestoreAttempt(false),
+		"restore-default-device failure should not block callback cleanup and sndDevicesFree");
+}
+
+void testAudioPassthruCleanupStopsAfterThreadShutdownTimeout()
+{
+	expect(!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true, true),
+		"timed out thread shutdown should still abort the remaining teardown");
 }
 
 void testScanProcessingOutputsPrefersTargetedOutput()
@@ -1430,6 +1475,10 @@ int main()
 		runTest("auto eq policy resets after band frequency change", testAutoEqPolicyResetsAnalysisAfterBandFrequencyChange);
 		runTest("auto eq policy disables after manual band gain edit", testAutoEqPolicyDisablesAfterManualBandGainEdit);
 		runTest("auto eq policy disables after manual band frequency edit", testAutoEqPolicyDisablesAfterManualBandFrequencyEdit);
+		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
+		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
+		runTest("audio passthru cleanup continues after restore failure", testAudioPassthruCleanupContinuesAfterRestoreFailure);
+		runTest("audio passthru cleanup stops after thread shutdown timeout", testAudioPassthruCleanupStopsAfterThreadShutdownTimeout);
 		runTest("processing scan prefers targeted output", testScanProcessingOutputsPrefersTargetedOutput);
 		runTest("processing scan skips mono default without fallback", testScanProcessingOutputsSkipsMonoDefaultWithoutFallback);
 		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);
