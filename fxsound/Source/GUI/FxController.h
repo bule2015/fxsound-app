@@ -124,11 +124,13 @@ public:
 	float getFilterQ();
 
     bool isAudioProcessing();
+	void getEqBandState(std::vector<float>& center_frequencies, std::vector<float>& band_boosts);
 	float getEqBandFrequency(int band_num);
     void setEqBandFrequency(int band_num, float freq);
     void getEqBandFrequencyRange(int band_num, float* min_freq, float* max_freq);
 	float getEqBandBoostCut(int band_num);
 	void setEqBandBoostCut(int band_num, float boost);
+    void getSpectrumBandValues(float* band_values, int array_size);
     void getSpectrumBandValues(Array<float>& band_values);
 
 	void enableHotkeys(bool enable);

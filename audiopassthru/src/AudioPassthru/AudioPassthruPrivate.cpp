@@ -42,6 +42,7 @@ AudioPassthruPrivate::AudioPassthruPrivate()
 	ProcessingThreadID_ = (DWORD)0;
 	i_kill_processing_thread_ = IS_FALSE;
 	device_change_pending_ = false;
+	processing_thread_running_ = false;
 	mute_ = false;
 	swprintf(wcp_playback_device_guid_, PT_MAX_GENERIC_STRLEN, L"");
 	b_no_valid_snd_device_dialog_shown_ = false;
@@ -67,6 +68,7 @@ AudioPassthruPrivate::~AudioPassthruPrivate()
 	s_callback_ = nullptr;
 	s_sndDevices_.deviceChangeCallback = nullptr;
 	device_change_pending_ = false;
+	processing_thread_running_ = false;
 
 	/*
 	* Disable the virtual soundcard
@@ -284,8 +286,7 @@ int AudioPassthruPrivate::killProcessingThread(int *ip_timed_out)
 
 	if (hProcessingThread_ != NULL)
 	{
-		bReturn = GetExitCodeThread(hProcessingThread_, &d_ExitCode);
-		if (d_ExitCode == STILL_ACTIVE)
+		if (processing_thread_running_)
 		{
 			b_need_to_kill_thread = TRUE;
 		}
@@ -310,6 +311,7 @@ int AudioPassthruPrivate::killProcessingThread(int *ip_timed_out)
 			if (d_ExitCode != STILL_ACTIVE)
 			{
 				i_thread_has_died = IS_TRUE;
+				processing_thread_running_ = false;
 				hProcessingThread_ = NULL;
 			}
 			else
@@ -362,9 +364,7 @@ int AudioPassthruPrivate::setBufferLength(int i_buffer_length_msecs)
 */
 int AudioPassthruPrivate::processTimer()
 {
-	BOOL bReturn;
 	BOOL b_need_to_start_thread;
-	DWORD d_ExitCode;
 	int numRealDevices;
 	int DfxDeviceEnabledFlag;
 	int statusFlag;
@@ -377,13 +377,9 @@ int AudioPassthruPrivate::processTimer()
 	*/
 	if (hProcessingThread_ == NULL)
 		b_need_to_start_thread = TRUE;
-	else
+	else if (!processing_thread_running_)
 	{
-		bReturn = GetExitCodeThread(hProcessingThread_, &d_ExitCode);
-		if (d_ExitCode != STILL_ACTIVE)
-		{
-			b_need_to_start_thread = TRUE;
-		}
+		b_need_to_start_thread = TRUE;
 	}
 
 	if (b_need_to_start_thread)
@@ -436,7 +432,10 @@ int AudioPassthruPrivate::processTimer()
 
 		/* PTNOTE - added check on DfxDeviceEnabledFlag status, may need to take additional steps if no DFX device is preset. */
 		if ((numRealDevices > 0) && (DfxDeviceEnabledFlag == IS_TRUE))
+		{
 			hProcessingThread_ = CreateThread(NULL, 0, processingThread, (LPVOID)this, 0L, &ProcessingThreadID_);
+			processing_thread_running_ = (hProcessingThread_ != NULL);
+		}
 
 		/* Check if a new playback device has been selected */
 		/*
@@ -572,6 +571,7 @@ DWORD WINAPI AudioPassthruPrivate::processingThread(LPVOID lpParam)
 
 	AudioPassthruPrivate * callerClass = (AudioPassthruPrivate*)lpParam;
 	auto ret = callerClass->threadWorker();
+	callerClass->processing_thread_running_ = false;
 
 	CoUninitialize();
 

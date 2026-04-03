@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <JuceHeader.h>
+#include <limits>
 
 //==============================================================================
 /*
@@ -68,9 +69,14 @@ private:
 
 	void resized() override;
 	void paint(Graphics& g) override;
+    void lookAndFeelChanged() override;
+    void refreshPresentation();
 
 	std::vector<std::unique_ptr<Label>> labels_;
 	std::vector<std::unique_ptr<FxEffectSlider>> effects_;
+    std::vector<float> displayed_effect_values_;
+    bool presentation_initialized_ = false;
+    bool help_tooltips_hidden_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxEffects)
 };

@@ -50,19 +50,27 @@ FxEffects::FxEffects()
 		addAndMakeVisible(effects_[i].get());
 	}
 
+    displayed_effect_values_.assign(EffectType::NumEffects, std::numeric_limits<float>::quiet_NaN());
+    lookAndFeelChanged();
 	setSize(WIDTH, HEIGHT);
 }
 
 void FxEffects::update()
 {
 	auto& controller = FxController::getInstance();
+    refreshPresentation();
 
 	for (int i = EffectType::Fidelity; i < EffectType::NumEffects; i++)
 	{
 		auto value = controller.getEffectValue(static_cast<EffectType>(i));
 		if (value >= 0.0 && value <= 1.0)
 		{
-			effects_[i]->setEffectValue(value*10.0);
+            auto slider_value = value * 10.0f;
+            if (displayed_effect_values_[i] != slider_value)
+            {
+			    effects_[i]->setEffectValue(slider_value);
+                displayed_effect_values_[i] = slider_value;
+            }
 		}
 	}
 }
@@ -90,6 +98,24 @@ void FxEffects::resized()
 
 void FxEffects::paint(Graphics& g)
 {
+	g.setFillType(FillType(Colour(FXCOLOR(ControlBackground)).withAlpha(1.0f)));
+	g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
+}
+
+void FxEffects::lookAndFeelChanged()
+{
+    auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+    for (int i = EffectType::Fidelity; i < EffectType::NumEffects; i++)
+    {
+        labels_[i]->setFont(theme.getNormalFont().withHeight(14));
+    }
+
+    presentation_initialized_ = false;
+    refreshPresentation();
+}
+
+void FxEffects::refreshPresentation()
+{
     StringArray texts = { TRANS("Clarity"), TRANS("Ambience"), TRANS("Surround Sound"), TRANS("Dynamic Boost"), TRANS("Bass Boost") };
     StringArray tool_tips = { TRANS("Enhances and elevates high end\r\nfidelity and presence"),
                               TRANS("Thickens and smooths audio\r\nwith controlled reverberation"),
@@ -97,24 +123,23 @@ void FxEffects::paint(Graphics& g)
                               TRANS("Increases overall volume and balance\r\nwith responsive processing"),
                               TRANS("Boosts low end for full,\r\nimpactful response") };
 
-	g.setFillType(FillType(Colour(FXCOLOR(ControlBackground)).withAlpha(1.0f)));
-	g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
+    auto hide_help_tooltips = FxController::getInstance().isHelpTooltipsHidden();
 
-    auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+    if (presentation_initialized_ && help_tooltips_hidden_ == hide_help_tooltips)
+        return;
 
     for (int i = EffectType::Fidelity; i < EffectType::NumEffects; i++)
     {
-        labels_[i]->setFont(theme.getNormalFont().withHeight(14));
-        labels_[i]->setText(texts[i], NotificationType::dontSendNotification);
-        if (!FxController::getInstance().isHelpTooltipsHidden())
-        {
-            effects_[i]->setTooltip(tool_tips[i]);
-        }
-        else
-        {
-            effects_[i]->setTooltip("");
-        }
+        if (labels_[i]->getText() != texts[i])
+            labels_[i]->setText(texts[i], NotificationType::dontSendNotification);
+
+        auto tooltip = hide_help_tooltips ? String() : tool_tips[i];
+        if (effects_[i]->getTooltip() != tooltip)
+            effects_[i]->setTooltip(tooltip);
     }
+
+    help_tooltips_hidden_ = hide_help_tooltips;
+    presentation_initialized_ = true;
 }
 
 FxEffects::FxEffectSlider::FxEffectSlider(EffectType effect)
@@ -135,13 +160,15 @@ FxEffects::FxEffectSlider::FxEffectSlider(EffectType effect)
 
 void FxEffects::FxEffectSlider::setEffectValue(float value)
 {
-	setValue(value, NotificationType::dontSendNotification);
-
 	auto text = String::formatted("%.0f", value);
-	value_label_.setText(text, NotificationType::dontSendNotification);
-
 	auto pos = getPositionOfValue(value);
 	auto x = pos + FxTheme::SLIDER_THUMB_RADIUS + 1;
+
+    if (getValue() == value && value_label_.getText() == text && value_label_.getX() == x)
+        return;
+
+	setValue(value, NotificationType::dontSendNotification);
+	value_label_.setText(text, NotificationType::dontSendNotification);
 	value_label_.setBounds(value_label_.getBounds().withX(x));
 }
 

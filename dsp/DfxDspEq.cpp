@@ -521,6 +521,31 @@ void DfxDspPrivate::setNumBands(int num_bands)
 	GraphicEqSetNumBands(graphic_eq_handle, num_bands);
 	logEqFlatTransition(L"setNumBands");
 }
+
+void DfxDspPrivate::getEqBandState(float* rp_center_freqs, float* rp_boost_cuts, int i_array_size)
+{
+    if (rp_center_freqs == nullptr || rp_boost_cuts == nullptr || i_array_size <= 0)
+        return;
+
+    PT_HANDLE* graphic_eq_handle;
+    realtype* rp_freq_array = nullptr;
+    realtype* rp_boost_array = nullptr;
+
+    dfxpEqGetGraphicEqHdl(dfxp_handle_, &graphic_eq_handle);
+
+    if (GraphicEqGetBandStateArrays(graphic_eq_handle, &rp_freq_array, &rp_boost_array) != OKAY)
+        return;
+
+    int num_bands = getNumEqBands();
+    int num_values = (i_array_size < num_bands) ? i_array_size : num_bands;
+
+    for (int i = 0; i < num_values; ++i)
+    {
+        rp_center_freqs[i] = rp_freq_array[i];
+        rp_boost_cuts[i] = rp_boost_array[i];
+    }
+}
+
 float DfxDspPrivate::getEqBandFrequency(int band_num)
 {
 	float band_freq = 0.0;

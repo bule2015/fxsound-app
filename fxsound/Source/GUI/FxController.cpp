@@ -1433,6 +1433,14 @@ bool FxController::isAudioProcessing()
     return audio_process_on_;
 }
 
+void FxController::getEqBandState(std::vector<float>& center_frequencies, std::vector<float>& band_boosts)
+{
+    auto num_bands = getNumEqBands();
+    center_frequencies.resize(num_bands);
+    band_boosts.resize(num_bands);
+    dfx_dsp_.getEqBandState(center_frequencies.data(), band_boosts.data(), num_bands);
+}
+
 void FxController::beginAudioProcessingGracePeriod()
 {
 	audio_process_time_ = dfx_dsp_.getTotalAudioProcessedTime();
@@ -2416,23 +2424,45 @@ void FxController::unregisterHotkeys()
 	}
 }
 
+void FxController::getSpectrumBandValues(float* band_values, int array_size)
+{
+    if (band_values == nullptr || array_size <= 0)
+        return;
+
+    if (!audio_process_on_)
+    {
+        for (int i = 0; i < array_size; ++i)
+        {
+            band_values[i] = (i < NUM_SPECTRUM_BANDS) ? 0.01f : 0.0f;
+        }
+
+        return;
+    }
+
+    float values[NUM_SPECTRUM_BANDS] = { 0 };
+    dfx_dsp_.getSpectrumBandValues(values, NUM_SPECTRUM_BANDS);
+
+    auto copy_count = (array_size < NUM_SPECTRUM_BANDS) ? array_size : NUM_SPECTRUM_BANDS;
+    for (int i = 0; i < copy_count; i++)
+    {
+		band_values[i] = values[i];
+    }
+
+    for (int i = copy_count; i < array_size; ++i)
+    {
+        band_values[i] = 0.0f;
+    }
+}
+
 void FxController::getSpectrumBandValues(Array<float>& band_values)
 {
     float values[NUM_SPECTRUM_BANDS] = { 0 };
+    getSpectrumBandValues(values, NUM_SPECTRUM_BANDS);
 
-    dfx_dsp_.getSpectrumBandValues(values, NUM_SPECTRUM_BANDS);
-
-    band_values.clearQuick();
-    for (auto i = 0; i < NUM_SPECTRUM_BANDS; i++)
+    band_values.resize(NUM_SPECTRUM_BANDS);
+    for (int i = 0; i < NUM_SPECTRUM_BANDS; ++i)
     {
-		if (audio_process_on_)
-		{
-			band_values.set(i, values[i]);
-		}
-		else
-		{
-			band_values.set(i, 0.01);
-		}
+        band_values.set(i, values[i]);
     }
 }
 

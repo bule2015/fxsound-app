@@ -177,6 +177,7 @@ namespace
 
 		realtype sample_rate = (r_samp_freq > 1000.0f) ? r_samp_freq : 48000.0f;
 		updateAdaptiveEqCoefficients(cast_handle, sample_rate);
+		realtype inv_channels = 1.0f / i_num_channels;
 
 		int index = 0;
 		for (int sample = 0; sample < i_num_sample_sets; sample++)
@@ -184,7 +185,6 @@ namespace
 			realtype low_energy = 0.0f;
 			realtype mid_energy = 0.0f;
 			realtype high_energy = 0.0f;
-			int analyzed_channels = 0;
 
 			for (int channel = 0; channel < i_num_channels; channel++)
 			{
@@ -201,16 +201,11 @@ namespace
 				low_energy += low_band * low_band;
 				mid_energy += mid_band * mid_band;
 				high_energy += high_band * high_band;
-				analyzed_channels++;
 			}
 
-			if (analyzed_channels > 0)
-			{
-				realtype inv_channels = 1.0f / analyzed_channels;
-				cast_handle->auto_eq_bucket_low_energy += low_energy * inv_channels;
-				cast_handle->auto_eq_bucket_mid_energy += mid_energy * inv_channels;
-				cast_handle->auto_eq_bucket_high_energy += high_energy * inv_channels;
-			}
+			cast_handle->auto_eq_bucket_low_energy += low_energy * inv_channels;
+			cast_handle->auto_eq_bucket_mid_energy += mid_energy * inv_channels;
+			cast_handle->auto_eq_bucket_high_energy += high_energy * inv_channels;
 
 			cast_handle->auto_eq_samples_in_bucket += 1.0f;
 			if (cast_handle->auto_eq_samples_in_bucket >= cast_handle->auto_eq_samples_per_bucket)

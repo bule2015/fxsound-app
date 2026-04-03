@@ -70,6 +70,7 @@ int PT_DECLSPEC GraphicEqSetBandFreq(PT_HANDLE *hp_GraphicEq, int i_band_num, re
 
 /* GraphicEqGet.cpp */
 int PT_DECLSPEC GraphicEqGetNumBands(PT_HANDLE *hp_GraphicEq, int *ip_num_bands);
+int PT_DECLSPEC GraphicEqGetBandStateArrays(PT_HANDLE* hp_GraphicEq, realtype** rpp_center_freqs, realtype** rpp_boost_cuts);
 int PT_DECLSPEC GraphicEqGetBandBoostCut(PT_HANDLE *hp_GraphicEq, int i_band_num, realtype *rp_boost_cut);
 int PT_DECLSPEC GraphicEqGetBandCenterFrequency(PT_HANDLE *hp_GraphicEq, int i_band_num, float *fp_center_freq);
 int PT_DECLSPEC GraphicEqGetBandFrequencyRange(PT_HANDLE *hp_GraphicEq, int i_band_num, float *fp_min_freq, float* fp_max_freq);

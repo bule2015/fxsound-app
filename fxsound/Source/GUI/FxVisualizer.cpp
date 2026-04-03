@@ -25,8 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 FxVisualizer::FxVisualizer()
 {
-    band_values_.resize(FxController::NUM_SPECTRUM_BANDS);
-    band_graph_.resize(FxController::NUM_SPECTRUM_BANDS * NUM_BARS);
+    rebuildBarLayout();
 
 #if JUCE_MAJOR_VERSION >= 8
     start();
@@ -38,6 +37,19 @@ FxVisualizer::FxVisualizer()
 
     setOpaque(false);
     setSize(WIDTH, HEIGHT);
+}
+
+void FxVisualizer::rebuildBarLayout()
+{
+    constexpr float kStartX = 27.0f;
+    constexpr float kBarSpacing = 9.1f;
+
+    float x = kStartX;
+    for (int index = 0; index < TOTAL_BARS; ++index)
+    {
+        bar_x_positions_[index] = x;
+        x += kBarSpacing;
+    }
 }
 
 void FxVisualizer::start()
@@ -98,10 +110,8 @@ void FxVisualizer::pause()
 
 void FxVisualizer::reset()
 {
-    for (int i = 0; i < FxController::NUM_SPECTRUM_BANDS * NUM_BARS; i++)
-    {
-        band_graph_.set(i, 0);
-    }
+    band_history_head_ = 0;
+    band_history_.fill(0.0f);
 }
 
 void FxVisualizer::update()
@@ -109,22 +119,17 @@ void FxVisualizer::update()
     if (!isEnabled())
         return;
 
-    FxController::getInstance().getSpectrumBandValues(band_values_);
+    FxController::getInstance().getSpectrumBandValues(band_values_.data(), (int)band_values_.size());
+    band_history_head_ = (band_history_head_ + 1) % HISTORY_LENGTH;
 
     for (int i = 0; i < FxController::NUM_SPECTRUM_BANDS; i++)
     {
         if (band_values_[i] < 0 || band_values_[i] > 1)
         {
-            band_values_.set(i, 0);
+            band_values_[i] = 0.0f;
         }
 
-        for (int j = 0; j < NUM_BARS / 2; j++)
-        {
-            band_graph_.set(i*NUM_BARS + j, band_graph_[i*NUM_BARS + j + 1]);
-            band_graph_.set(i*NUM_BARS + (NUM_BARS - 1) - j, band_graph_[i*NUM_BARS + j + 1]);
-        }
-
-        band_graph_.set(i*NUM_BARS + NUM_BARS / 2, band_values_[i]);
+        band_history_[i * HISTORY_LENGTH + band_history_head_] = band_values_[i];
     }
 }
 
@@ -140,16 +145,21 @@ void FxVisualizer::paint(Graphics& g)
     // ------------------------------------------------------ SPECTRUM AREA - LEFT AND SIZE 
     Path barsPath;
 
-    float x = 27;
-    float dx = 9.1;
-
-    for (auto i = 0; i < FxController::NUM_SPECTRUM_BANDS * NUM_BARS; i++)
+    for (int band = 0; band < FxController::NUM_SPECTRUM_BANDS; ++band)
     {
-        float band_value = band_graph_[i] == 0.0 ? 0.01 : band_graph_[i];
-        float height = band_value * 100.0f;
+        for (int bar = 0; bar < NUM_BARS; ++bar)
+        {
+            int age = (bar < NUM_BARS / 2) ? (NUM_BARS / 2 - bar) : (bar - NUM_BARS / 2);
+            int slot = (band_history_head_ + HISTORY_LENGTH - age) % HISTORY_LENGTH;
 
-        barsPath.addRectangle(x, bounds.getHeight() / 2.0f - height / 2.0f, 4.0f, height);
-        x += dx;
+            float band_value = band_history_[band * HISTORY_LENGTH + slot];
+            if (band_value == 0.0f)
+                band_value = 0.01f;
+
+            float height = band_value * 100.0f;
+            auto bar_index = band * NUM_BARS + bar;
+            barsPath.addRectangle(bar_x_positions_[bar_index], bounds.getHeight() / 2.0f - height / 2.0f, 4.0f, height);
+        }
     }
 
     g.fillPath(barsPath);

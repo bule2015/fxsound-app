@@ -43,6 +43,24 @@ int PT_DECLSPEC GraphicEqGetNumBands(PT_HANDLE *hp_GraphicEq, int *ip_num_bands)
 	return(OKAY);
 }
 
+int PT_DECLSPEC GraphicEqGetBandStateArrays(PT_HANDLE* hp_GraphicEq, realtype** rpp_center_freqs, realtype** rpp_boost_cuts)
+{
+	struct GraphicEqHdlType* cast_handle;
+
+	cast_handle = (struct GraphicEqHdlType*)(hp_GraphicEq);
+
+	if (cast_handle == NULL)
+		return(NOT_OKAY);
+
+	if (sosGetCenterFreqArray((PT_HANDLE*)(cast_handle->sos_hdl), rpp_center_freqs) != OKAY)
+		return(NOT_OKAY);
+
+	if (sosGetCenterFreqResponseArray((PT_HANDLE*)(cast_handle->sos_hdl), rpp_boost_cuts) != OKAY)
+		return(NOT_OKAY);
+
+	return(OKAY);
+}
+
 /*
  * FUNCTION: GraphicEqGetBandBoostCut()
  * DESCRIPTION:

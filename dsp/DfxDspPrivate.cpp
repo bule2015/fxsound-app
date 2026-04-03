@@ -242,7 +242,11 @@ void DfxDspPrivate::processTimer()
 
 int DfxDspPrivate::processAudio(short int *si_input_samples, short int *si_output_samples, int i_num_sample_sets, int i_check_for_duplicate_buffers)
 {
-	processTimer();
+	if (update_from_registry_)
+	{
+		processTimer();
+	}
+
 	// Apply DFX processing here using data and format vars above. Format will always be 32 bit floating point.
 	if (dfxpUniversalModifySamples(dfxp_handle_, si_input_samples, si_output_samples, i_num_sample_sets, i_check_for_duplicate_buffers) != OKAY)
 		return(NOT_OKAY);
@@ -286,6 +290,11 @@ bool DfxDspPrivate::isEqFlat()
 
 void DfxDspPrivate::logEqFlatTransition(const std::wstring& context)
 {
+#ifndef _DEBUG
+	(void) context;
+	return;
+#endif
+
 	auto eq_is_flat = isEqFlat();
 	if (!eq_is_flat)
 	{

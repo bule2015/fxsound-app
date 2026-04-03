@@ -41,7 +41,6 @@ namespace
     constexpr realtype kVolumeLevelingReleaseAlphaFast = 0.05f;
     constexpr realtype kVolumeLevelingReleaseAlphaSlow = 0.02f;
     constexpr realtype kVolumeLevelingReleaseGapThreshold = 0.15f;
-    constexpr realtype kVolumeLevelingMaxReductionPerBufferDb = 1.0f;
     constexpr realtype kVolumeLevelingPredictionStrength = 0.35f;
     constexpr realtype kVolumeLevelingPredictionClamp = 0.15f;
     constexpr realtype kVolumeLevelingPredictionMissRatio = 0.35f;
@@ -49,6 +48,7 @@ namespace
     constexpr realtype kVolumeLevelingToneLowHz = 180.0f;
     constexpr realtype kVolumeLevelingToneBodyHz = 1200.0f;
     constexpr realtype kVolumeLevelingTonePresenceHz = 4500.0f;
+    constexpr realtype kVolumeLevelingMinRatioPerBuffer = 0.8912509381337456f; // 10 ^ (-1 dB / 20)
     constexpr realtype kVolumeLevelingTonalityDbRange = 7.0f;
     constexpr realtype kVolumeLevelingTonalitySmoothing = 0.08f;
     constexpr realtype kVolumeLevelingMuffledTargetBoost = 0.12f;
@@ -274,8 +274,7 @@ namespace
         // Avoid abrupt "crushed" sound: limit how much gain can drop within one buffer.
         if (gain_end < gain_start)
         {
-            const realtype min_ratio_per_buffer = std::pow((realtype)10.0f, -kVolumeLevelingMaxReductionPerBufferDb / (realtype)20.0f);
-            const realtype min_allowed_gain_end = gain_start * min_ratio_per_buffer;
+            const realtype min_allowed_gain_end = gain_start * kVolumeLevelingMinRatioPerBuffer;
             if (gain_end < min_allowed_gain_end)
                 gain_end = min_allowed_gain_end;
         }

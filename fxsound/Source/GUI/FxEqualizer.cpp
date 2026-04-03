@@ -102,6 +102,10 @@ FxEqualizer::FxEqualizer()
     band_boosts_.resize(num_bands);
     center_frequencies_.resize(num_bands);
     band_gain_values_.resize(num_bands);
+    queried_band_boosts_.assign(num_bands, 0.0f);
+    queried_center_frequencies_.assign(num_bands, 0.0f);
+    displayed_band_boosts_.assign(num_bands, std::numeric_limits<float>::quiet_NaN());
+    displayed_center_frequencies_.assign(num_bands, std::numeric_limits<float>::quiet_NaN());
 
     float min_freq, max_freq;
     for (int i = 0; i < num_bands; i++)
@@ -132,6 +136,9 @@ FxEqualizer::FxEqualizer()
     ui_sync_tick_ = 0;
     help_tooltips_hidden_ = false;
     tooltip_band_count_ = -1;
+    auto_eq_toggle_help_hidden_ = false;
+    auto_eq_toggle_enabled_ = false;
+    auto_eq_toggle_range_ = std::numeric_limits<float>::quiet_NaN();
 
     setSize(WIDTH, HEIGHT);
     startTimerHz(10);
@@ -155,6 +162,10 @@ void FxEqualizer::reinit(int num_bands)
     band_boosts_.resize(num_bands);
     center_frequencies_.resize(num_bands);
     band_gain_values_.resize(num_bands);
+    queried_band_boosts_.assign(num_bands, 0.0f);
+    queried_center_frequencies_.assign(num_bands, 0.0f);
+    displayed_band_boosts_.assign(num_bands, std::numeric_limits<float>::quiet_NaN());
+    displayed_center_frequencies_.assign(num_bands, std::numeric_limits<float>::quiet_NaN());
 
     // ------------------------------------------------------------ recreate all controls
     float min_freq, max_freq;
@@ -309,17 +320,23 @@ void FxEqualizer::update()
 
     refreshAutoEqToggle();
     refreshEqTooltips();
+    controller.getEqBandState(queried_center_frequencies_, queried_band_boosts_);
 
     for (auto i = 0; i<band_boosts_.size(); i++)
     {
-        auto value = controller.getEqBandBoostCut(i);
-        if (value >= -MAX_GAIN && value <= MAX_GAIN)
+        auto value = queried_band_boosts_[i];
+        if (value >= -MAX_GAIN && value <= MAX_GAIN && displayed_band_boosts_[i] != value)
         {
             band_boosts_[i]->setGainValue(value);
+            displayed_band_boosts_[i] = value;
         }
 
-        auto freq = controller.getEqBandFrequency(i);
-        center_frequencies_[i]->setFrequency(freq);
+        auto freq = queried_center_frequencies_[i];
+        if (displayed_center_frequencies_[i] != freq)
+        {
+            center_frequencies_[i]->setFrequency(freq);
+            displayed_center_frequencies_[i] = freq;
+        }
     }
 }
 
@@ -517,20 +534,38 @@ void FxEqualizer::paint(Graphics& g)
 void FxEqualizer::refreshAutoEqToggle()
 {
     auto& controller = FxController::getInstance();
+    auto hide_help_tooltips = controller.isHelpTooltipsHidden();
+    auto enabled = controller.isAutoEqEnabled();
+    auto range = controller.getAutoEqRange();
 
-    auto_eq_button_.setButtonText(TRANS("Auto EQ"));
-    auto_eq_button_.setToggleState(controller.isAutoEqEnabled(), NotificationType::dontSendNotification);
+    auto button_text = TRANS("Auto EQ");
+    if (auto_eq_button_.getButtonText() != button_text)
+    {
+        auto_eq_button_.setButtonText(button_text);
+    }
 
-	if (!controller.isHelpTooltipsHidden())
+    if (auto_eq_toggle_enabled_ != enabled)
+    {
+        auto_eq_button_.setToggleState(enabled, NotificationType::dontSendNotification);
+        auto_eq_toggle_enabled_ = enabled;
+    }
+
+	if (!hide_help_tooltips)
 	{
-		auto_eq_button_.setTooltip(
-			TRANS("Automatically adjusts EQ balance over time within a +/-")
-			+ String(controller.getAutoEqRange(), 0)
-			+ TRANS(" dB range."));
+        if (auto_eq_toggle_help_hidden_ || auto_eq_toggle_range_ != range)
+        {
+		    auto_eq_button_.setTooltip(
+			    TRANS("Automatically adjusts EQ balance over time within a +/-")
+			    + String(range, 0)
+			    + TRANS(" dB range."));
+            auto_eq_toggle_help_hidden_ = false;
+            auto_eq_toggle_range_ = range;
+        }
 	}
-    else
+    else if (!auto_eq_toggle_help_hidden_)
     {
         auto_eq_button_.setTooltip("");
+        auto_eq_toggle_help_hidden_ = true;
     }
 }
 
@@ -609,12 +644,14 @@ FxEqualizer::FxEqSlider::FxEqSlider(int band, float)
 
 void FxEqualizer::FxEqSlider::setGainValue(float value)
 {
-    setValue(value, NotificationType::dontSendNotification);
-
     auto text = String::formatted(value == 0.0 ? "%.0f" : "%+.0f", value);
-    gain_label_.setText(text, NotificationType::dontSendNotification);
-
     auto y = getPositionOfValue(value) - (FxTheme::SLIDER_THUMB_RADIUS *3);
+
+    if (getValue() == value && gain_label_.getText() == text && gain_label_.getY() == y)
+        return;
+
+    setValue(value, NotificationType::dontSendNotification);
+    gain_label_.setText(text, NotificationType::dontSendNotification);
     gain_label_.setBounds(gain_label_.getBounds().withY(y));
 }
 
@@ -705,8 +742,6 @@ FxEqualizer::FxBandCenterFreqSlider::FxBandCenterFreqSlider(int band, Label& fre
 
 void FxEqualizer::FxBandCenterFreqSlider::setFrequency(float value)
 {
-    setValue(value, NotificationType::dontSendNotification);
-
     String text;
     if (value > 0)
     {
@@ -739,9 +774,15 @@ void FxEqualizer::FxBandCenterFreqSlider::setFrequency(float value)
                 text = String::formatted("%.0f Hz", value);
             }
         }
-
-        freq_label_.setText(text, NotificationType::dontSendNotification);
     }
+
+    if (getValue() == value && freq_label_.getText() == text)
+        return;
+
+    setValue(value, NotificationType::dontSendNotification);
+
+    if (value > 0)
+        freq_label_.setText(text, NotificationType::dontSendNotification);
 }
 
 void FxEqualizer::FxBandCenterFreqSlider::enablementChanged()

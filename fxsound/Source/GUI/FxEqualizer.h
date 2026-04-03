@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <JuceHeader.h>
+#include <limits>
 #include "AutoEqPolicy.h"
 
 //==============================================================================
@@ -135,6 +136,13 @@ private:
     int ui_sync_tick_;
     bool help_tooltips_hidden_;
     int tooltip_band_count_;
+    bool auto_eq_toggle_help_hidden_;
+    bool auto_eq_toggle_enabled_;
+    float auto_eq_toggle_range_;
+    std::vector<float> queried_band_boosts_;
+    std::vector<float> queried_center_frequencies_;
+    std::vector<float> displayed_band_boosts_;
+    std::vector<float> displayed_center_frequencies_;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxEqualizer)
 };

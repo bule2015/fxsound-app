@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 
 //==============================================================================
 /*
@@ -33,6 +34,9 @@ class FxVisualizer : public AnimatedAppComponent
 #endif
 {
 public:
+    static constexpr int SPECTRUM_BANDS = 10;
+    static constexpr int HISTORY_LENGTH = 6;
+
     FxVisualizer();
 
     void start();
@@ -51,13 +55,17 @@ private:
     static constexpr int WIDTH = 960;
     static constexpr int HEIGHT = 120;
     static constexpr int NUM_BARS = 10;
+    static constexpr int TOTAL_BARS = SPECTRUM_BANDS * NUM_BARS;
 
     void paint(Graphics& g) override;
     void enablementChanged() override;
 	void lookAndFeelChanged() override;
+    void rebuildBarLayout();
 
-    Array<float> band_values_;
-    Array<float> band_graph_;
+    std::array<float, SPECTRUM_BANDS> band_values_{};
+    std::array<float, SPECTRUM_BANDS * HISTORY_LENGTH> band_history_{};
+    std::array<float, TOTAL_BARS> bar_x_positions_{};
+    int band_history_head_ = 0;
     ColourGradient gradient_;
 
 #if JUCE_MAJOR_VERSION >=8

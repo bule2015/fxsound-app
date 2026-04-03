@@ -104,6 +104,7 @@ public:
 	float getFilterQ();
 	void setFilterQ(float q_multiplier);
 	void setNumBands(int num_bands);
+	void getEqBandState(float* rp_center_freqs, float* rp_boost_cuts, int i_array_size);
     float getEqBandFrequency(int band_num);
     void setEqBandFrequency(int band_num, float freq);
     void getEqBandFrequencyRange(int band_num, float* min_freq, float* max_freq);

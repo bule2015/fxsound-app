@@ -195,6 +195,11 @@ void DfxDsp::setNumBands(int num_bands)
 	data_->setNumBands(num_bands);
 }
 
+void DfxDsp::getEqBandState(float* rp_center_freqs, float* rp_boost_cuts, int i_array_size)
+{
+	data_->getEqBandState(rp_center_freqs, rp_boost_cuts, i_array_size);
+}
+
 float DfxDsp::getEqBandFrequency(int band_num)
 {
 	return data_->getEqBandFrequency(band_num);
