@@ -7,6 +7,7 @@
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../dsp/include/AutoEqPolicy.h"
+#include "../../dsp/include/VolumeLevelingQuietPolicy.h"
 #include "../../audiopassthru/include/u_AudioPassthru.h"
 
 namespace
@@ -690,6 +691,84 @@ void testAudioPassthruCleanupStopsAfterThreadShutdownTimeout()
 {
 	expect(!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true, true),
 		"timed out thread shutdown should still abort the remaining teardown");
+}
+
+void testQuietFloorRetainsBoostAfterProlongedLowOutput()
+{
+	auto result = FxSound::VolumeLevelingQuietPolicy::applyTransition({
+		0.01f,
+		0.02f,
+		10.0f,
+		0.5f,
+		4.0f,
+		0.2f,
+		1.0f,
+		1.0f,
+		0.0f,
+		0.0f,
+		false
+	});
+
+	expect(result.post_gain_still_quiet, "prolonged low output should still be marked quiet");
+	expect(result.quiet_boost_had_authority, "quiet floor retention should only happen after quiet boost had authority");
+	expect(std::fabs(result.quiet_duration_after - 10.5f) < 1.0e-6f, "quiet duration should keep accumulating while output stays very quiet");
+	expect(std::fabs(result.quiet_gain_floor_after - 4.0f) < 1.0e-6f, "quiet floor should retain the gain reached by prolonged quiet boosting");
+}
+
+void testQuietFloorRaiseStopsNearCeiling()
+{
+	auto result = FxSound::VolumeLevelingQuietPolicy::applyTransition({
+		0.01f,
+		0.03f,
+		12.0f,
+		0.5f,
+		4.0f,
+		0.2f,
+		1.0f,
+		4.0f,
+		0.99f,
+		0.0f,
+		true
+	});
+
+	expect(!result.floor_raise_applied, "quiet floor raise should stop once the rolling peak is already near the ceiling target");
+	expect(std::fabs(result.quiet_gain_floor_after - 4.0f) < 1.0e-6f, "quiet floor should stay unchanged when the 30 second peak window has already reached the ceiling target");
+}
+
+void testQuietFloorReleaseAndSilenceDecayWork()
+{
+	auto release_result = FxSound::VolumeLevelingQuietPolicy::applyTransition({
+		0.01f,
+		0.08f,
+		12.0f,
+		0.5f,
+		1.0f,
+		0.2f,
+		1.0f,
+		4.0f,
+		0.5f,
+		0.0f,
+		false
+	});
+
+	auto silence_result = FxSound::VolumeLevelingQuietPolicy::applyTransition({
+		0.001f,
+		0.01f,
+		12.0f,
+		0.5f,
+		1.0f,
+		0.2f,
+		1.0f,
+		4.0f,
+		0.0f,
+		0.0f,
+		false
+	});
+
+	expect(release_result.release_decay_applied, "quiet floor should release after sustained audible output");
+	expect(release_result.quiet_gain_floor_after < 4.0f, "release decay should reduce the retained quiet floor");
+	expect(silence_result.silence_decay_applied, "quiet floor should decay when the input falls back below the audible peak threshold");
+	expect(silence_result.quiet_gain_floor_after < 4.0f, "silence decay should reduce the retained quiet floor");
 }
 
 void testScanProcessingOutputsPrefersTargetedOutput()
@@ -1479,6 +1558,9 @@ int main()
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
 		runTest("audio passthru cleanup continues after restore failure", testAudioPassthruCleanupContinuesAfterRestoreFailure);
 		runTest("audio passthru cleanup stops after thread shutdown timeout", testAudioPassthruCleanupStopsAfterThreadShutdownTimeout);
+		runTest("quiet floor retains boost after prolonged low output", testQuietFloorRetainsBoostAfterProlongedLowOutput);
+		runTest("quiet floor raise stops near ceiling", testQuietFloorRaiseStopsNearCeiling);
+		runTest("quiet floor release and silence decay work", testQuietFloorReleaseAndSilenceDecayWork);
 		runTest("processing scan prefers targeted output", testScanProcessingOutputsPrefersTargetedOutput);
 		runTest("processing scan skips mono default without fallback", testScanProcessingOutputsSkipsMonoDefaultWithoutFallback);
 		runTest("processing scan detects dfx endpoint", testScanProcessingOutputsDetectsDfxEndpoint);

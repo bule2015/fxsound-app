@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "filt.h"
 #include "sos.h"
 #include "u_sos.h"
+#include "../../include/VolumeLevelingQuietPolicy.h"
 
 namespace
 {
@@ -60,19 +61,19 @@ namespace
     constexpr realtype kVolumeLevelingHeadroomComfortThreshold = 0.18f;
     constexpr realtype kVolumeLevelingHeadroomNearCeilingThreshold = 0.985f;
     constexpr realtype kVolumeLevelingHeadroomHitThreshold = 0.002f;
-    constexpr realtype kVolumeLevelingVeryQuietRmsThreshold = 0.035f;
-    constexpr realtype kVolumeLevelingQuietAudiblePeakThreshold = 0.0035f;
+    constexpr realtype kVolumeLevelingVeryQuietRmsThreshold = FxSound::VolumeLevelingQuietPolicy::kVeryQuietRmsThreshold;
+    constexpr realtype kVolumeLevelingQuietAudiblePeakThreshold = FxSound::VolumeLevelingQuietPolicy::kQuietAudiblePeakThreshold;
     constexpr realtype kVolumeLevelingQuietFullBoostPeak = 0.02f;
-    constexpr realtype kVolumeLevelingQuietMaxGain = 10.0f;
+    constexpr realtype kVolumeLevelingQuietMaxGain = FxSound::VolumeLevelingQuietPolicy::kQuietMaxGain;
     constexpr realtype kVolumeLevelingQuietReleaseAlpha = 0.18f;
-    constexpr realtype kVolumeLevelingQuietActivationSeconds = 10.0f;
+    constexpr realtype kVolumeLevelingQuietActivationSeconds = FxSound::VolumeLevelingQuietPolicy::kQuietActivationSeconds;
     constexpr realtype kVolumeLevelingQuietActivationRampSeconds = 2.0f;
-    constexpr realtype kVolumeLevelingQuietFloorReleaseRmsThreshold = 0.06f;
-    constexpr realtype kVolumeLevelingQuietFloorReleaseAlpha = 0.02f;
-    constexpr realtype kVolumeLevelingQuietFloorSilenceDecayAlpha = 0.08f;
+    constexpr realtype kVolumeLevelingQuietFloorReleaseRmsThreshold = FxSound::VolumeLevelingQuietPolicy::kQuietFloorReleaseRmsThreshold;
+    constexpr realtype kVolumeLevelingQuietFloorReleaseAlpha = FxSound::VolumeLevelingQuietPolicy::kQuietFloorReleaseAlpha;
+    constexpr realtype kVolumeLevelingQuietFloorSilenceDecayAlpha = FxSound::VolumeLevelingQuietPolicy::kQuietFloorSilenceDecayAlpha;
     constexpr realtype kVolumeLevelingQuietPeakBucketSeconds = 1.0f;
-    constexpr realtype kVolumeLevelingQuietPeakTargetRatio = 0.98f;
-    constexpr realtype kVolumeLevelingQuietPeakFloorRaiseTimeSeconds = 6.0f;
+    constexpr realtype kVolumeLevelingQuietPeakTargetRatio = FxSound::VolumeLevelingQuietPolicy::kQuietPeakTargetRatio;
+    constexpr realtype kVolumeLevelingQuietPeakFloorRaiseTimeSeconds = FxSound::VolumeLevelingQuietPolicy::kQuietPeakFloorRaiseTimeSeconds;
     constexpr realtype kPi = 3.14159265358979323846f;
 
     static realtype clampReal(realtype value, realtype min_value, realtype max_value)
@@ -402,63 +403,21 @@ namespace
         realtype post_gain_rms = sqrtf(post_gain_sum_squares / (i_num_sample_sets * analyzed_channels));
         updateQuietPeakWindow(cast_handle, post_gain_peak_abs, buffer_duration_seconds);
         realtype rolling_peak_max = getQuietPeakWindowMax(cast_handle);
-        bool post_gain_still_quiet =
-            peak > kVolumeLevelingQuietAudiblePeakThreshold &&
-            post_gain_rms < kVolumeLevelingVeryQuietRmsThreshold;
-        if (post_gain_still_quiet)
-        {
-            cast_handle->volume_leveling_quiet_duration_seconds += buffer_duration_seconds;
-        }
-        else
-        {
-            cast_handle->volume_leveling_quiet_duration_seconds = 0.0f;
-        }
-
-        bool quiet_boost_had_authority =
-            quiet_duration_before >= kVolumeLevelingQuietActivationSeconds &&
-            gain_end > (effective_target_rms / 0.125f);
-        if (quiet_boost_had_authority && gain_end > quiet_gain_floor)
-        {
-            quiet_gain_floor = gain_end;
-        }
-
-        bool quiet_peak_window_ready =
-            cast_handle->volume_leveling_quiet_peak_history_count == SOS_VOLUME_LEVELING_PEAK_WINDOW_SIZE;
-        bool quiet_floor_is_active =
-            quiet_duration_before >= kVolumeLevelingQuietActivationSeconds || quiet_gain_floor > 1.0f;
-        realtype quiet_peak_target = effective_ceiling * kVolumeLevelingQuietPeakTargetRatio;
-        bool sustained_headroom_available =
-            rolling_peak_max > kVolumeLevelingQuietAudiblePeakThreshold &&
-            rolling_peak_max < quiet_peak_target &&
-            headroom_reduce_score < 0.25f;
-        if (quiet_peak_window_ready && quiet_floor_is_active && sustained_headroom_available)
-        {
-            realtype desired_quiet_floor =
-                quiet_gain_floor * (quiet_peak_target / std::fmax(rolling_peak_max, (realtype)1e-6f));
-            desired_quiet_floor = clampReal(desired_quiet_floor, quiet_gain_floor, kVolumeLevelingQuietMaxGain);
-
-            realtype quiet_floor_raise_alpha = clampReal(
-                buffer_duration_seconds / kVolumeLevelingQuietPeakFloorRaiseTimeSeconds,
-                0.0005f,
-                0.05f);
-            quiet_gain_floor =
-                quiet_gain_floor * (1.0f - quiet_floor_raise_alpha) +
-                desired_quiet_floor * quiet_floor_raise_alpha;
-        }
-
-        if (peak <= kVolumeLevelingQuietAudiblePeakThreshold)
-        {
-            quiet_gain_floor += (1.0f - quiet_gain_floor) * kVolumeLevelingQuietFloorSilenceDecayAlpha;
-        }
-        else if (post_gain_rms > kVolumeLevelingQuietFloorReleaseRmsThreshold)
-        {
-            quiet_gain_floor += (1.0f - quiet_gain_floor) * kVolumeLevelingQuietFloorReleaseAlpha;
-        }
-
-        if (quiet_gain_floor < 1.0001f)
-        {
-            quiet_gain_floor = 1.0f;
-        }
+        auto quiet_transition = FxSound::VolumeLevelingQuietPolicy::applyTransition({
+            peak,
+            post_gain_rms,
+            quiet_duration_before,
+            buffer_duration_seconds,
+            gain_end,
+            effective_target_rms,
+            effective_ceiling,
+            quiet_gain_floor,
+            rolling_peak_max,
+            headroom_reduce_score,
+            cast_handle->volume_leveling_quiet_peak_history_count == SOS_VOLUME_LEVELING_PEAK_WINDOW_SIZE
+        });
+        cast_handle->volume_leveling_quiet_duration_seconds = quiet_transition.quiet_duration_after;
+        quiet_gain_floor = quiet_transition.quiet_gain_floor_after;
         cast_handle->volume_leveling_quiet_gain_floor = quiet_gain_floor;
 
         realtype ceiling_hit_ratio = (realtype)ceiling_hit_count / (realtype)(i_num_sample_sets * analyzed_channels);
