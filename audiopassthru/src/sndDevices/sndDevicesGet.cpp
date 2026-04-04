@@ -682,8 +682,6 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 {
 	struct sndDevicesHdlType *cast_handle;
 	wchar_t regVal[PT_MAX_GENERIC_STRLEN];
-	int hasMachineDefaultBufferSizeSetting;
-	int machineDefaultBufferSizeMilliSecs;
 
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices;
 
@@ -696,13 +694,9 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 		if( sndDeviceReadFromRegistry(hp_sndDevices, REG_CURRENT_USER, SND_DEVICES_REGISTRY_USER_BUFFER_SIZE, regVal) != OKAY)
 			return(NOT_OKAY);
 
-		if( wcscmp(regVal, L"") != 0)
-		{
-			swscanf(regVal, L"%d", ipBufferSize);
-			*ipBufferSize = FxSound::SndDevicesBufferPolicy::clampBufferSizeOrDefault(*ipBufferSize);
-		}
-		else
-			*ipBufferSize = cast_handle->bufferSizeMilliSecs;
+		*ipBufferSize = FxSound::SndDevicesBufferPolicy::resolveConfiguredBufferSizeFromRegistryValue(
+			regVal,
+			cast_handle->bufferSizeMilliSecs);
 	}
 	else
 	{
@@ -710,14 +704,7 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 		if( sndDeviceReadFromRegistry(hp_sndDevices, REG_LOCAL_MACHINE, SND_DEVICES_REGISTRY_DEFAULT_BUFFER_SIZE, regVal) != OKAY)
 			return(NOT_OKAY);
 
-		hasMachineDefaultBufferSizeSetting = (wcscmp(regVal, L"") != 0);
-		machineDefaultBufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
-		if (hasMachineDefaultBufferSizeSetting)
-			swscanf(regVal, L"%d", &machineDefaultBufferSizeMilliSecs);
-
-		*ipBufferSize = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(
-			hasMachineDefaultBufferSizeSetting != 0,
-			machineDefaultBufferSizeMilliSecs);
+		*ipBufferSize = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSizeFromRegistryValue(regVal);
 	}
 
 	return(OKAY);

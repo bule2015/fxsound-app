@@ -36,26 +36,26 @@ AudioPassthruCallback* AudioPassthruPrivate::s_callback_ = nullptr;
 
 namespace
 {
-void resetLatencyMeasurementState(sndDevicesHdlType* cast_handle)
+void resetLatencyMeasurementState(sndDevicesHdlType::LatencyMeasurementState* latency)
 {
-	if (cast_handle == NULL)
+	if (latency == NULL)
 		return;
 
-	cast_handle->latencyCaptureBatchStartQpc = 0;
-	cast_handle->latencyCaptureBatchQpc100ns = 0;
-	cast_handle->latencyLastLogQpc = 0;
-	cast_handle->latencyCaptureToRenderSumMs = 0.0;
-	cast_handle->latencyCaptureToRenderMinMs = 0.0;
-	cast_handle->latencyCaptureToRenderMaxMs = 0.0;
-	cast_handle->latencyCaptureAgeSumMs = 0.0;
-	cast_handle->latencyCaptureAgeMinMs = 0.0;
-	cast_handle->latencyCaptureAgeMaxMs = 0.0;
-	cast_handle->latencyPlaybackQueueSumMs = 0.0;
-	cast_handle->latencyPlaybackQueueMaxMs = 0.0;
-	cast_handle->latencyEstimatedOutputSumMs = 0.0;
-	cast_handle->latencyEstimatedOutputMinMs = 0.0;
-	cast_handle->latencyEstimatedOutputMaxMs = 0.0;
-	cast_handle->latencyMeasurementCount = 0;
+	latency->captureBatchStartQpc = 0;
+	latency->captureBatchQpc100ns = 0;
+	latency->lastLogQpc = 0;
+	latency->captureToRenderSumMs = 0.0;
+	latency->captureToRenderMinMs = 0.0;
+	latency->captureToRenderMaxMs = 0.0;
+	latency->captureAgeSumMs = 0.0;
+	latency->captureAgeMinMs = 0.0;
+	latency->captureAgeMaxMs = 0.0;
+	latency->playbackQueueSumMs = 0.0;
+	latency->playbackQueueMaxMs = 0.0;
+	latency->estimatedOutputSumMs = 0.0;
+	latency->estimatedOutputMinMs = 0.0;
+	latency->estimatedOutputMaxMs = 0.0;
+	latency->measurementCount = 0;
 }
 }
 
@@ -72,9 +72,9 @@ AudioPassthruPrivate::AudioPassthruPrivate()
 	swprintf(wcp_playback_device_guid_, PT_MAX_GENERIC_STRLEN, L"");
 	b_no_valid_snd_device_dialog_shown_ = false;
 	debug_ = IS_TRUE;
-	s_sndDevices_.latencyLoggingEnabled = FALSE;
-	s_sndDevices_.latencyQpcFrequency = 0;
-	resetLatencyMeasurementState(&s_sndDevices_);
+	s_sndDevices_.latency.loggingEnabled = FALSE;
+	s_sndDevices_.latency.qpcFrequency = 0;
+	resetLatencyMeasurementState(&s_sndDevices_.latency);
 }
 
 AudioPassthruPrivate::~AudioPassthruPrivate()
@@ -115,9 +115,16 @@ AudioPassthruPrivate::~AudioPassthruPrivate()
 		return;
 }
 
-int AudioPassthruPrivate::init()
+int AudioPassthruPrivate::init(bool enable_output_latency_logging)
 {
 	int status_flag;
+
+	s_sndDevices_.latency.loggingEnabled = enable_output_latency_logging ? TRUE : FALSE;
+	if (!enable_output_latency_logging)
+	{
+		s_sndDevices_.latency.qpcFrequency = 0;
+		resetLatencyMeasurementState(&s_sndDevices_.latency);
+	}
 	
 	/* Initialize the handle */
 	if (sndDevicesInit(this->hp_sndDevices_, NULL, SND_DEVICES_INIT_FOR_PROCESSING, debug_, &status_flag) != OKAY)
@@ -154,21 +161,6 @@ int AudioPassthruPrivate::init()
 void AudioPassthruPrivate::setDspProcessingModule(DfxDsp* p_dfx_dsp)
 {
 	p_dfx_dsp_ = p_dfx_dsp;
-}
-
-void AudioPassthruPrivate::setOutputLatencyLoggingEnabled(bool enabled)
-{
-	struct sndDevicesHdlType *cast_handle;
-	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices_;
-	if (cast_handle == NULL)
-		return;
-
-	cast_handle->latencyLoggingEnabled = enabled ? TRUE : FALSE;
-	if (!enabled)
-	{
-		cast_handle->latencyQpcFrequency = 0;
-		resetLatencyMeasurementState(cast_handle);
-	}
 }
 
 
@@ -516,11 +508,11 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	setReturn = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
 	if (QueryPerformanceFrequency(&qpc_frequency))
-		cast_handle->latencyQpcFrequency = (cast_handle->latencyLoggingEnabled == TRUE) ? qpc_frequency.QuadPart : 0;
+		cast_handle->latency.qpcFrequency = (cast_handle->latency.loggingEnabled == TRUE) ? qpc_frequency.QuadPart : 0;
 	else
-		cast_handle->latencyQpcFrequency = 0;
+		cast_handle->latency.qpcFrequency = 0;
 
-	resetLatencyMeasurementState(cast_handle);
+	resetLatencyMeasurementState(&cast_handle->latency);
 
 	// Start capture.
 	if (sndDevicesStartStopCapture(hp_sndDevices_, SND_DEVICES_START_CAPTURE) != OKAY)

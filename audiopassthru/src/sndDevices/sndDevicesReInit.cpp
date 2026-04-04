@@ -49,9 +49,6 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 	HRESULT hr;
 	int resultFlag;
 	int loopCount;
-	int hasUserBufferSizeSetting;
-	int hasMachineDefaultBufferSizeSetting;
-	int machineDefaultBufferSizeMilliSecs;
 	int captureAllocSize, playbackAllocSize;
 	int captureBufferChannelsForAllocation;
     
@@ -215,12 +212,11 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 			if (sndDeviceReadFromRegistry(hp_sndDevices, REG_CURRENT_USER, SND_DEVICES_REGISTRY_USER_BUFFER_SIZE, regVal) != OKAY)
 				return(NOT_OKAY);
 
-			hasUserBufferSizeSetting = (wcscmp(regVal, L"") != 0);
-
-			if (hasUserBufferSizeSetting)
+			if (FxSound::SndDevicesBufferPolicy::hasRegistryBufferSizeValue(regVal))
 			{
-				swscanf(regVal, L"%d", &(cast_handle->bufferSizeMilliSecs));
-				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::clampBufferSizeOrDefault(cast_handle->bufferSizeMilliSecs);
+				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::resolveConfiguredBufferSizeFromRegistryValue(
+					regVal,
+					cast_handle->bufferSizeMilliSecs);
 			}
 			else
 			{
@@ -228,18 +224,8 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 				if (sndDeviceReadFromRegistry(hp_sndDevices, REG_LOCAL_MACHINE, SND_DEVICES_REGISTRY_DEFAULT_BUFFER_SIZE, regVal) != OKAY)
 					return(NOT_OKAY);
 
-				hasMachineDefaultBufferSizeSetting = (wcscmp(regVal, L"") != 0);
-				machineDefaultBufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
-
-				if (hasMachineDefaultBufferSizeSetting)
-				{
-					swscanf(regVal, L"%d", &machineDefaultBufferSizeMilliSecs);
-				}
-
 				// Keep user overrides intact, but migrate stock legacy defaults to the new low-latency default.
-				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(
-					hasMachineDefaultBufferSizeSetting != 0,
-					machineDefaultBufferSizeMilliSecs);
+				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSizeFromRegistryValue(regVal);
 			}
 
 			// NOTE bufferSizeMilliSecs is the average bulk delay, actual buffer length is twice this, so use 500 in denoms to correct.

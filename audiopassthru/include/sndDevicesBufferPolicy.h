@@ -17,12 +17,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
 
+#include <wchar.h>
+
 #include "sndDevices.h"
 
 namespace FxSound
 {
 	namespace SndDevicesBufferPolicy
 	{
+		inline bool hasRegistryBufferSizeValue(const wchar_t* registry_value)
+		{
+			return (registry_value != NULL) && (wcscmp(registry_value, L"") != 0);
+		}
+
 		inline bool isLegacyDefaultBufferSize(int buffer_size_msecs)
 		{
 			switch (buffer_size_msecs)
@@ -49,6 +56,28 @@ namespace FxSound
 			return buffer_size_msecs;
 		}
 
+		inline int parseRegistryBufferSizeValue(const wchar_t* registry_value, int fallback_buffer_size_msecs)
+		{
+			int parsed_buffer_size_msecs = fallback_buffer_size_msecs;
+
+			if (hasRegistryBufferSizeValue(registry_value))
+			{
+				swscanf(registry_value, L"%d", &parsed_buffer_size_msecs);
+			}
+
+			return parsed_buffer_size_msecs;
+		}
+
+		inline int resolveConfiguredBufferSizeFromRegistryValue(const wchar_t* registry_value, int fallback_buffer_size_msecs)
+		{
+			if (!hasRegistryBufferSizeValue(registry_value))
+			{
+				return fallback_buffer_size_msecs;
+			}
+
+			return clampBufferSizeOrDefault(parseRegistryBufferSizeValue(registry_value, fallback_buffer_size_msecs));
+		}
+
 		inline int resolveEffectiveDefaultBufferSize(bool has_machine_default_setting, int machine_default_buffer_size_msecs)
 		{
 			if ((!has_machine_default_setting) || isLegacyDefaultBufferSize(machine_default_buffer_size_msecs))
@@ -57,6 +86,13 @@ namespace FxSound
 			}
 
 			return clampBufferSizeOrDefault(machine_default_buffer_size_msecs);
+		}
+
+		inline int resolveEffectiveDefaultBufferSizeFromRegistryValue(const wchar_t* registry_value)
+		{
+			return resolveEffectiveDefaultBufferSize(
+				hasRegistryBufferSizeValue(registry_value),
+				parseRegistryBufferSizeValue(registry_value, SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS));
 		}
 	}
 }

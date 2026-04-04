@@ -43,7 +43,7 @@ struct FakeAudioPassthru : IAudioPassthru
 	std::wstring last_playback_device_id;
 	AudioPassthruCallback* callback = nullptr;
 
-	int init() override
+	int init(bool = false) override
 	{
 		return 0;
 	}
@@ -114,10 +114,6 @@ struct FakeAudioPassthru : IAudioPassthru
 	void registerCallback(AudioPassthruCallback* new_callback) override
 	{
 		callback = new_callback;
-	}
-
-	void setOutputLatencyLoggingEnabled(bool) override
-	{
 	}
 
 	bool isPlaybackDeviceAvailable() override

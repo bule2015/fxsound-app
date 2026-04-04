@@ -72,7 +72,7 @@ class IAudioPassthru
 {
 public:
 	virtual ~IAudioPassthru() = default;
-	virtual int init() = 0;
+	virtual int init(bool enable_output_latency_logging = false) = 0;
 	virtual void mute(bool mute) = 0;
 	virtual std::vector<SoundDevice> getSoundDevices(bool active_devices = true) = 0;
 	virtual int setBufferLength(int i_buffer_length_msecs) = 0;
@@ -80,7 +80,6 @@ public:
 	virtual void setDspProcessingModule(DfxDsp* pDspProcessingModule) = 0;
 	virtual void setAsPlaybackDevice(const SoundDevice sound_device) = 0;
 	virtual void registerCallback(AudioPassthruCallback* callback) = 0;
-	virtual void setOutputLatencyLoggingEnabled(bool enabled) = 0;
 	virtual bool isPlaybackDeviceAvailable() = 0;
 	virtual void restoreDefaultPlaybackDevice() = 0;
 	virtual bool restartProcessingForDeviceChange() = 0;
@@ -92,7 +91,7 @@ class AudioPassthru : public IAudioPassthru
 public:
 	AudioPassthru();
 	~AudioPassthru();
-	int init() override;
+	int init(bool enable_output_latency_logging = false) override;
 	void mute(bool mute) override;
 	std::vector<SoundDevice> getSoundDevices(bool active_devices = true) override;
 	int setBufferLength(int i_buffer_length_msecs) override;
@@ -100,7 +99,6 @@ public:
 	void setDspProcessingModule(DfxDsp* pDspProcessingModule) override;
 	void setAsPlaybackDevice(const SoundDevice sound_device) override;
 	void registerCallback(AudioPassthruCallback *callback) override;
-	void setOutputLatencyLoggingEnabled(bool enabled) override;
     bool isPlaybackDeviceAvailable() override;
 	void restoreDefaultPlaybackDevice() override;
 	bool restartProcessingForDeviceChange() override;

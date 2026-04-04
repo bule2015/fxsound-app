@@ -171,26 +171,26 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 		{
 			if( packetLength > 0 )
 			{
-				if ((cast_handle->latencyLoggingEnabled == TRUE) &&
+				if ((cast_handle->latency.loggingEnabled == TRUE) &&
 					(cast_handle->capturedFramesCount == 0) &&
-					(cast_handle->latencyCaptureBatchStartQpc == 0) &&
-					(cast_handle->latencyQpcFrequency != 0))
+					(cast_handle->latency.captureBatchStartQpc == 0) &&
+					(cast_handle->latency.qpcFrequency != 0))
 				{
 					if (QueryPerformanceCounter(&capture_qpc))
-						cast_handle->latencyCaptureBatchStartQpc = capture_qpc.QuadPart;
+						cast_handle->latency.captureBatchStartQpc = capture_qpc.QuadPart;
 				}
 
 				// Get the data in this packet.
 				hr = cast_handle->pAudioCaptureLoopback->GetBuffer(&(cast_handle->pDataPacketCapture), &(cast_handle->numCaptureFramesAvailable), &flags,
-					(cast_handle->latencyLoggingEnabled == TRUE) ? &DevicePosition : NULL,
-					(cast_handle->latencyLoggingEnabled == TRUE) ? &QPCPosition : NULL);
+					(cast_handle->latency.loggingEnabled == TRUE) ? &DevicePosition : NULL,
+					(cast_handle->latency.loggingEnabled == TRUE) ? &QPCPosition : NULL);
 				if (FAILED(hr)) goto Exit;
 
-				if ((cast_handle->latencyLoggingEnabled == TRUE) &&
+				if ((cast_handle->latency.loggingEnabled == TRUE) &&
 					(cast_handle->capturedFramesCount == 0) &&
-					(cast_handle->latencyCaptureBatchQpc100ns == 0) &&
+					(cast_handle->latency.captureBatchQpc100ns == 0) &&
 					(QPCPosition != 0))
-					cast_handle->latencyCaptureBatchQpc100ns = QPCPosition;
+					cast_handle->latency.captureBatchQpc100ns = QPCPosition;
 
 				fptr = (float *)(cast_handle->pDataPacketCapture);
 

@@ -20,6 +20,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include <vector>
 
+namespace juce
+{
+	struct ArgumentList;
+}
+
 namespace FxSound
 {
 	namespace StartupOptionPolicy
@@ -41,5 +46,7 @@ namespace FxSound
 		{
 			return containsExactOption(arguments, L"--measure-output-latency");
 		}
+
+		bool shouldEnableOutputLatencyLogging(const juce::ArgumentList& arguments);
 	}
 }

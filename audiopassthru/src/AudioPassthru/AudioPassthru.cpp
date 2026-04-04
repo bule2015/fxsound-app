@@ -31,11 +31,11 @@ AudioPassthru::~AudioPassthru()
 	delete data_;
 }
 
-int AudioPassthru::init()
+int AudioPassthru::init(bool enable_output_latency_logging)
 {
     try 
     {
-        return data_->init();
+        return data_->init(enable_output_latency_logging);
     }
     catch (...)
     {
@@ -96,11 +96,6 @@ void AudioPassthru::mute(bool mute)
 void AudioPassthru::registerCallback(AudioPassthruCallback* callback)
 {
 	data_->registerCallback(callback);
-}
-
-void AudioPassthru::setOutputLatencyLoggingEnabled(bool enabled)
-{
-	data_->setOutputLatencyLoggingEnabled(enabled);
 }
 
 bool AudioPassthru::isPlaybackDeviceAvailable()

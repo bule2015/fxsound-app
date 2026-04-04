@@ -426,24 +426,25 @@ struct sndDevicesHdlType {
 	int MeasuredVirtualSilentBufferCount;	// This is buffer of measured all very low values, essentially silence.
 	int MeasuredTrueSilentBufferCount;		// This is buffer of measured all true zero values.
     BOOL playbackDeviceIsUnavailable;
-	BOOL latencyLoggingEnabled;
-
-	LONGLONG latencyQpcFrequency;
-	LONGLONG latencyCaptureBatchStartQpc;
-	UINT64 latencyCaptureBatchQpc100ns;
-	LONGLONG latencyLastLogQpc;
-	double latencyCaptureToRenderSumMs;
-	double latencyCaptureToRenderMinMs;
-	double latencyCaptureToRenderMaxMs;
-	double latencyCaptureAgeSumMs;
-	double latencyCaptureAgeMinMs;
-	double latencyCaptureAgeMaxMs;
-	double latencyPlaybackQueueSumMs;
-	double latencyPlaybackQueueMaxMs;
-	double latencyEstimatedOutputSumMs;
-	double latencyEstimatedOutputMinMs;
-	double latencyEstimatedOutputMaxMs;
-	UINT32 latencyMeasurementCount;
+	struct LatencyMeasurementState {
+		BOOL loggingEnabled;
+		LONGLONG qpcFrequency;
+		LONGLONG captureBatchStartQpc;
+		UINT64 captureBatchQpc100ns;
+		LONGLONG lastLogQpc;
+		double captureToRenderSumMs;
+		double captureToRenderMinMs;
+		double captureToRenderMaxMs;
+		double captureAgeSumMs;
+		double captureAgeMinMs;
+		double captureAgeMaxMs;
+		double playbackQueueSumMs;
+		double playbackQueueMaxMs;
+		double estimatedOutputSumMs;
+		double estimatedOutputMinMs;
+		double estimatedOutputMaxMs;
+		UINT32 measurementCount;
+	} latency;
 
 	// Module common status flag, set by functions that can't complete their requestion operation
 	int function_status;

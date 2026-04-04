@@ -59,8 +59,31 @@ static void sndDevicesAppendLatencyLogLine(const wchar_t *line)
 	fclose(stream);
 }
 
+static void sndDevicesResetLatencyMeasurementState(sndDevicesHdlType::LatencyMeasurementState* latency)
+{
+	if (latency == NULL)
+		return;
+
+	latency->captureBatchStartQpc = 0;
+	latency->captureBatchQpc100ns = 0;
+	latency->lastLogQpc = 0;
+	latency->captureToRenderSumMs = 0.0;
+	latency->captureToRenderMinMs = 0.0;
+	latency->captureToRenderMaxMs = 0.0;
+	latency->captureAgeSumMs = 0.0;
+	latency->captureAgeMinMs = 0.0;
+	latency->captureAgeMaxMs = 0.0;
+	latency->playbackQueueSumMs = 0.0;
+	latency->playbackQueueMaxMs = 0.0;
+	latency->estimatedOutputSumMs = 0.0;
+	latency->estimatedOutputMinMs = 0.0;
+	latency->estimatedOutputMaxMs = 0.0;
+	latency->measurementCount = 0;
+}
+
 static void sndDevicesRecordLatencyMeasurement(struct sndDevicesHdlType *cast_handle, UINT32 numFramesQueuedUpToPlay)
 {
+	sndDevicesHdlType::LatencyMeasurementState *latency;
 	LARGE_INTEGER now_qpc;
 	SYSTEMTIME local_time;
 	wchar_t logLine[512];
@@ -74,71 +97,72 @@ static void sndDevicesRecordLatencyMeasurement(struct sndDevicesHdlType *cast_ha
 	double averageEstimatedOutputMs;
 	UINT64 currentQpc100ns;
 
-	if ((cast_handle->latencyLoggingEnabled != TRUE) ||
-		(cast_handle->latencyCaptureBatchStartQpc == 0) ||
-		(cast_handle->latencyQpcFrequency == 0))
+	latency = &(cast_handle->latency);
+	if ((latency->loggingEnabled != TRUE) ||
+		(latency->captureBatchStartQpc == 0) ||
+		(latency->qpcFrequency == 0))
 		return;
 
 	if (!QueryPerformanceCounter(&now_qpc))
 		return;
 
-	captureToRenderMs = (double)(now_qpc.QuadPart - cast_handle->latencyCaptureBatchStartQpc) * 1000.0 / (double)cast_handle->latencyQpcFrequency;
+	captureToRenderMs = (double)(now_qpc.QuadPart - latency->captureBatchStartQpc) * 1000.0 / (double)latency->qpcFrequency;
 	playbackQueueMs = ((double)numFramesQueuedUpToPlay * 1000.0) / (double)cast_handle->wfxPlayback.nSamplesPerSec;
-	currentQpc100ns = (UINT64)(((long double)now_qpc.QuadPart * 10000000.0L) / (long double)cast_handle->latencyQpcFrequency);
+	currentQpc100ns = (UINT64)(((long double)now_qpc.QuadPart * 10000000.0L) / (long double)latency->qpcFrequency);
 
-	if ((cast_handle->latencyCaptureBatchQpc100ns != 0) && (currentQpc100ns >= cast_handle->latencyCaptureBatchQpc100ns))
-		captureAgeMs = (double)(currentQpc100ns - cast_handle->latencyCaptureBatchQpc100ns) / 10000.0;
+	if ((latency->captureBatchQpc100ns != 0) && (currentQpc100ns >= latency->captureBatchQpc100ns))
+		captureAgeMs = (double)(currentQpc100ns - latency->captureBatchQpc100ns) / 10000.0;
 	else
 		captureAgeMs = captureToRenderMs;
 
 	estimatedOutputMs = captureAgeMs + playbackQueueMs;
 
-	if (cast_handle->latencyMeasurementCount == 0)
+	if (latency->measurementCount == 0)
 	{
-		cast_handle->latencyCaptureToRenderMinMs = captureToRenderMs;
-		cast_handle->latencyCaptureToRenderMaxMs = captureToRenderMs;
-		cast_handle->latencyCaptureAgeMinMs = captureAgeMs;
-		cast_handle->latencyCaptureAgeMaxMs = captureAgeMs;
-		cast_handle->latencyPlaybackQueueMaxMs = playbackQueueMs;
-		cast_handle->latencyEstimatedOutputMinMs = estimatedOutputMs;
-		cast_handle->latencyEstimatedOutputMaxMs = estimatedOutputMs;
+		latency->captureToRenderMinMs = captureToRenderMs;
+		latency->captureToRenderMaxMs = captureToRenderMs;
+		latency->captureAgeMinMs = captureAgeMs;
+		latency->captureAgeMaxMs = captureAgeMs;
+		latency->playbackQueueMaxMs = playbackQueueMs;
+		latency->estimatedOutputMinMs = estimatedOutputMs;
+		latency->estimatedOutputMaxMs = estimatedOutputMs;
 	}
 	else
 	{
-		if (captureToRenderMs < cast_handle->latencyCaptureToRenderMinMs)
-			cast_handle->latencyCaptureToRenderMinMs = captureToRenderMs;
-		if (captureToRenderMs > cast_handle->latencyCaptureToRenderMaxMs)
-			cast_handle->latencyCaptureToRenderMaxMs = captureToRenderMs;
-		if (captureAgeMs < cast_handle->latencyCaptureAgeMinMs)
-			cast_handle->latencyCaptureAgeMinMs = captureAgeMs;
-		if (captureAgeMs > cast_handle->latencyCaptureAgeMaxMs)
-			cast_handle->latencyCaptureAgeMaxMs = captureAgeMs;
-		if (playbackQueueMs > cast_handle->latencyPlaybackQueueMaxMs)
-			cast_handle->latencyPlaybackQueueMaxMs = playbackQueueMs;
-		if (estimatedOutputMs < cast_handle->latencyEstimatedOutputMinMs)
-			cast_handle->latencyEstimatedOutputMinMs = estimatedOutputMs;
-		if (estimatedOutputMs > cast_handle->latencyEstimatedOutputMaxMs)
-			cast_handle->latencyEstimatedOutputMaxMs = estimatedOutputMs;
+		if (captureToRenderMs < latency->captureToRenderMinMs)
+			latency->captureToRenderMinMs = captureToRenderMs;
+		if (captureToRenderMs > latency->captureToRenderMaxMs)
+			latency->captureToRenderMaxMs = captureToRenderMs;
+		if (captureAgeMs < latency->captureAgeMinMs)
+			latency->captureAgeMinMs = captureAgeMs;
+		if (captureAgeMs > latency->captureAgeMaxMs)
+			latency->captureAgeMaxMs = captureAgeMs;
+		if (playbackQueueMs > latency->playbackQueueMaxMs)
+			latency->playbackQueueMaxMs = playbackQueueMs;
+		if (estimatedOutputMs < latency->estimatedOutputMinMs)
+			latency->estimatedOutputMinMs = estimatedOutputMs;
+		if (estimatedOutputMs > latency->estimatedOutputMaxMs)
+			latency->estimatedOutputMaxMs = estimatedOutputMs;
 	}
 
-	cast_handle->latencyCaptureToRenderSumMs += captureToRenderMs;
-	cast_handle->latencyCaptureAgeSumMs += captureAgeMs;
-	cast_handle->latencyPlaybackQueueSumMs += playbackQueueMs;
-	cast_handle->latencyEstimatedOutputSumMs += estimatedOutputMs;
-	cast_handle->latencyMeasurementCount += 1;
-	cast_handle->latencyCaptureBatchStartQpc = 0;
-	cast_handle->latencyCaptureBatchQpc100ns = 0;
+	latency->captureToRenderSumMs += captureToRenderMs;
+	latency->captureAgeSumMs += captureAgeMs;
+	latency->playbackQueueSumMs += playbackQueueMs;
+	latency->estimatedOutputSumMs += estimatedOutputMs;
+	latency->measurementCount += 1;
+	latency->captureBatchStartQpc = 0;
+	latency->captureBatchQpc100ns = 0;
 
-	if ((cast_handle->latencyLastLogQpc != 0) &&
-		((now_qpc.QuadPart - cast_handle->latencyLastLogQpc) < cast_handle->latencyQpcFrequency))
+	if ((latency->lastLogQpc != 0) &&
+		((now_qpc.QuadPart - latency->lastLogQpc) < latency->qpcFrequency))
 	{
 		return;
 	}
 
-	averageCaptureToRenderMs = cast_handle->latencyCaptureToRenderSumMs / (double)cast_handle->latencyMeasurementCount;
-	averageCaptureAgeMs = cast_handle->latencyCaptureAgeSumMs / (double)cast_handle->latencyMeasurementCount;
-	averagePlaybackQueueMs = cast_handle->latencyPlaybackQueueSumMs / (double)cast_handle->latencyMeasurementCount;
-	averageEstimatedOutputMs = cast_handle->latencyEstimatedOutputSumMs / (double)cast_handle->latencyMeasurementCount;
+	averageCaptureToRenderMs = latency->captureToRenderSumMs / (double)latency->measurementCount;
+	averageCaptureAgeMs = latency->captureAgeSumMs / (double)latency->measurementCount;
+	averagePlaybackQueueMs = latency->playbackQueueSumMs / (double)latency->measurementCount;
+	averageEstimatedOutputMs = latency->estimatedOutputSumMs / (double)latency->measurementCount;
 
 	GetLocalTime(&local_time);
 	swprintf(
@@ -152,33 +176,22 @@ static void sndDevicesRecordLatencyMeasurement(struct sndDevicesHdlType *cast_ha
 		local_time.wMinute,
 		local_time.wSecond,
 		averageCaptureToRenderMs,
-		cast_handle->latencyCaptureToRenderMinMs,
-		cast_handle->latencyCaptureToRenderMaxMs,
+		latency->captureToRenderMinMs,
+		latency->captureToRenderMaxMs,
 		averageCaptureAgeMs,
-		cast_handle->latencyCaptureAgeMinMs,
-		cast_handle->latencyCaptureAgeMaxMs,
+		latency->captureAgeMinMs,
+		latency->captureAgeMaxMs,
 		averagePlaybackQueueMs,
-		cast_handle->latencyPlaybackQueueMaxMs,
+		latency->playbackQueueMaxMs,
 		averageEstimatedOutputMs,
-		cast_handle->latencyEstimatedOutputMinMs,
-		cast_handle->latencyEstimatedOutputMaxMs,
-		cast_handle->latencyMeasurementCount,
+		latency->estimatedOutputMinMs,
+		latency->estimatedOutputMaxMs,
+		latency->measurementCount,
 		cast_handle->bufferSizeMilliSecs);
 	sndDevicesAppendLatencyLogLine(logLine);
 
-	cast_handle->latencyLastLogQpc = now_qpc.QuadPart;
-	cast_handle->latencyCaptureToRenderSumMs = 0.0;
-	cast_handle->latencyCaptureToRenderMinMs = 0.0;
-	cast_handle->latencyCaptureToRenderMaxMs = 0.0;
-	cast_handle->latencyCaptureAgeSumMs = 0.0;
-	cast_handle->latencyCaptureAgeMinMs = 0.0;
-	cast_handle->latencyCaptureAgeMaxMs = 0.0;
-	cast_handle->latencyPlaybackQueueSumMs = 0.0;
-	cast_handle->latencyPlaybackQueueMaxMs = 0.0;
-	cast_handle->latencyEstimatedOutputSumMs = 0.0;
-	cast_handle->latencyEstimatedOutputMinMs = 0.0;
-	cast_handle->latencyEstimatedOutputMaxMs = 0.0;
-	cast_handle->latencyMeasurementCount = 0;
+	sndDevicesResetLatencyMeasurementState(latency);
+	latency->lastLogQpc = now_qpc.QuadPart;
 }
 
 /*

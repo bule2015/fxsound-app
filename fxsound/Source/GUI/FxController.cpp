@@ -29,6 +29,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxPresetSaveDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
+namespace FxSound
+{
+	namespace StartupOptionPolicy
+	{
+		bool shouldEnableOutputLatencyLogging(const juce::ArgumentList& arguments)
+		{
+			for (int index = 0; index < arguments.size(); ++index)
+			{
+				if (arguments[index].text == "--measure-output-latency")
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+	}
+}
+
 namespace
 {
 constexpr auto kSelectedOutputIdSetting = "selected_output_device_id";
@@ -318,12 +337,6 @@ FxController::~FxController()
 void FxController::config(const String& commandline)
 {
     auto arg_list = ArgumentList(File::getSpecialLocation(File::SpecialLocationType::invokedExecutableFile).getFileName(), commandline);
-	std::vector<std::wstring> startup_arguments;
-	startup_arguments.reserve(static_cast<size_t>(arg_list.size()));
-	for (int index = 0; index < arg_list.size(); ++index)
-	{
-		startup_arguments.push_back(arg_list[index].text.toWideCharPointer());
-	}
 
     auto preset = arg_list.getValueForOption("--preset").unquoted();
     auto view = arg_list.getValueForOption("--view");
@@ -334,7 +347,7 @@ void FxController::config(const String& commandline)
 	auto filterq = arg_list.getValueForOption("--filter_q");
 	auto mastergain = arg_list.getValueForOption("--master_gain");
 	auto normalization = arg_list.getValueForOption("--normalization");
-	output_latency_logging_enabled_ = FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(startup_arguments);
+	output_latency_logging_enabled_ = FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(arg_list);
     
     if (preset.isNotEmpty())
     {
@@ -448,9 +461,8 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 		main_window_ = main_window;
 		audio_passthru_ = audio_passthru;
 		system_tray_view_ = system_tray_view;
-		audio_passthru_->setOutputLatencyLoggingEnabled(output_latency_logging_enabled_);
         
-        if (audio_passthru_->init() != 0)
+        if (audio_passthru_->init(output_latency_logging_enabled_) != 0)
         {
             String message(TRANS("Error in system audio configuration. Unable to run FxSound"));
             AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, JUCEApplication::getInstance()->getApplicationName(), message, TRANS("OK"));
