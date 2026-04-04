@@ -31,21 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "reg.h"
 #include "u_sndDevices.h"
 #include "sndDevices.h"
-
-static int sndDevicesShouldMigrateLegacyBufferDefault(int iBufferSizeMilliSecs)
-{
-	switch (iBufferSizeMilliSecs)
-	{
-	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_32BIT_CPU:
-	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_32BIT_CPU:
-	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_64BIT_CPU:
-	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_64BIT_OS:
-		return 1;
-
-	default:
-		return 0;
-	}
-}
+#include "sndDevicesBufferPolicy.h"
 
 /*
  * FUNCTION: sndDevicesReInit()
@@ -64,6 +50,8 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 	int resultFlag;
 	int loopCount;
 	int hasUserBufferSizeSetting;
+	int hasMachineDefaultBufferSizeSetting;
+	int machineDefaultBufferSizeMilliSecs;
 	int captureAllocSize, playbackAllocSize;
 	int captureBufferChannelsForAllocation;
     
@@ -232,6 +220,7 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 			if (hasUserBufferSizeSetting)
 			{
 				swscanf(regVal, L"%d", &(cast_handle->bufferSizeMilliSecs));
+				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::clampBufferSizeOrDefault(cast_handle->bufferSizeMilliSecs);
 			}
 			else
 			{
@@ -239,19 +228,19 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 				if (sndDeviceReadFromRegistry(hp_sndDevices, REG_LOCAL_MACHINE, SND_DEVICES_REGISTRY_DEFAULT_BUFFER_SIZE, regVal) != OKAY)
 					return(NOT_OKAY);
 
-				// If a value was read, set it, otherwise use the default.
-				if (wcscmp(regVal, L"") != 0)
-				{
-					swscanf(regVal, L"%d", &(cast_handle->bufferSizeMilliSecs));
-				}
-			}
-			// Keep user overrides intact, but migrate stock legacy defaults to the new low-latency default.
-			if ((!hasUserBufferSizeSetting) && ((wcscmp(regVal, L"") == 0) || sndDevicesShouldMigrateLegacyBufferDefault(cast_handle->bufferSizeMilliSecs)))
-				cast_handle->bufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
+				hasMachineDefaultBufferSizeSetting = (wcscmp(regVal, L"") != 0);
+				machineDefaultBufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
 
-			// Check the ranges on the buffer size setting.
-			if ((cast_handle->bufferSizeMilliSecs < SND_DEVICES_CAPTURE_BUFFER_MIN_SIZE_MILLI_SECS) || (cast_handle->bufferSizeMilliSecs >(SND_DEVICES_CAPTURE_BUFFER_MAX_SIZE_MILLI_SECS)))
-				cast_handle->bufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
+				if (hasMachineDefaultBufferSizeSetting)
+				{
+					swscanf(regVal, L"%d", &machineDefaultBufferSizeMilliSecs);
+				}
+
+				// Keep user overrides intact, but migrate stock legacy defaults to the new low-latency default.
+				cast_handle->bufferSizeMilliSecs = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(
+					hasMachineDefaultBufferSizeSetting != 0,
+					machineDefaultBufferSizeMilliSecs);
+			}
 
 			// NOTE bufferSizeMilliSecs is the average bulk delay, actual buffer length is twice this, so use 500 in denoms to correct.
 			cast_handle->hnsRequestedDurationCapture = (REFERENCE_TIME)((double)cast_handle->bufferSizeMilliSecs * (double)SND_DEVICES_REFTIMES_PER_SEC / 500.0);

@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mry.h"
 #include "u_sndDevices.h"
 #include "sndDevices.h"
+#include "sndDevicesBufferPolicy.h"
 
 /*
  * FUNCTION: sndDevicesGetID()
@@ -681,6 +682,8 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 {
 	struct sndDevicesHdlType *cast_handle;
 	wchar_t regVal[PT_MAX_GENERIC_STRLEN];
+	int hasMachineDefaultBufferSizeSetting;
+	int machineDefaultBufferSizeMilliSecs;
 
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices;
 
@@ -694,7 +697,10 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 			return(NOT_OKAY);
 
 		if( wcscmp(regVal, L"") != 0)
+		{
 			swscanf(regVal, L"%d", ipBufferSize);
+			*ipBufferSize = FxSound::SndDevicesBufferPolicy::clampBufferSizeOrDefault(*ipBufferSize);
+		}
 		else
 			*ipBufferSize = cast_handle->bufferSizeMilliSecs;
 	}
@@ -704,10 +710,14 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 		if( sndDeviceReadFromRegistry(hp_sndDevices, REG_LOCAL_MACHINE, SND_DEVICES_REGISTRY_DEFAULT_BUFFER_SIZE, regVal) != OKAY)
 			return(NOT_OKAY);
 
-		if( wcscmp(regVal, L"") != 0)
-			swscanf(regVal, L"%d", ipBufferSize);
-		else
-			*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
+		hasMachineDefaultBufferSizeSetting = (wcscmp(regVal, L"") != 0);
+		machineDefaultBufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
+		if (hasMachineDefaultBufferSizeSetting)
+			swscanf(regVal, L"%d", &machineDefaultBufferSizeMilliSecs);
+
+		*ipBufferSize = FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(
+			hasMachineDefaultBufferSizeSetting != 0,
+			machineDefaultBufferSizeMilliSecs);
 	}
 
 	return(OKAY);

@@ -6,9 +6,11 @@
 #include <vector>
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
+#include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
 #include "../../dsp/include/AutoEqPolicy.h"
 #include "../../dsp/include/VolumeLevelingQuietPolicy.h"
 #include "../../audiopassthru/include/u_AudioPassthru.h"
+#include "../../audiopassthru/include/sndDevicesBufferPolicy.h"
 
 namespace
 {
@@ -112,6 +114,10 @@ struct FakeAudioPassthru : IAudioPassthru
 	void registerCallback(AudioPassthruCallback* new_callback) override
 	{
 		callback = new_callback;
+	}
+
+	void setOutputLatencyLoggingEnabled(bool) override
+	{
 	}
 
 	bool isPlaybackDeviceAvailable() override
@@ -649,6 +655,30 @@ void testAutoEqPolicyDisablesAfterManualBandFrequencyEdit()
 		"manual band frequency edits should disable auto eq while preserving the current curve");
 }
 
+void testStartupOptionPolicyFindsExactOutputLatencyFlag()
+{
+	const std::vector<std::wstring> arguments {
+		L"--preset",
+		L"General",
+		L"--measure-output-latency"
+	};
+
+	expect(FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(arguments),
+		"startup option policy should enable output latency logging when the exact flag is present");
+}
+
+void testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags()
+{
+	const std::vector<std::wstring> arguments {
+		L"--measure-output-latency-extra",
+		L"--preset",
+		L"General"
+	};
+
+	expect(!FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(arguments),
+		"startup option policy should ignore similar but non-exact latency logging flags");
+}
+
 void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
 {
 	auto selected_output = makeOutput(L"usb-selected", L"USB DAC", L"USB Audio", true, false, true, L"container-selected");
@@ -685,6 +715,33 @@ void testAudioPassthruCleanupStopsAfterThreadShutdownTimeout()
 {
 	expect(!FxSound::AudioPassthruLifecycle::shouldContinueCleanupAfterThreadShutdown(true, true),
 		"timed out thread shutdown should still abort the remaining teardown");
+}
+
+void testBufferPolicyMigratesLegacyMachineDefaultToLowLatencyDefault()
+{
+	expect(FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(true, 40)
+			== SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS,
+		"legacy machine default buffer sizes should migrate to the low-latency default");
+}
+
+void testBufferPolicyPreservesExplicitModernMachineDefault()
+{
+	expect(FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(true, 25) == 25,
+		"non-legacy machine defaults should be preserved");
+}
+
+void testBufferPolicyFallsBackWhenMachineDefaultMissing()
+{
+	expect(FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(false, 0)
+			== SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS,
+		"missing machine defaults should fall back to the low-latency default");
+}
+
+void testBufferPolicyClampsOutOfRangeValues()
+{
+	expect(FxSound::SndDevicesBufferPolicy::clampBufferSizeOrDefault(500)
+			== SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS,
+		"out-of-range buffer sizes should clamp back to the default");
 }
 
 void testQuietFloorRetainsBoostAfterProlongedLowOutput()
@@ -1543,10 +1600,16 @@ int main()
 		runTest("auto eq policy resets after band frequency change", testAutoEqPolicyResetsAnalysisAfterBandFrequencyChange);
 		runTest("auto eq policy disables after manual band gain edit", testAutoEqPolicyDisablesAfterManualBandGainEdit);
 		runTest("auto eq policy disables after manual band frequency edit", testAutoEqPolicyDisablesAfterManualBandFrequencyEdit);
+		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
+		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
 		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
 		runTest("audio passthru cleanup continues after restore failure", testAudioPassthruCleanupContinuesAfterRestoreFailure);
 		runTest("audio passthru cleanup stops after thread shutdown timeout", testAudioPassthruCleanupStopsAfterThreadShutdownTimeout);
+		runTest("buffer policy migrates legacy machine default", testBufferPolicyMigratesLegacyMachineDefaultToLowLatencyDefault);
+		runTest("buffer policy preserves explicit modern machine default", testBufferPolicyPreservesExplicitModernMachineDefault);
+		runTest("buffer policy falls back when machine default missing", testBufferPolicyFallsBackWhenMachineDefaultMissing);
+		runTest("buffer policy clamps out of range values", testBufferPolicyClampsOutOfRangeValues);
 		runTest("quiet floor retains boost after prolonged low output", testQuietFloorRetainsBoostAfterProlongedLowOutput);
 		runTest("quiet floor raise stops near ceiling", testQuietFloorRaiseStopsNearCeiling);
 		runTest("quiet floor release and silence decay work", testQuietFloorReleaseAndSilenceDecayWork);

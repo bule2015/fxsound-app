@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
 #include "OutputDeviceSelection.h"
+#include "StartupOptionPolicy.h"
 #include "FxEffects.h"
 #include "FxPresetSaveDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
@@ -317,17 +318,23 @@ FxController::~FxController()
 void FxController::config(const String& commandline)
 {
     auto arg_list = ArgumentList(File::getSpecialLocation(File::SpecialLocationType::invokedExecutableFile).getFileName(), commandline);
+	std::vector<std::wstring> startup_arguments;
+	startup_arguments.reserve(static_cast<size_t>(arg_list.size()));
+	for (int index = 0; index < arg_list.size(); ++index)
+	{
+		startup_arguments.push_back(arg_list[index].text.toWideCharPointer());
+	}
 
     auto preset = arg_list.getValueForOption("--preset").unquoted();
     auto view = arg_list.getValueForOption("--view");
     auto output_device = arg_list.getValueForOption("--output").unquoted();
-    auto language = arg_list.getValueForOption("--language");
+	auto language = arg_list.getValueForOption("--language");
 	auto numbands = arg_list.getValueForOption("--num_bands");
 	auto balance = arg_list.getValueForOption("--balance");
 	auto filterq = arg_list.getValueForOption("--filter_q");
 	auto mastergain = arg_list.getValueForOption("--master_gain");
 	auto normalization = arg_list.getValueForOption("--normalization");
-	output_latency_logging_enabled_ = arg_list.containsOption("--measure-output-latency");
+	output_latency_logging_enabled_ = FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(startup_arguments);
     
     if (preset.isNotEmpty())
     {
