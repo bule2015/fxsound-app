@@ -32,6 +32,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "u_sndDevices.h"
 #include "sndDevices.h"
 
+static int sndDevicesShouldMigrateLegacyBufferDefault(int iBufferSizeMilliSecs)
+{
+	switch (iBufferSizeMilliSecs)
+	{
+	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_32BIT_CPU:
+	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_32BIT_CPU:
+	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_64BIT_CPU:
+	case SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_64BIT_OS:
+		return 1;
+
+	default:
+		return 0;
+	}
+}
+
 /*
  * FUNCTION: sndDevicesReInit()
  * DESCRIPTION:
@@ -48,6 +63,7 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 	HRESULT hr;
 	int resultFlag;
 	int loopCount;
+	int hasUserBufferSizeSetting;
 	int captureAllocSize, playbackAllocSize;
 	int captureBufferChannelsForAllocation;
     
@@ -211,7 +227,9 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 			if (sndDeviceReadFromRegistry(hp_sndDevices, REG_CURRENT_USER, SND_DEVICES_REGISTRY_USER_BUFFER_SIZE, regVal) != OKAY)
 				return(NOT_OKAY);
 
-			if (wcscmp(regVal, L"") != 0)
+			hasUserBufferSizeSetting = (wcscmp(regVal, L"") != 0);
+
+			if (hasUserBufferSizeSetting)
 			{
 				swscanf(regVal, L"%d", &(cast_handle->bufferSizeMilliSecs));
 			}
@@ -227,6 +245,9 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 					swscanf(regVal, L"%d", &(cast_handle->bufferSizeMilliSecs));
 				}
 			}
+			// Keep user overrides intact, but migrate stock legacy defaults to the new low-latency default.
+			if ((!hasUserBufferSizeSetting) && ((wcscmp(regVal, L"") == 0) || sndDevicesShouldMigrateLegacyBufferDefault(cast_handle->bufferSizeMilliSecs)))
+				cast_handle->bufferSizeMilliSecs = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
 
 			// Check the ranges on the buffer size setting.
 			if ((cast_handle->bufferSizeMilliSecs < SND_DEVICES_CAPTURE_BUFFER_MIN_SIZE_MILLI_SECS) || (cast_handle->bufferSizeMilliSecs >(SND_DEVICES_CAPTURE_BUFFER_MAX_SIZE_MILLI_SECS)))
@@ -375,7 +396,7 @@ int PT_DECLSPEC sndCheckDeviceChanges(PT_HANDLE* hp_sndDevices, BOOL* bp_deviceC
 			{
 				deviceFound = TRUE;
 
-				// Device ID matched — now check if its state has changed
+				// Device ID matched; now check if its state has changed
 				DWORD currentState = 0;
 				hr = pDevice->GetState(&currentState);
 				if (SUCCEEDED(hr) && currentState != cast_handle->deviceState[j])

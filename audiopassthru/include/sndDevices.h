@@ -191,12 +191,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SND_DEVICES_MAX_NUM_CHANS 8
 
 // These are the average delay buffer sizes. The actual internal buffers will be twice this length.
+// The legacy OS-specific values are kept for migration of existing registry settings.
 #define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_32BIT_CPU 80
 #define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_32BIT_CPU 100
 #define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_64BIT_CPU 100
 #define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_64BIT_CPU 60
 #define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_64BIT_OS 40
-#define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_32BIT_CPU
+#define SND_DEVICES_CAPTURE_BUFFER_LOW_LATENCY_DEFAULT_SIZE_MILLI_SECS 10
+#define SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS SND_DEVICES_CAPTURE_BUFFER_LOW_LATENCY_DEFAULT_SIZE_MILLI_SECS
 #define SND_DEVICES_CAPTURE_BUFFER_MIN_SIZE_MILLI_SECS 10
 #define SND_DEVICES_CAPTURE_BUFFER_MAX_SIZE_MILLI_SECS 100
 #define SND_DEVICES_REFTIMES_PER_SEC 1.0e7		// A fixed reference number, used in for internal calculations
@@ -424,6 +426,24 @@ struct sndDevicesHdlType {
 	int MeasuredVirtualSilentBufferCount;	// This is buffer of measured all very low values, essentially silence.
 	int MeasuredTrueSilentBufferCount;		// This is buffer of measured all true zero values.
     BOOL playbackDeviceIsUnavailable;
+	BOOL latencyLoggingEnabled;
+
+	LONGLONG latencyQpcFrequency;
+	LONGLONG latencyCaptureBatchStartQpc;
+	UINT64 latencyCaptureBatchQpc100ns;
+	LONGLONG latencyLastLogQpc;
+	double latencyCaptureToRenderSumMs;
+	double latencyCaptureToRenderMinMs;
+	double latencyCaptureToRenderMaxMs;
+	double latencyCaptureAgeSumMs;
+	double latencyCaptureAgeMinMs;
+	double latencyCaptureAgeMaxMs;
+	double latencyPlaybackQueueSumMs;
+	double latencyPlaybackQueueMaxMs;
+	double latencyEstimatedOutputSumMs;
+	double latencyEstimatedOutputMinMs;
+	double latencyEstimatedOutputMaxMs;
+	UINT32 latencyMeasurementCount;
 
 	// Module common status flag, set by functions that can't complete their requestion operation
 	int function_status;

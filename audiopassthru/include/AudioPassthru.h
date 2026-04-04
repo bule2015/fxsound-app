@@ -80,6 +80,7 @@ public:
 	virtual void setDspProcessingModule(DfxDsp* pDspProcessingModule) = 0;
 	virtual void setAsPlaybackDevice(const SoundDevice sound_device) = 0;
 	virtual void registerCallback(AudioPassthruCallback* callback) = 0;
+	virtual void setOutputLatencyLoggingEnabled(bool enabled) = 0;
 	virtual bool isPlaybackDeviceAvailable() = 0;
 	virtual void restoreDefaultPlaybackDevice() = 0;
 	virtual bool restartProcessingForDeviceChange() = 0;
@@ -99,6 +100,7 @@ public:
 	void setDspProcessingModule(DfxDsp* pDspProcessingModule) override;
 	void setAsPlaybackDevice(const SoundDevice sound_device) override;
 	void registerCallback(AudioPassthruCallback *callback) override;
+	void setOutputLatencyLoggingEnabled(bool enabled) override;
     bool isPlaybackDeviceAvailable() override;
 	void restoreDefaultPlaybackDevice() override;
 	bool restartProcessingForDeviceChange() override;

@@ -291,6 +291,7 @@ private:
 	bool audio_process_on_;
 	std::time_t audio_process_start_time_;
 	int64 audio_process_grace_deadline_ms_;
+	bool output_latency_logging_enabled_;
 
 	bool minimize_tip_;
 	bool survey_tip_;

@@ -58,14 +58,15 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 	UINT32 i;
 	int numCaptureChannels;
 	int numPlaybackChannels;
+	LARGE_INTEGER capture_qpc;
 	UINT32 numDesiredCaptureFrames;
 	UINT32 halfCaptureBufferSize;
 	UINT32 quarterCaptureBufferSize;
+	UINT32 lowLatencyPlaybackTargetSize;
+	UINT32 lowLatencyPlaybackRefillThreshold;
 	int i_playback_index;
-#ifdef _DEBUG
 	UINT64 DevicePosition;
 	UINT64 QPCPosition;
-#endif
 
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices;
 
@@ -124,11 +125,13 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 
 		halfCaptureBufferSize = cast_handle->bufferFrameSizeCapture/2;
 		quarterCaptureBufferSize = cast_handle->bufferFrameSizeCapture/4;
+		lowLatencyPlaybackTargetSize = quarterCaptureBufferSize;
+		lowLatencyPlaybackRefillThreshold = cast_handle->bufferFrameSizeCapture - lowLatencyPlaybackTargetSize;
 
-		// If playback buffer is totally empty, don't send more buffers to playback until we fill 1/2 the capture buffer.
+		// If playback buffer is totally empty, don't send more buffers to playback until we fill a 1/4-buffer low-latency target.
 		if( numFramesQueuedUpToPlayReferencedToCapture == 0 )
 		{
-			numDesiredCaptureFrames = halfCaptureBufferSize;
+			numDesiredCaptureFrames = lowLatencyPlaybackTargetSize;
 			cast_handle->playbackIsActive = SND_DEVICES_PLAYBACK_IS_STOPPED;
 			
 			if( cast_handle->playbackStreamIsTemporarilyPaused == 0 )
@@ -148,12 +151,12 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 				hr = cast_handle->pAudioClientPlayback->Start(); // Restart playback.
 			}
 
-			// If the playback buffer is already at least 1/2 full, don't grab anymore capture buffers.
-			if( cast_handle->numPlaybackFramesAvailableToFill < halfCaptureBufferSize )
+			// If the playback buffer is already at least at the low-latency target, don't grab anymore capture buffers.
+			if( cast_handle->numPlaybackFramesAvailableToFill <= lowLatencyPlaybackRefillThreshold )
 				numDesiredCaptureFrames = 0;
 			else
-				// If the playback buffer is less than 1/2 full, get what we need to make 1/2 full.
-				numDesiredCaptureFrames = cast_handle->numPlaybackFramesAvailableToFill - halfCaptureBufferSize;
+				// If the playback buffer is below the low-latency target, get only what is needed to reach that target.
+				numDesiredCaptureFrames = cast_handle->numPlaybackFramesAvailableToFill - lowLatencyPlaybackRefillThreshold;
 		}
 
 		if( numDesiredCaptureFrames == 0 )
@@ -168,14 +171,26 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 		{
 			if( packetLength > 0 )
 			{
+				if ((cast_handle->latencyLoggingEnabled == TRUE) &&
+					(cast_handle->capturedFramesCount == 0) &&
+					(cast_handle->latencyCaptureBatchStartQpc == 0) &&
+					(cast_handle->latencyQpcFrequency != 0))
+				{
+					if (QueryPerformanceCounter(&capture_qpc))
+						cast_handle->latencyCaptureBatchStartQpc = capture_qpc.QuadPart;
+				}
+
 				// Get the data in this packet.
 				hr = cast_handle->pAudioCaptureLoopback->GetBuffer(&(cast_handle->pDataPacketCapture), &(cast_handle->numCaptureFramesAvailable), &flags,
-#ifdef _DEBUG
-					&DevicePosition, &QPCPosition);
-#else
-					NULL, NULL);
-#endif
+					(cast_handle->latencyLoggingEnabled == TRUE) ? &DevicePosition : NULL,
+					(cast_handle->latencyLoggingEnabled == TRUE) ? &QPCPosition : NULL);
 				if (FAILED(hr)) goto Exit;
+
+				if ((cast_handle->latencyLoggingEnabled == TRUE) &&
+					(cast_handle->capturedFramesCount == 0) &&
+					(cast_handle->latencyCaptureBatchQpc100ns == 0) &&
+					(QPCPosition != 0))
+					cast_handle->latencyCaptureBatchQpc100ns = QPCPosition;
 
 				fptr = (float *)(cast_handle->pDataPacketCapture);
 

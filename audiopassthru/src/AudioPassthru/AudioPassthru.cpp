@@ -98,6 +98,11 @@ void AudioPassthru::registerCallback(AudioPassthruCallback* callback)
 	data_->registerCallback(callback);
 }
 
+void AudioPassthru::setOutputLatencyLoggingEnabled(bool enabled)
+{
+	data_->setOutputLatencyLoggingEnabled(enabled);
+}
+
 bool AudioPassthru::isPlaybackDeviceAvailable()
 {
     return data_->isPlaybackDeviceAvailable();

@@ -50,6 +50,7 @@ public:
 	DWORD threadWorker(void); // Needs to be public to be called from static thread starter function
 	int setTargetedRealPlaybackDevice(const std::wstring sound_device_guid);
 	void registerCallback(AudioPassthruCallback *callback);
+	void setOutputLatencyLoggingEnabled(bool enabled);
     bool isPlaybackDeviceAvailable();
 	void restoreDefaultPlaybackDevice();
 	bool restartProcessingForDeviceChange();

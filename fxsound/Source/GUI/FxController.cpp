@@ -243,6 +243,7 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 
 	audio_process_start_time_ = -1LL;
 	audio_process_grace_deadline_ms_ = 0;
+	output_latency_logging_enabled_ = false;
     main_window_ = nullptr;
     audio_passthru_ = nullptr;
 
@@ -326,6 +327,7 @@ void FxController::config(const String& commandline)
 	auto filterq = arg_list.getValueForOption("--filter_q");
 	auto mastergain = arg_list.getValueForOption("--master_gain");
 	auto normalization = arg_list.getValueForOption("--normalization");
+	output_latency_logging_enabled_ = arg_list.containsOption("--measure-output-latency");
     
     if (preset.isNotEmpty())
     {
@@ -425,6 +427,11 @@ void FxController::config(const String& commandline)
 	}		
 	if (mg < -20 || mg > +20) mg = DEFAULT_MASTER_GAIN;
 	setMasterGain(mg);
+
+	if (output_latency_logging_enabled_)
+	{
+		logMessage("Output latency logging enabled");
+	}
 }
 
 void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray_view, IAudioPassthru* audio_passthru)
@@ -434,6 +441,7 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 		main_window_ = main_window;
 		audio_passthru_ = audio_passthru;
 		system_tray_view_ = system_tray_view;
+		audio_passthru_->setOutputLatencyLoggingEnabled(output_latency_logging_enabled_);
         
         if (audio_passthru_->init() != 0)
         {

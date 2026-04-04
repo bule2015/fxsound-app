@@ -34,7 +34,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "pstr.h"
 #include "reg.h"
 #include "mry.h"
-#include "operatingSystem.h"
 #include "u_sndDevices.h"
 #include "sndDevices.h"
 
@@ -716,13 +715,11 @@ int PT_DECLSPEC sndDevicesGetBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int i
 
 /*
  * FUNCTION: sndDevicesGetRecommendedBufferSizeMilliSecs()
- * DESCRIPTION: Gets the recommended buffer size in millisecs, based on CPU and OS characteristics.
+ * DESCRIPTION: Gets the recommended low-latency buffer size in millisecs.
  */
 int PT_DECLSPEC sndDevicesGetRecommendedBufferSizeMilliSecs(PT_HANDLE *hp_sndDevices, int *ipBufferSize)
 {
 	struct sndDevicesHdlType *cast_handle;
-	unsigned int procInfo;
-	int numCores;
 
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices;
 
@@ -730,36 +727,6 @@ int PT_DECLSPEC sndDevicesGetRecommendedBufferSizeMilliSecs(PT_HANDLE *hp_sndDev
 		return(NOT_OKAY);
 
 	*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS;
-
-	// Get the current OS
-	if( operatingSystemGetSystemProperties(&procInfo, &numCores) != OKAY )
-		return(NOT_OKAY);
-
-	if( procInfo & OPERATING_SYSTEM_CPU_32 )
-	{
-		// 32 bit processor and OS case
-		if( procInfo & OPERATING_SYSTEM_VISTA_32 )
-			*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_32BIT_CPU;
-		else
-			*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_32BIT_CPU;
-	}
-	else
-	{
-		// 64 bit processor case
-		if( procInfo & OPERATING_SYSTEM_32_BIT_OS )
-		{
-			// 32 bit OS on 64 bit processor
-			if( procInfo & OPERATING_SYSTEM_VISTA_32 )
-				*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_VISTA_64BIT_CPU;
-			else
-				*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_32BIT_OS_64BIT_CPU;
-		}
-		else
-		{
-			// 64 bit OS on 64 bit processor
-			*ipBufferSize = SND_DEVICES_CAPTURE_BUFFER_DEFAULT_SIZE_MILLI_SECS_64BIT_OS;
-		}
-	}
 
 	return(OKAY);
 }
