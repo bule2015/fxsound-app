@@ -42,6 +42,8 @@ private:
     
     std::unique_ptr<Drawable> up_image_;
     std::unique_ptr<Drawable> down_image_;
+    std::unique_ptr<Drawable> up_selected_image_;
+    std::unique_ptr<Drawable> down_selected_image_;
     DrawableButton up_button_;
     DrawableButton down_button_;
     Label device_name_;

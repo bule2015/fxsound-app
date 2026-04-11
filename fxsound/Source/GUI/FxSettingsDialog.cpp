@@ -24,15 +24,44 @@ namespace
 {
 std::unique_ptr<Drawable> createEqualizerButtonIcon()
 {
-	auto drawable = std::make_unique<DrawablePath>();
-	Path path;
-	path.addRoundedRectangle(0.0f, 8.0f, 18.0f, 4.0f, 1.5f);
-	path.addRoundedRectangle(6.0f, 0.0f, 4.0f, 20.0f, 1.5f);
-	path.addRoundedRectangle(20.0f, 2.0f, 4.0f, 16.0f, 1.5f);
-	path.addRoundedRectangle(30.0f, 5.0f, 4.0f, 10.0f, 1.5f);
-	drawable->setPath(path);
-	drawable->setFill(FillType(Colour(FXCOLOR(DefaultText)).withAlpha(1.0f)));
-	return drawable;
+    auto root = std::make_unique<DrawableComposite>();
+    auto color = Colour(0xFF7E7E7E);
+
+    auto addLine = [&](float x1, float y1, float x2, float y2)
+    {
+        auto line = std::make_unique<DrawablePath>();
+        Path path;
+        path.startNewSubPath(x1, y1);
+        path.lineTo(x2, y2);
+        line->setPath(path);
+        PathStrokeType stroke(2.0f, PathStrokeType::curved, PathStrokeType::rounded);
+        line->setStrokeFill(FillType(color));
+        line->setStrokeType(stroke);
+        root->addAndMakeVisible(line.release());
+    };
+
+    auto addCircle = [&](float cx, float cy)
+    {
+        auto circle = std::make_unique<DrawablePath>();
+        Path path;
+        path.addEllipse(cx - 2.5f, cy - 2.5f, 5.0f, 5.0f);
+        circle->setPath(path);
+        circle->setFill(FillType(color));
+        root->addAndMakeVisible(circle.release());
+    };
+
+    addLine(3.0f, 7.0f, 13.5f, 7.0f);
+    addLine(18.5f, 7.0f, 21.0f, 7.0f);
+    addCircle(16.0f, 7.0f);
+    addLine(3.0f, 12.0f, 9.5f, 12.0f);
+    addLine(14.5f, 12.0f, 21.0f, 12.0f);
+    addCircle(12.0f, 12.0f);
+    addLine(3.0f, 17.0f, 6.5f, 17.0f);
+    addLine(11.5f, 17.0f, 21.0f, 17.0f);
+    addCircle(9.0f, 17.0f);
+
+    root->setContentArea({ 0.0f, 0.0f, 24.0f, 24.0f });
+    return root;
 }
 }
 
@@ -75,7 +104,10 @@ void FxSettingsDialog::SettingsButton::paint(Graphics& g)
 	auto rect = juce::Rectangle<float>(0, 0, (float)bounds.getHeight(), (float)bounds.getHeight());
 	g.fillRoundedRectangle(rect, (float)bounds.getHeight()/4);
 
-	image_->drawWithin(g, rect.reduced(10, 10), RectanglePlacement::centred, 1.0f);
+	if (image_ != nullptr)
+	{
+		image_->drawWithin(g, rect.reduced(10, 10), RectanglePlacement::centred, 1.0f);
+	}
 
 	if (getToggleState())
 	{

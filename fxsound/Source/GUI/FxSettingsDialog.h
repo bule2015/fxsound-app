@@ -60,7 +60,11 @@ private:
 
 		void setImage(const Drawable* image)
 		{
-			image_ = image->createCopy();
+			image_.reset();
+			if (image != nullptr)
+			{
+				image_ = image->createCopy();
+			}
 		}
 
 		void paintButton(Graphics &, bool, bool) override {}

@@ -50,6 +50,29 @@ bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
         rhs.container_id.isEmpty() &&
         lhs.device_name == rhs.device_name;
 }
+
+std::unique_ptr<Drawable> createSelectedArrowDrawable(bool is_up)
+{
+    auto drawable = std::make_unique<DrawablePath>();
+    Path path;
+    if (is_up)
+    {
+        path.startNewSubPath(3.0f, 1.25f);
+        path.lineTo(0.5f, 3.75f);
+        path.lineTo(5.5f, 3.75f);
+    }
+    else
+    {
+        path.startNewSubPath(0.5f, 1.25f);
+        path.lineTo(5.5f, 1.25f);
+        path.lineTo(3.0f, 3.75f);
+    }
+    path.closeSubPath();
+
+    drawable->setPath(path);
+    drawable->setFill(FillType(Colour(FxTheme::getThemeMode() == FxThemeMode::Dark ? 0xFFB1B1B1u : 0xFF4E4E4Eu)));
+    return drawable;
+}
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -58,10 +81,12 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
     up_image_ = Drawable::createFromImageData(FXIMAGE(ArrowUp), FXIMAGESIZE(ArrowUp));
     down_image_ = Drawable::createFromImageData(FXIMAGE(ArrowDown), FXIMAGESIZE(ArrowDown));
+    up_selected_image_ = createSelectedArrowDrawable(true);
+    down_selected_image_ = createSelectedArrowDrawable(false);
 
     up_button_.setMouseCursor(MouseCursor::PointingHandCursor);
     up_button_.setSize(BUTTON_WIDTH, BUTTON_WIDTH);
-    up_button_.setImages(up_image_.get(), up_image_.get(), up_image_.get());
+    up_button_.setImages(up_image_.get(), up_selected_image_.get(), up_image_.get());
     up_button_.setWantsKeyboardFocus(true);
     up_button_.onClick = [this]() {
         output_preference_list_model_.moveRowUp(row_index_);
@@ -69,17 +94,18 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
     down_button_.setMouseCursor(MouseCursor::PointingHandCursor);
     down_button_.setSize(BUTTON_WIDTH, BUTTON_WIDTH);
-    down_button_.setImages(down_image_.get(), down_image_.get(), down_image_.get());
+    down_button_.setImages(down_image_.get(), down_selected_image_.get(), down_image_.get());
     down_button_.setWantsKeyboardFocus(true);
     down_button_.onClick = [this]() {
         output_preference_list_model_.moveRowDown(row_index_);
         };
 
     preset_list_.setColour(ComboBox::ColourIds::backgroundColourId, Colour(FXCOLOR(WidgetBackground)).withAlpha(1.0f));
-    preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(1.0f));
+    preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(0.5f));
     preset_list_.setColour(ComboBox::ColourIds::focusedOutlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
     preset_list_.setWantsKeyboardFocus(true);
-    preset_list_.setJustificationType(Justification::centredLeft);   
+    preset_list_.setJustificationType(Justification::centredLeft);
+    preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
     preset_list_.onChange = [this]() {
         auto index = preset_list_.getSelectedItemIndex();
         if (index >= 0)
@@ -102,7 +128,8 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     };
 
     auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
-    device_name_.setFont(theme.getNormalFont().withHeight(14));
+    device_name_.setInterceptsMouseClicks(false, false);
+    device_name_.setFont(theme.getNormalFont());
     device_name_.setMinimumHorizontalScale(1.0f);
 
     addAndMakeVisible(up_button_);
@@ -162,13 +189,22 @@ void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConf
     if (is_row_selected_ != is_row_selected)
     {
         is_row_selected_ = is_row_selected;
-        auto outline = is_row_selected_ ? FXCOLOR(SelectedRowOutline) : FXCOLOR(RowOutline);
-        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(outline).withAlpha(1.0f));
+        if (is_row_selected_)
+        {
+            up_button_.setImages(up_selected_image_.get(), up_selected_image_.get(), up_selected_image_.get());
+            down_button_.setImages(down_selected_image_.get(), down_selected_image_.get(), down_selected_image_.get());
+            preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
+        }
+        else
+        {
+            up_button_.setImages(up_image_.get(), up_selected_image_.get(), up_image_.get());
+            down_button_.setImages(down_image_.get(), down_selected_image_.get(), down_image_.get());
+            preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(0.5f));
+        }
         repaint();
     }
 
     preset_list_.clear();
-    preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
     auto& model = FxModel::getModel();
     int selected_id = 0;
     for (auto i = 0; i < model.getPresetCount(); i++)
