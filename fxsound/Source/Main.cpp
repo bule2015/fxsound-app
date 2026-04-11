@@ -34,6 +34,38 @@ extern "C" {
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
 }
 
+namespace
+{
+constexpr auto kFxSoundMessageWindowName = L"FxSoundHotkeys";
+
+DWORD getCurrentSessionId()
+{
+    DWORD session_id = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session_id);
+    return session_id;
+}
+
+String buildSessionInstanceMutexName()
+{
+    return "Local\\FxSound_" + String(getCurrentSessionId());
+}
+
+bool signalExistingSessionInstance()
+{
+    for (int attempt = 0; attempt < 40; ++attempt)
+    {
+        if (auto existing_window = ::FindWindowW(nullptr, kFxSoundMessageWindowName))
+        {
+            return ::PostMessage(existing_window, FxController::WMAPP_SHOW_MAIN_WINDOW, 0, 0) != FALSE;
+        }
+
+        Thread::sleep(50);
+    }
+
+    return false;
+}
+}
+
 //==============================================================================
 class FxSoundApplication : public JUCEApplication
 {
@@ -43,7 +75,7 @@ public:
 
     const String getApplicationName() override       { return ProjectInfo::projectName; }
     const String getApplicationVersion() override    { return ProjectInfo::versionString; }
-    bool moreThanOneInstanceAllowed() override       { return false; }
+    bool moreThanOneInstanceAllowed() override       { return true; }
 
     //==============================================================================
     void initialise (const String& commandline) override
@@ -51,11 +83,19 @@ public:
         // This method is where you should put your application's initialisation code..
         try
         {
+            if (!acquireSessionInstanceLock())
+            {
+                signalExistingSessionInstance();
+                quit();
+                return;
+            }
+
             SetUnhandledExceptionFilter(unhandledExceptionFilter);
 
             HRESULT hRes = CoInitializeEx(0, COINIT_MULTITHREADED);
             if (SUCCEEDED(hRes))
             {
+                com_initialized_ = true;
                 CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT,
                     RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
             }
@@ -119,7 +159,12 @@ public:
 
         LookAndFeel::setDefaultLookAndFeel(nullptr);
 
-        CoUninitialize();
+        releaseSessionInstanceLock();
+        if (com_initialized_)
+        {
+            CoUninitialize();
+            com_initialized_ = false;
+        }
     }
 
     //==============================================================================
@@ -139,6 +184,38 @@ public:
 private:
     FxTheme theme_;
     static constexpr int MAX_FRAMES = 64;
+    HANDLE session_instance_mutex_ = nullptr;
+    bool com_initialized_ = false;
+
+    bool acquireSessionInstanceLock()
+    {
+        auto mutex_name = buildSessionInstanceMutexName();
+        session_instance_mutex_ = ::CreateMutexW(nullptr, TRUE, mutex_name.toWideCharPointer());
+
+        if (session_instance_mutex_ == nullptr)
+        {
+            return true;
+        }
+
+        if (::GetLastError() == ERROR_ALREADY_EXISTS)
+        {
+            ::CloseHandle(session_instance_mutex_);
+            session_instance_mutex_ = nullptr;
+            return false;
+        }
+
+        return true;
+    }
+
+    void releaseSessionInstanceLock()
+    {
+        if (session_instance_mutex_ != nullptr)
+        {
+            ::ReleaseMutex(session_instance_mutex_);
+            ::CloseHandle(session_instance_mutex_);
+            session_instance_mutex_ = nullptr;
+        }
+    }
 
     static LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exception_info)
     {

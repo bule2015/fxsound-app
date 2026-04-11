@@ -59,6 +59,7 @@ public:
 	static constexpr char HK_CMD_NEXT_PRESET[] = "cmd_next_preset";
 	static constexpr char HK_CMD_PREVIOUS_PRESET[] = "cmd_previous_preset";
 	static constexpr char HK_CMD_NEXT_OUTPUT[] = "cmd_change_output";
+	static constexpr UINT WMAPP_SHOW_MAIN_WINDOW = WM_APP + 2;
 	
 	static FxController& getInstance()
 	{

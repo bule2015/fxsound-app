@@ -1874,6 +1874,13 @@ LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, cons
 				controller->powerOn(false);
 			}
 		}
+		break;
+
+		case WMAPP_SHOW_MAIN_WINDOW:
+		{
+			controller->showMainWindow();
+		}
+		break;
 	}
 
 	return DefWindowProc(hwnd, message, w_param, l_param);
