@@ -93,37 +93,41 @@ bool FxSettingsDialog::keyPressed(const KeyPress& key)
 FxSettingsDialog::SettingsComponent::SettingsComponent()
 {
 	audio_button_ = std::make_unique<SettingsButton>("Audio");
-	audio_button_->setToggleState(true, NotificationType::dontSendNotification);
 	audio_button_->setImage(Drawable::createFromImageData(BinaryData::speaker_svg, BinaryData::speaker_svgSize).get());
 	audio_button_->addListener(this);
 
 	equalizer_button_ = std::make_unique<SettingsButton>("Equalizer");
-	equalizer_button_->setToggleState(false, NotificationType::dontSendNotification);
 	auto equalizer_icon = FxTheme::createEqualizerButtonIcon();
 	equalizer_button_->setImage(equalizer_icon.get());
 	equalizer_button_->addListener(this);
 
 	general_button_ = std::make_unique<SettingsButton>("General");
-	general_button_->setToggleState(false, NotificationType::dontSendNotification);
 	general_button_->setImage(Drawable::createFromImageData(BinaryData::settings_svg, BinaryData::settings_svgSize).get());
 	general_button_->addListener(this);
 	
 	help_button_ = std::make_unique<SettingsButton>("Help");
-	help_button_->setToggleState(false, NotificationType::dontSendNotification);
 	help_button_->setImage(Drawable::createFromImageData(BinaryData::question_svg, BinaryData::question_svgSize).get());
 	help_button_->addListener(this);    
 
-	addAndMakeVisible(audio_button_.get());
-	addAndMakeVisible(equalizer_button_.get());
-	addAndMakeVisible(general_button_.get());
-	addAndMakeVisible(help_button_.get());
+	for (auto* button : getPaneButtons())
+	{
+		addAndMakeVisible(button);
+	}
 
-	addAndMakeVisible(audio_settings_pane_);
-	addChildComponent(equalizer_settings_pane_);
-	addChildComponent(general_settings_pane_);
-	addChildComponent(help_settings_pane_);
+	for (auto [button, pane] : getPaneEntries())
+	{
+		if (button == audio_button_.get())
+		{
+			addAndMakeVisible(pane);
+		}
+		else
+		{
+			addChildComponent(pane);
+		}
+	}
 
-    setSize(WIDTH, getPreferredHeight());
+	showPane(PaneId::Audio);
+	setSize(WIDTH, getPreferredHeight());
 }
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
@@ -136,70 +140,89 @@ int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 
 void FxSettingsDialog::SettingsComponent::resized()
 {
-	audio_button_->setBounds(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-	equalizer_button_->setBounds(BUTTON_X, audio_button_->getBottom() + 20, BUTTON_WIDTH, BUTTON_HEIGHT);
-	general_button_->setBounds(BUTTON_X, equalizer_button_->getBottom() + 20, BUTTON_WIDTH, BUTTON_HEIGHT);
-	help_button_->setBounds(BUTTON_X, general_button_->getBottom() + 20, BUTTON_WIDTH, BUTTON_HEIGHT);
+	auto y = BUTTON_Y;
+	for (auto* button : getPaneButtons())
+	{
+		button->setBounds(BUTTON_X, y, BUTTON_WIDTH, BUTTON_HEIGHT);
+		y += BUTTON_HEIGHT + 20;
+	}
 
 	juce::Rectangle<int> pane_rect(SEPARATOR_X + 1, 1, getWidth() - SEPARATOR_X + 1, getHeight() - 1);
-	
-	audio_settings_pane_.setBounds(pane_rect);
-	equalizer_settings_pane_.setBounds(pane_rect);
-	general_settings_pane_.setBounds(pane_rect);
-	help_settings_pane_.setBounds(pane_rect);
+
+	for (auto* pane : getPanes())
+	{
+		pane->setBounds(pane_rect);
+	}
 }
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
 {
-	if (button == audio_button_.get())
+	for (int index = 0; index < (int)PaneId::Count; ++index)
 	{
-		showPane(*audio_button_, audio_settings_pane_);
-	}
-	else if (button == equalizer_button_.get())
-	{
-		showPane(*equalizer_button_, equalizer_settings_pane_);
-	}
-	else if (button == general_button_.get())
-	{
-		showPane(*general_button_, general_settings_pane_);
-	}
-	else if (button == help_button_.get())
-	{
-		showPane(*help_button_, help_settings_pane_);
+		if (getPaneButtons()[(size_t)index] == button)
+		{
+			showPane((PaneId)index);
+			break;
+		}
 	}
 }
 
-void FxSettingsDialog::SettingsComponent::showPane(SettingsButton& active_button, Component& active_pane)
+std::array<FxSettingsDialog::SettingsButton*, 4> FxSettingsDialog::SettingsComponent::getPaneButtons()
 {
-	audio_button_->setToggleState(audio_button_.get() == &active_button, NotificationType::dontSendNotification);
-	equalizer_button_->setToggleState(equalizer_button_.get() == &active_button, NotificationType::dontSendNotification);
-	general_button_->setToggleState(general_button_.get() == &active_button, NotificationType::dontSendNotification);
-	help_button_->setToggleState(help_button_.get() == &active_button, NotificationType::dontSendNotification);
+	return { audio_button_.get(), equalizer_button_.get(), general_button_.get(), help_button_.get() };
+}
 
-	audio_settings_pane_.setVisible(&audio_settings_pane_ == &active_pane);
-	equalizer_settings_pane_.setVisible(&equalizer_settings_pane_ == &active_pane);
-	general_settings_pane_.setVisible(&general_settings_pane_ == &active_pane);
-	help_settings_pane_.setVisible(&help_settings_pane_ == &active_pane);
+std::array<Component*, 4> FxSettingsDialog::SettingsComponent::getPanes()
+{
+	return { &audio_settings_pane_, &equalizer_settings_pane_, &general_settings_pane_, &help_settings_pane_ };
+}
+
+std::array<std::pair<FxSettingsDialog::SettingsButton*, Component*>, 4> FxSettingsDialog::SettingsComponent::getPaneEntries()
+{
+	return {
+		std::make_pair(audio_button_.get(), static_cast<Component*>(&audio_settings_pane_)),
+		std::make_pair(equalizer_button_.get(), static_cast<Component*>(&equalizer_settings_pane_)),
+		std::make_pair(general_button_.get(), static_cast<Component*>(&general_settings_pane_)),
+		std::make_pair(help_button_.get(), static_cast<Component*>(&help_settings_pane_))
+	};
+}
+
+void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
+{
+	auto entries = getPaneEntries();
+	for (int index = 0; index < (int)entries.size(); ++index)
+	{
+		auto [button, pane] = entries[(size_t)index];
+		auto is_active = index == (int)active_pane;
+		button->setToggleState(is_active, NotificationType::dontSendNotification);
+		pane->setVisible(is_active);
+	}
 }
 
 FxSettingsDialog::SettingsPane::SettingsPane(String name)
 {
 	name_ = name;
-	auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
-
-    title_.setFont(theme.getTitleFont());
-	title_.setText(TRANS(name_), NotificationType::dontSendNotification);	
-	title_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	title_.setJustificationType(Justification::centredLeft);
 	addAndMakeVisible(title_);
+	lookAndFeelChanged();
 }
 
-void FxSettingsDialog::SettingsPane::paint(Graphics&)
+void FxSettingsDialog::SettingsPane::lookAndFeelChanged()
 {
-    auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+	auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+	title_.setFont(theme.getTitleFont());
+	title_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	refreshText();
+}
 
-    title_.setFont(theme.getTitleFont());
-    title_.setText(TRANS(name_), NotificationType::dontSendNotification);    
+void FxSettingsDialog::SettingsPane::paint(Graphics& g)
+{
+	ignoreUnused(g);
+}
+
+void FxSettingsDialog::SettingsPane::refreshText()
+{
+	title_.setText(TRANS(name_), NotificationType::dontSendNotification);
 }
 
 FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
@@ -238,8 +261,8 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 		updateResetPresetsButton();
 		};
 
-	setText();
-	output_preference_.update();
+	refreshText();
+	refreshOutputPreference();
 
 	addAndMakeVisible(&output_preference_title_);
 	addAndMakeVisible(&output_preference_);
@@ -292,14 +315,13 @@ void FxSettingsDialog::AudioSettingsPane::paint(Graphics& g)
 	g.setFillType(FillType(Colour(FXCOLOR(DefaultFill)).withAlpha(0.2f)));
 	g.fillRoundedRectangle(output_preference_bounds_, 8);
 
-	setText();
-
 	SettingsPane::paint(g);
 }
 
-void FxSettingsDialog::AudioSettingsPane::setText()
+void FxSettingsDialog::AudioSettingsPane::refreshText()
 {
 	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	SettingsPane::refreshText();
 
 	output_preference_title_.setFont(theme.getNormalFont());
 	output_preference_title_.setText(TRANS("Output Device Preference"), NotificationType::dontSendNotification);	
@@ -307,6 +329,11 @@ void FxSettingsDialog::AudioSettingsPane::setText()
 
 	reset_presets_button_.setButtonText(TRANS("Reset presets to factory defaults"));
 	resizeResetButton(reset_presets_button_.getX(), reset_presets_button_.getY());
+}
+
+void FxSettingsDialog::AudioSettingsPane::refreshOutputPreference()
+{
+	output_preference_.update();
 }
 
 void FxSettingsDialog::AudioSettingsPane::resizeResetButton(int x, int y)
@@ -341,11 +368,11 @@ void FxSettingsDialog::AudioSettingsPane::modelChanged(FxModel::Event model_even
 {
 	if (model_event == FxModel::Event::OutputListUpdated)
 	{
-		output_preference_.update();
+		refreshOutputPreference();
 	}
 	else if (model_event == FxModel::Event::PresetModified || model_event == FxModel::Event::PresetListUpdated)
 	{
-		output_preference_.update();
+		refreshOutputPreference();
 		updateResetPresetsButton();
 	}
 }
@@ -360,19 +387,9 @@ void FxSettingsDialog::AudioSettingsPane::visibilityChanged()
 {
 	if (isVisible())
 	{
-		output_preference_.update();
+		refreshOutputPreference();
 		updateResetPresetsButton();
     }
-}
-
-void FxSettingsDialog::AudioSettingsPane::mouseEnter(const MouseEvent& mouse_event)
-{
-	Component::mouseEnter(mouse_event);
-}
-
-void FxSettingsDialog::AudioSettingsPane::mouseExit(const MouseEvent& mouse_event)
-{
-	Component::mouseEnter(mouse_event);
 }
 
 FxSettingsDialog::EqualizerSettingsPane::EqualizerSettingsPane() :
@@ -496,7 +513,7 @@ FxSettingsDialog::EqualizerSettingsPane::EqualizerSettingsPane() :
 		restoreDefaults();
 	};
 
-	setText();
+	refreshText();
 
 	addAndMakeVisible(&equalizer_title_);
 	addAndMakeVisible(&equalizer_);
@@ -599,15 +616,15 @@ void FxSettingsDialog::EqualizerSettingsPane::paint(Graphics& g)
 	g.setFillType(FillType(Colour(FXCOLOR(DefaultFill)).withAlpha(0.2f)));
 	g.fillRoundedRectangle(equalizer_settings_bounds_, 8);
 
-	setText();
 	updateEqualizerBandsText();
 
 	SettingsPane::paint(g);
 }
 
-void FxSettingsDialog::EqualizerSettingsPane::setText()
+void FxSettingsDialog::EqualizerSettingsPane::refreshText()
 {
 	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	SettingsPane::refreshText();
 
 	equalizer_title_.setFont(theme.getNormalFont());
 	equalizer_title_.setText(TRANS("Equalizer:"), NotificationType::dontSendNotification);
@@ -772,7 +789,7 @@ FxSettingsDialog::GeneralSettingsPane::GeneralSettingsPane() :
 	addAndMakeVisible(&hotkeys_toggle_);
 	addAndMakeVisible(&language_switch_);
 
-	setText();
+	refreshText();
 }
 
 FxSettingsDialog::GeneralSettingsPane::~GeneralSettingsPane()
@@ -830,13 +847,12 @@ void FxSettingsDialog::GeneralSettingsPane::paint(Graphics& g)
 {
 	g.fillAll(getLookAndFeel().findColour(ResizableWindow::backgroundColourId));
 
-    setText();
-
 	SettingsPane::paint(g);    
 }
 
-void FxSettingsDialog::GeneralSettingsPane::setText()
+void FxSettingsDialog::GeneralSettingsPane::refreshText()
 {
+	SettingsPane::refreshText();
     launch_toggle_.setButtonText(TRANS("Launch on system startup"));
     hide_help_tips_toggle_.setButtonText(TRANS("Hide help tips for audio controls"));
 	hide_notifications_toggle_.setButtonText(TRANS("Hide notifications"));
@@ -872,7 +888,7 @@ FxSettingsDialog::HelpSettingsPane::HelpSettingsPane() : SettingsPane("Help"), a
 		FxController::getInstance().setAutoUpdates(auto_updates_toggle_.getToggleState());
 	};
 
-    setText();
+    refreshText();
 
 	addAndMakeVisible(version_title_);
 	addAndMakeVisible(version_text_);
@@ -917,19 +933,18 @@ void FxSettingsDialog::HelpSettingsPane::paint(Graphics& g)
 {
 	g.fillAll(getLookAndFeel().findColour(ResizableWindow::backgroundColourId));
 
-    setText();
-
 	SettingsPane::paint(g);
 }
 
-void FxSettingsDialog::HelpSettingsPane::setText()
+void FxSettingsDialog::HelpSettingsPane::refreshText()
 {
     auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	SettingsPane::refreshText();
 
     version_title_.setText(TRANS("Version"), NotificationType::dontSendNotification);
     version_title_.setFont(theme.getNormalFont());
     
-    version_text_.setText(L"v" + JUCEApplication::getInstance()->getApplicationVersion(), NotificationType::dontSendNotification);
+    version_text_.setText(getDisplayVersionText(), NotificationType::dontSendNotification);
     version_text_.setFont(theme.getSmallFont());
     
     support_title_.setText(TRANS("Support"), NotificationType::dontSendNotification);
@@ -944,4 +959,9 @@ void FxSettingsDialog::HelpSettingsPane::setText()
     helpcenter_link_.setButtonText(TRANS("Help center"));        
     feedback_link_.setButtonText(TRANS("Feedback"));
 	auto_updates_toggle_.setButtonText(TRANS("Automatic updates"));;
+}
+
+String FxSettingsDialog::HelpSettingsPane::getDisplayVersionText() const
+{
+	return "v" + JUCEApplication::getInstance()->getApplicationVersion();
 }

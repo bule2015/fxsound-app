@@ -51,6 +51,12 @@ bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
         lhs.device_name == rhs.device_name;
 }
 
+void setArrowButtonImages(DrawableButton& button, Drawable* normal_image, Drawable* selected_image, bool is_row_selected)
+{
+	auto* active_image = is_row_selected ? selected_image : normal_image;
+	button.setImages(active_image, selected_image, active_image);
+}
+
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -145,18 +151,10 @@ void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
 
 void FxOutputDeviceRow::updateSelectionVisuals()
 {
-    if (is_row_selected_)
-    {
-        up_button_.setImages(up_selected_image_.get(), up_selected_image_.get(), up_selected_image_.get());
-        down_button_.setImages(down_selected_image_.get(), down_selected_image_.get(), down_selected_image_.get());
-        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
-    }
-    else
-    {
-        up_button_.setImages(up_image_.get(), up_selected_image_.get(), up_image_.get());
-        down_button_.setImages(down_image_.get(), down_selected_image_.get(), down_image_.get());
-        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(0.5f));
-    }
+    setArrowButtonImages(up_button_, up_image_.get(), up_selected_image_.get(), is_row_selected_);
+    setArrowButtonImages(down_button_, down_image_.get(), down_selected_image_.get(), is_row_selected_);
+    preset_list_.setColour(ComboBox::ColourIds::outlineColourId,
+        Colour(is_row_selected_ ? FXCOLOR(SelectedRowOutline) : FXCOLOR(RowOutline)).withAlpha(is_row_selected_ ? 1.0f : 0.5f));
 }
 
 void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConfig& device_config)
@@ -260,6 +258,7 @@ int FxOutputPreferenceListModel::getNumRows()
 
 void FxOutputPreferenceListModel::paintListBoxItem(int, juce::Graphics&, int, int, bool)
 {
+    // Rows are fully rendered by FxOutputDeviceRow.
 }
 
 Component* FxOutputPreferenceListModel::refreshComponentForRow(int rowNumber, bool isRowSelected, Component* existingComponent)
@@ -330,13 +329,11 @@ void FxOutputPreferenceListModel::persist()
 FxOutputPreference::FxOutputPreference()
 {
     output_preference_model_.onModelChanged = [this]() {
-        output_preference_list_.updateContent();
-        output_preference_list_.repaint();
+        refreshListBox();
     };
 
     output_preference_model_.onRowMoved = [this](int row_index) {
-        output_preference_list_.updateContent();
-        output_preference_list_.selectRow(row_index);
+        refreshListBox(row_index);
     };
 
     output_preference_list_.setModel(&output_preference_model_);
@@ -349,14 +346,12 @@ FxOutputPreference::FxOutputPreference()
     output_preference_list_.setRowHeight(ROW_HEIGHT);
     output_preference_list_.setMultipleSelectionEnabled(false);
 
-    output_preference_list_.updateContent();
-    output_preference_list_.repaint();
+    refreshListBox();
 }
 
 void FxOutputPreference::update()
 {
-    output_preference_list_.updateContent();
-    output_preference_list_.repaint();
+    refreshListBox();
 }
 
 bool FxOutputPreference::keyPressed(const KeyPress& key, Component*)
@@ -393,4 +388,16 @@ void FxOutputPreference::paint(Graphics& g)
 {
     g.setFillType(FillType(Colour(FXCOLOR(WidgetBackground)).withAlpha(1.0f)));
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
+}
+
+void FxOutputPreference::refreshListBox()
+{
+    output_preference_list_.updateContent();
+    output_preference_list_.repaint();
+}
+
+void FxOutputPreference::refreshListBox(int selected_row)
+{
+    refreshListBox();
+    output_preference_list_.selectRow(selected_row);
 }

@@ -18,6 +18,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <array>
+
 #include <JuceHeader.h>
 #include "FxWindow.h"
 #include "FxHyperlink.h"
@@ -81,7 +83,9 @@ private:
 		~SettingsPane() = default;
 
 	protected:
+		void lookAndFeelChanged() override;
         void paint(Graphics& g) override;
+		virtual void refreshText();
 
 		static constexpr int X_MARGIN = 20;
 		static constexpr int Y_MARGIN = 5;
@@ -113,14 +117,13 @@ private:
 		static constexpr int BUTTON_HEIGHT = 24;
 		static constexpr int MAX_BUTTON_WIDTH = 315;
 
-		void setText();
+		void refreshText() override;
 		void resizeResetButton(int x, int y);
 		void modelChanged(FxModel::Event model_event);
 		void updateResetPresetsButton();
+		void refreshOutputPreference();
 
 		void visibilityChanged() override;
-		void mouseEnter(const MouseEvent& mouse_event) override;
-		void mouseExit(const MouseEvent& mouse_event) override;
 
 		Label output_preference_title_;
 
@@ -153,7 +156,7 @@ private:
 
 		std::vector<int> equalizer_bands_ = { 5, 10, 15, 20, 31 };
 
-		void setText();
+		void refreshText() override;
 		void updateEqualizerBandsText();
 		void selectEqualizerBands();
 		void restoreDefaults();
@@ -199,7 +202,7 @@ private:
 		static constexpr int LANGUAGE_LIST_WIDTH = 120;
 		static constexpr int LANGUAGE_LIST_HEIGHT = 30;
 
-        void setText();
+        void refreshText() override;
 
         ToggleButton launch_toggle_;
         ToggleButton hide_help_tips_toggle_;
@@ -227,7 +230,8 @@ private:
 		static constexpr int TOGGLE_BUTTON_HEIGHT = 24;
 		static constexpr int BUTTON_WIDTH = 220;
 
-        void setText();
+        void refreshText() override;
+		String getDisplayVersionText() const;
         
 		Label version_title_;
 		Label support_title_;
@@ -257,13 +261,17 @@ private:
 		void buttonClicked(Button* button) override;
 
 	private:
+		enum class PaneId : int { Audio = 0, Equalizer, General, Help, Count };
 		static constexpr int BUTTON_X = 20;
 		static constexpr int BUTTON_Y = 50;
 		static constexpr int BUTTON_WIDTH = 150;
 		static constexpr int BUTTON_HEIGHT = 40;
 		static constexpr int SEPARATOR_X = 152;
 
-		void showPane(SettingsButton& active_button, Component& active_pane);
+		std::array<SettingsButton*, 4> getPaneButtons();
+		std::array<Component*, 4> getPanes();
+		std::array<std::pair<SettingsButton*, Component*>, 4> getPaneEntries();
+		void showPane(PaneId active_pane);
 
 		std::unique_ptr<SettingsButton> audio_button_;
 		std::unique_ptr<SettingsButton> equalizer_button_;

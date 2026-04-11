@@ -103,6 +103,8 @@ private:
     bool keyPressed(const KeyPress& key, Component* originating_component) override;
     void resized() override;
     void paint(Graphics& g) override;
+    void refreshListBox();
+    void refreshListBox(int selected_row);
 
     ListBox output_preference_list_;
     FxOutputPreferenceListModel output_preference_model_;
