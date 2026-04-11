@@ -128,7 +128,7 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
-	return jmax(HEIGHT,
+	return jmax(MIN_HEIGHT,
 		jmax(audio_settings_pane_.getPreferredHeight(),
 			jmax(equalizer_settings_pane_.getPreferredHeight(),
 				jmax(general_settings_pane_.getPreferredHeight(), help_settings_pane_.getPreferredHeight()))));
