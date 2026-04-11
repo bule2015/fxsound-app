@@ -46,13 +46,21 @@ public:
 	int setBufferLength(int i_buffer_length_msecs);
 	int processTimer();
 	void setDspProcessingModule(DfxDsp* p_dfx_dsp);
+	void setDspProcessingEnabled(bool enabled);
 	static DWORD WINAPI processingThread(LPVOID lpParam);
 	DWORD threadWorker(void); // Needs to be public to be called from static thread starter function
 	int setTargetedRealPlaybackDevice(const std::wstring sound_device_guid);
 	void registerCallback(AudioPassthruCallback *callback);
+	static void notifyDiagnostic(const std::wstring& message);
     bool isPlaybackDeviceAvailable();
 	void restoreDefaultPlaybackDevice();
 	bool restartProcessingForDeviceChange();
+	bool isProcessingThreadRunning();
+	bool isMuted();
+	uint64_t getLastCaptureWithSamplesTickMs();
+	uint64_t getLastSuccessfulPlaybackTickMs();
+	float getLastCaptureInputRmsDb();
+	float getLastSubmittedPlaybackRmsDb();
 
 private:
 	int sndDeviceHandleToSoundDevices(std::vector<SoundDevice>& sound_devices, bool active_devices = true);
@@ -67,11 +75,16 @@ private:
 	int i_kill_processing_thread_; /* Flag set from the outside telling processing thread to end */
 	std::atomic<bool> device_change_pending_ = false;
 	std::atomic<bool> processing_thread_running_ = false;
+	std::atomic<uint64_t> last_capture_with_samples_tick_ms_ = 0;
+	std::atomic<uint64_t> last_successful_playback_tick_ms_ = 0;
+	std::atomic<float> last_capture_input_rms_db_ = -160.0f;
+	std::atomic<float> last_submitted_playback_rms_db_ = -160.0f;
 	wchar_t wcp_playback_device_guid_[PT_MAX_GENERIC_STRLEN];
 	bool b_no_valid_snd_device_dialog_shown_; /* Flag stating whether we have shown the user a message to select a valid snd device.  We only want it shown once per session. */
 	int debug_;
 	bool mute_;
 	DfxDsp *p_dfx_dsp_;
+	std::atomic<bool> dsp_processing_enabled_ = true;
 	static AudioPassthruCallback *s_callback_;
 };
 

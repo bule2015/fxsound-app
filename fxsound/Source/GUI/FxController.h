@@ -229,10 +229,48 @@ private:
 	static constexpr UINT CMD_NEXT_OUTPUT = 1005;
 	static constexpr UINT WMAPP_SOUND_DEVICE_CHANGE = WM_APP + 1;
 
+	struct AudioPipelineSnapshot
+	{
+		int process_timer_result = 0;
+		int64 now_ms = 0;
+		int64 last_capture_tick_ms = 0;
+		int64 last_playback_tick_ms = 0;
+		int64 capture_age_ms = -1;
+		int64 playback_age_ms = -1;
+		float capture_input_rms_db = -160.0f;
+		float submitted_playback_rms_db = -160.0f;
+		bool capture_recent = false;
+		bool playback_recent = false;
+		bool audio_signal_present = false;
+		bool processing_thread_running = false;
+		bool muted = false;
+		bool selected_output_active = false;
+	};
+
+	struct AudioSignalCounters
+	{
+		int present = 0;
+		int absent = 0;
+	};
+
+	struct AudioRecoveryState
+	{
+		int error_counter = 0;
+		int64 recovery_deadline_ms = 0;
+		bool stall_logged = false;
+	};
+
 	FxController();
 
 	static LRESULT CALLBACK eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param);
 	void timerCallback() override;
+	AudioPipelineSnapshot createAudioPipelineSnapshot(int process_timer_result) const;
+	void updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot);
+	void syncAudioProcessingState(const AudioPipelineSnapshot& snapshot);
+	void maybeRecoverAudioPassthru(const AudioPipelineSnapshot& snapshot);
+	void logAudioPipelineSnapshot(const String& reason, const AudioPipelineSnapshot& snapshot);
+	void logAudioPipelineMessage(const String& message);
+	void onAudioPassthruDiagnostic(const std::wstring& message) override;
 	void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) override;
 	void handleSoundDeviceChange();
 	void beginAudioProcessingGracePeriod();
@@ -299,9 +337,7 @@ private:
 	bool hide_notifications_;
 	bool auto_updates_;
 
-	unsigned long audio_process_time_;
-	int audio_process_on_counter_;
-	int audio_process_off_counter_;
+	AudioSignalCounters audio_signal_counters_;
 	bool audio_process_on_;
 	std::time_t audio_process_start_time_;
 	int64 audio_process_grace_deadline_ms_;
@@ -310,6 +346,7 @@ private:
 	int auto_save_counter_;
 	int tray_icon_health_check_counter_;
 	bool tray_icon_recovery_pending_;
+	AudioRecoveryState audio_recovery_state_;
 
 	bool minimize_tip_;
 	bool survey_tip_;

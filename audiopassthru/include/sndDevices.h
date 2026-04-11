@@ -419,7 +419,6 @@ struct sndDevicesHdlType {
 	BOOL ignoreDeviceCallbacks;
 	int initializationMode;		// Will be either SND_DEVICES_INIT_FOR_PROCESSING or SND_DEVICES_INIT_NO_PROCESSING
 	int playbackIsActive;		// Will be either SND_DEVICES_PLAYBACK_IS_STOPPED or SND_DEVICES_PLAYBACK_IS_ACTIVE.
-	int playbackStreamIsTemporarilyPaused;	// Used to turn off playback stream when no capture or playback is occuring.
 
 	int noBufferCount;			// This is a count of how many times no buffers were available in a DoRecording call.
 	int WindowsSilentBufferCount;				// This is a buffer specified by the Windows flag to be all zeros.

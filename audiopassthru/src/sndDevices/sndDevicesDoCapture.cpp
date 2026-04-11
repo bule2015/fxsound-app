@@ -67,6 +67,7 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 	int i_playback_index;
 	UINT64 DevicePosition;
 	UINT64 QPCPosition;
+	BOOL captureBatchHasAudibleSignal;
 
 	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices;
 
@@ -86,6 +87,7 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 	*pp_wfxDfx = NULL;
 
 	// Repeat this loop until we have enough frames to fill the specified playback buffer space.
+	captureBatchHasAudibleSignal = FALSE;
 	do
 	{
 		// If the device callbacks or an external call has thrown the stop flag, exit this thread.
@@ -133,23 +135,10 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 		{
 			numDesiredCaptureFrames = lowLatencyPlaybackTargetSize;
 			cast_handle->playbackIsActive = SND_DEVICES_PLAYBACK_IS_STOPPED;
-			
-			if( cast_handle->playbackStreamIsTemporarilyPaused == 0 )
-			{
-				cast_handle->playbackStreamIsTemporarilyPaused = 1;
-				hr = cast_handle->pAudioClientPlayback->Stop(); // Stop playback to allow PC to sleep if no audio is playing.
-				if (FAILED(hr)) goto Exit;
-			}
 		}
 		else
 		{
 			cast_handle->playbackIsActive = SND_DEVICES_PLAYBACK_IS_ACTIVE;
-
-			if( cast_handle->playbackStreamIsTemporarilyPaused )
-			{
-				cast_handle->playbackStreamIsTemporarilyPaused = 0;
-				hr = cast_handle->pAudioClientPlayback->Start(); // Restart playback.
-			}
 
 			// If the playback buffer is already at least at the low-latency target, don't grab anymore capture buffers.
 			if( cast_handle->numPlaybackFramesAvailableToFill <= lowLatencyPlaybackRefillThreshold )
@@ -207,7 +196,11 @@ int PT_DECLSPEC sndDevicesDoCapture(PT_HANDLE *hp_sndDevices, float **fpp_buffer
 				else
 				{
 					for(i=0; i<loopsize; i++)
+					{
 						cast_handle->fCaptureBuf[ offset + i ] = fptr[i];
+						if ((captureBatchHasAudibleSignal == FALSE) && (fabs(fptr[i]) > 0.000001f))
+							captureBatchHasAudibleSignal = TRUE;
+					}
 				}
 
 // #define DO_BEEPS_ON_SONG_CHANGES

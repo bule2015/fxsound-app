@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef __ANDROID__
 #include <Windows.h>
 #endif //WIN32
+#include <cstdint>
 #include <Mmdeviceapi.h>
 #include <vector> 
 #include "DfxDsp.h"
@@ -66,6 +67,7 @@ class AudioPassthruCallback
 public:
 	virtual ~AudioPassthruCallback() = default;
 	virtual void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) = 0;
+	virtual void onAudioPassthruDiagnostic(const std::wstring&) {}
 };
 
 class IAudioPassthru
@@ -78,11 +80,18 @@ public:
 	virtual int setBufferLength(int i_buffer_length_msecs) = 0;
 	virtual int processTimer() = 0;
 	virtual void setDspProcessingModule(DfxDsp* pDspProcessingModule) = 0;
+	virtual void setDspProcessingEnabled(bool enabled) = 0;
 	virtual void setAsPlaybackDevice(const SoundDevice sound_device) = 0;
 	virtual void registerCallback(AudioPassthruCallback* callback) = 0;
 	virtual bool isPlaybackDeviceAvailable() = 0;
 	virtual void restoreDefaultPlaybackDevice() = 0;
 	virtual bool restartProcessingForDeviceChange() = 0;
+	virtual bool isProcessingThreadRunning() = 0;
+	virtual bool isMuted() = 0;
+	virtual uint64_t getLastCaptureWithSamplesTickMs() = 0;
+	virtual uint64_t getLastSuccessfulPlaybackTickMs() = 0;
+	virtual float getLastCaptureInputRmsDb() = 0;
+	virtual float getLastSubmittedPlaybackRmsDb() = 0;
 };
 
 class AudioPassthruPrivate;
@@ -97,11 +106,18 @@ public:
 	int setBufferLength(int i_buffer_length_msecs) override;
 	int processTimer() override;
 	void setDspProcessingModule(DfxDsp* pDspProcessingModule) override;
+	void setDspProcessingEnabled(bool enabled) override;
 	void setAsPlaybackDevice(const SoundDevice sound_device) override;
 	void registerCallback(AudioPassthruCallback *callback) override;
     bool isPlaybackDeviceAvailable() override;
 	void restoreDefaultPlaybackDevice() override;
 	bool restartProcessingForDeviceChange() override;
+	bool isProcessingThreadRunning() override;
+	bool isMuted() override;
+	uint64_t getLastCaptureWithSamplesTickMs() override;
+	uint64_t getLastSuccessfulPlaybackTickMs() override;
+	float getLastCaptureInputRmsDb() override;
+	float getLastSubmittedPlaybackRmsDb() override;
 
 private:
 	AudioPassthruPrivate *data_;

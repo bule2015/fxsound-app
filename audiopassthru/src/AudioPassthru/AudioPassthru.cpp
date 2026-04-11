@@ -48,6 +48,11 @@ void AudioPassthru::setDspProcessingModule(DfxDsp* p_dfx_dsp)
 	data_->setDspProcessingModule(p_dfx_dsp);
 }
 
+void AudioPassthru::setDspProcessingEnabled(bool enabled)
+{
+	data_->setDspProcessingEnabled(enabled);
+}
+
 
 std::vector<SoundDevice> AudioPassthru::getSoundDevices(bool active_devices)
 {
@@ -111,4 +116,34 @@ void AudioPassthru::restoreDefaultPlaybackDevice()
 bool AudioPassthru::restartProcessingForDeviceChange()
 {
 	return data_->restartProcessingForDeviceChange();
+}
+
+bool AudioPassthru::isProcessingThreadRunning()
+{
+	return data_->isProcessingThreadRunning();
+}
+
+bool AudioPassthru::isMuted()
+{
+	return data_->isMuted();
+}
+
+uint64_t AudioPassthru::getLastCaptureWithSamplesTickMs()
+{
+	return data_->getLastCaptureWithSamplesTickMs();
+}
+
+uint64_t AudioPassthru::getLastSuccessfulPlaybackTickMs()
+{
+	return data_->getLastSuccessfulPlaybackTickMs();
+}
+
+float AudioPassthru::getLastCaptureInputRmsDb()
+{
+	return data_->getLastCaptureInputRmsDb();
+}
+
+float AudioPassthru::getLastSubmittedPlaybackRmsDb()
+{
+	return data_->getLastSubmittedPlaybackRmsDb();
 }

@@ -76,7 +76,6 @@ int PT_DECLSPEC sndDevicesReInit(PT_HANDLE *hp_sndDevices, int i_initType, int *
 	cast_handle->upsampleRatio = 1;
 	cast_handle->numPlaybackFramesAvailableToFill = 0;
 	cast_handle->playbackIsActive = SND_DEVICES_PLAYBACK_IS_STOPPED;
-	cast_handle->playbackStreamIsTemporarilyPaused = 0;
 
 	cast_handle->stopAudioCaptureAndPlaybackLoop = 0;
 

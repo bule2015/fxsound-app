@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxMainWindow.h"
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
+#include "AudioSignalPolicy.h"
 #include "OutputDeviceSelection.h"
 #include "PresetAutoSavePolicy.h"
 #include "StartupOptionPolicy.h"
@@ -256,9 +257,7 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 	device_count_ = 0;
 	output_device_name_ = L"";
 	
-	audio_process_time_ = 0;
-	audio_process_on_counter_ = 0;
-	audio_process_off_counter_ = 0;
+	audio_signal_counters_ = {};
 	audio_process_on_ = false;
 
 	audio_process_start_time_ = -1LL;
@@ -268,6 +267,7 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 	auto_save_counter_ = 0;
 	tray_icon_health_check_counter_ = 0;
 	tray_icon_recovery_pending_ = false;
+	audio_recovery_state_ = {};
     main_window_ = nullptr;
     audio_passthru_ = nullptr;
 
@@ -476,6 +476,7 @@ void FxController::init(FxMainWindow* main_window, FxSystemTrayView* system_tray
 		}
 
 		audio_passthru_->setDspProcessingModule(&dfx_dsp_);
+		audio_passthru_->setDspProcessingEnabled(true);
 		auto selected_output = loadSelectedOutputFromSettings();
 		if (!selected_output.pwszID.empty() || !selected_output.deviceFriendlyName.empty())
 		{
@@ -1676,9 +1677,7 @@ void FxController::getEqBandState(std::vector<float>& center_frequencies, std::v
 
 void FxController::beginAudioProcessingGracePeriod()
 {
-	audio_process_time_ = dfx_dsp_.getTotalAudioProcessedTime();
-	audio_process_on_counter_ = 0;
-	audio_process_off_counter_ = 0;
+	audio_signal_counters_ = {};
 	audio_process_grace_deadline_ms_ = Time::currentTimeMillis() + 2000;
 }
 
@@ -1914,50 +1913,10 @@ void FxController::timerCallback()
 		tray_icon_health_check_counter_ = 0;
 	}
 
-    audio_passthru_->processTimer();
-	auto total_audio_process_time = dfx_dsp_.getTotalAudioProcessedTime();
-	if (audio_process_time_ != total_audio_process_time)
-	{
-		audio_process_time_ = total_audio_process_time;
-		audio_process_on_counter_++;
-		audio_process_off_counter_ = 0;
-	}
-	else if (isAudioProcessingGracePeriodActive())
-	{
-		audio_process_on_counter_ = 0;
-		audio_process_off_counter_ = 0;
-	}
-	else
-	{
-		audio_process_off_counter_++;
-		audio_process_on_counter_ = 0;
-	}
-
-	auto power = FxModel::getModel().getPowerState();
-	if (audio_process_on_counter_ == 5 && !audio_process_on_)
-	{
-		audio_process_on_ = true;
-		system_tray_view_->setStatus(power, true);
-		main_window_->setIcon(power, true);
-		main_window_->startLogoAnimation();
-        if (view_ == ViewType::Pro)
-        {
-            main_window_->showProView();
-			main_window_->startVisualizer();
-        }
-	}
-	if (audio_process_off_counter_ == 5 && audio_process_on_)
-	{
-		audio_process_on_ = false;
-		system_tray_view_->setStatus(power, false);
-		main_window_->setIcon(power, false);
-		main_window_->stopLogoAnimation();
-        if (view_ == ViewType::Pro)
-        {
-            main_window_->showProView();
-			main_window_->pauseVisualizer();
-        }
-	}
+	const auto snapshot = createAudioPipelineSnapshot(audio_passthru_->processTimer());
+	updateAudioSignalCounters(snapshot);
+	maybeRecoverAudioPassthru(snapshot);
+	syncAudioProcessingState(snapshot);
 
 	static constexpr int AUTO_SAVE_INTERVAL = 600;
 	if (++auto_save_counter_ >= AUTO_SAVE_INTERVAL)
@@ -1975,6 +1934,212 @@ void FxController::timerCallback()
 	{
 		checkUpdates();
 	}
+}
+
+FxController::AudioPipelineSnapshot FxController::createAudioPipelineSnapshot(int process_timer_result) const
+{
+	AudioPipelineSnapshot snapshot;
+	snapshot.process_timer_result = process_timer_result;
+
+	if (audio_passthru_ == nullptr)
+	{
+		return snapshot;
+	}
+
+	snapshot.now_ms = static_cast<int64>(GetTickCount64());
+	snapshot.last_capture_tick_ms = static_cast<int64>(audio_passthru_->getLastCaptureWithSamplesTickMs());
+	snapshot.last_playback_tick_ms = static_cast<int64>(audio_passthru_->getLastSuccessfulPlaybackTickMs());
+	snapshot.capture_age_ms = snapshot.last_capture_tick_ms > 0 ? snapshot.now_ms - snapshot.last_capture_tick_ms : -1;
+	snapshot.playback_age_ms = snapshot.last_playback_tick_ms > 0 ? snapshot.now_ms - snapshot.last_playback_tick_ms : -1;
+	snapshot.processing_thread_running = audio_passthru_->isProcessingThreadRunning();
+	snapshot.muted = audio_passthru_->isMuted();
+	snapshot.capture_input_rms_db = audio_passthru_->getLastCaptureInputRmsDb();
+	snapshot.submitted_playback_rms_db = audio_passthru_->getLastSubmittedPlaybackRmsDb();
+	snapshot.capture_recent = snapshot.capture_age_ms >= 0 && snapshot.capture_age_ms <= 500;
+	snapshot.playback_recent = snapshot.playback_age_ms >= 0 && snapshot.playback_age_ms <= 500;
+	snapshot.audio_signal_present = FxSound::AudioSignalPolicy::isCaptureSignalPresent(
+		snapshot.now_ms,
+		snapshot.last_capture_tick_ms,
+		snapshot.capture_input_rms_db);
+
+	auto sound_devices = audio_passthru_->getSoundDevices(false);
+	auto selected_output = FxModel::getModel().getSelectedOutput();
+	auto selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
+		[&selected_output](const SoundDevice& sound_device)
+		{
+			return FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, sound_device);
+		});
+	if (selected_output_it != sound_devices.end())
+	{
+		snapshot.selected_output_active = selected_output_it->isActive;
+	}
+
+	return snapshot;
+}
+
+void FxController::updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot)
+{
+	const auto signal_counters = FxSound::AudioSignalPolicy::advanceSignalCounters(
+		snapshot.audio_signal_present,
+		isAudioProcessingGracePeriodActive(),
+		audio_signal_counters_.present,
+		audio_signal_counters_.absent);
+	audio_signal_counters_.present = signal_counters.signal_present_after;
+	audio_signal_counters_.absent = signal_counters.signal_absent_after;
+}
+
+void FxController::syncAudioProcessingState(const AudioPipelineSnapshot& snapshot)
+{
+	auto power = FxModel::getModel().getPowerState();
+	if (FxSound::AudioSignalPolicy::shouldEnableDsp(audio_signal_counters_.present, audio_process_on_))
+	{
+		audio_process_on_ = true;
+		audio_passthru_->setDspProcessingEnabled(true);
+		logAudioPipelineMessage("Audio DSP processing resumed after signal detection");
+		system_tray_view_->setStatus(power, true);
+		main_window_->setIcon(power, true);
+		main_window_->startLogoAnimation();
+        if (view_ == ViewType::Pro)
+        {
+            main_window_->showProView();
+			main_window_->startVisualizer();
+        }
+	}
+	if (FxSound::AudioSignalPolicy::shouldDisableDsp(audio_signal_counters_.absent, audio_process_on_))
+	{
+		logAudioPipelineSnapshot("audio_processing_stopped", snapshot);
+		audio_process_on_ = false;
+		audio_passthru_->setDspProcessingEnabled(false);
+		logAudioPipelineMessage("Audio DSP processing paused while signal is absent");
+		system_tray_view_->setStatus(power, false);
+		main_window_->setIcon(power, false);
+		main_window_->stopLogoAnimation();
+        if (view_ == ViewType::Pro)
+        {
+            main_window_->showProView();
+			main_window_->pauseVisualizer();
+        }
+	}
+}
+
+void FxController::logAudioPipelineSnapshot(const String& reason, const AudioPipelineSnapshot& snapshot)
+{
+	String message = "Audio pipeline snapshot reason=" + reason
+		+ " process_timer_result=" + String(snapshot.process_timer_result)
+		+ " power=" + String(FxModel::getModel().getPowerState() ? 1 : 0)
+		+ " playback_available=" + String(playback_device_available_ ? 1 : 0)
+		+ " processing_thread_running=" + String(snapshot.processing_thread_running ? 1 : 0)
+		+ " muted=" + String(snapshot.muted ? 1 : 0)
+		+ " selected_output_active=" + String(snapshot.selected_output_active ? 1 : 0)
+		+ " capture_age_ms=" + String(snapshot.capture_age_ms)
+		+ " playback_age_ms=" + String(snapshot.playback_age_ms)
+		+ " capture_recent=" + String(snapshot.capture_recent ? 1 : 0)
+		+ " playback_recent=" + String(snapshot.playback_recent ? 1 : 0)
+		+ " capture_input_rms_db=" + String(snapshot.capture_input_rms_db, 2)
+		+ " submitted_playback_rms_db=" + String(snapshot.submitted_playback_rms_db, 2)
+		+ " audio_signal_present=" + String(snapshot.audio_signal_present ? 1 : 0)
+		+ " signal_present_counter=" + String(audio_signal_counters_.present)
+		+ " signal_absent_counter=" + String(audio_signal_counters_.absent)
+		+ " grace_active=" + String(isAudioProcessingGracePeriodActive() ? 1 : 0);
+	logAudioPipelineMessage(message);
+}
+
+void FxController::logAudioPipelineMessage(const String& message)
+{
+	auto now = Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S");
+	logMessage("[" + now + "] " + message);
+}
+
+void FxController::maybeRecoverAudioPassthru(const AudioPipelineSnapshot& snapshot)
+{
+	if (audio_passthru_ == nullptr || shutting_down_)
+	{
+		audio_recovery_state_.error_counter = 0;
+		audio_recovery_state_.stall_logged = false;
+		return;
+	}
+
+	auto& model = FxModel::getModel();
+	if (!model.getPowerState() || isAudioProcessingGracePeriodActive())
+	{
+		audio_recovery_state_.error_counter = 0;
+		audio_recovery_state_.stall_logged = false;
+		return;
+	}
+
+	const auto stall_detected = FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(
+		snapshot.process_timer_result,
+		playback_device_available_,
+		snapshot.now_ms,
+		snapshot.last_capture_tick_ms,
+		snapshot.last_playback_tick_ms,
+		snapshot.audio_signal_present);
+
+	if (snapshot.process_timer_result == 0 && !stall_detected)
+	{
+		audio_recovery_state_.error_counter = 0;
+		audio_recovery_state_.stall_logged = false;
+		return;
+	}
+
+	if (stall_detected && !audio_recovery_state_.stall_logged)
+	{
+		logAudioPipelineMessage("Audio pipeline stall detected with live capture and no render progress");
+		logAudioPipelineSnapshot("stall_detected", snapshot);
+		audio_recovery_state_.stall_logged = true;
+	}
+
+	if (snapshot.now_ms < audio_recovery_state_.recovery_deadline_ms)
+	{
+		return;
+	}
+
+	if (!stall_detected && ++audio_recovery_state_.error_counter < 5)
+	{
+		return;
+	}
+
+	auto sound_devices = audio_passthru_->getSoundDevices(false);
+	auto selected_output = model.getSelectedOutput();
+	auto selected_output_it = std::find_if(sound_devices.begin(), sound_devices.end(),
+		[&selected_output](const SoundDevice& sound_device)
+		{
+			return FxSound::OutputDeviceSelection::areSameOutputDevice(selected_output, sound_device);
+		});
+
+	if (selected_output_it == sound_devices.end() || !selected_output_it->isActive)
+	{
+		audio_recovery_state_.error_counter = 0;
+		audio_recovery_state_.stall_logged = false;
+		return;
+	}
+
+	logAudioPipelineMessage(stall_detected
+		? "Audio passthru watchdog restarting after stalled output with live capture"
+		: "Audio passthru watchdog restarting after repeated timer failures");
+	logAudioPipelineSnapshot(stall_detected ? "watchdog_restart_stall" : "watchdog_restart_failure", snapshot);
+	beginAudioProcessingGracePeriod();
+	auto recovered = audio_passthru_->restartProcessingForDeviceChange();
+	playback_device_available_ = audio_passthru_->isPlaybackDeviceAvailable();
+	audio_passthru_->mute(!playback_device_available_);
+	audio_recovery_state_.error_counter = 0;
+	audio_recovery_state_.stall_logged = false;
+	audio_recovery_state_.recovery_deadline_ms = snapshot.now_ms + 5000;
+
+	if (recovered)
+	{
+		logAudioPipelineMessage("Audio passthru watchdog restart completed");
+	}
+	else
+	{
+		logAudioPipelineMessage("Audio passthru watchdog restart failed");
+	}
+}
+
+void FxController::onAudioPassthruDiagnostic(const std::wstring& message)
+{
+	auto now = Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S");
+	logMessage("[" + now + "] AudioPassthru: " + String(message.c_str()));
 }
 
 void FxController::onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id)

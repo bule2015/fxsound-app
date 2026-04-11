@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#include "stdafx.h"
 #include "u_AudioPassthru.h"
 #include "sndDevices.h"
+#include <cmath>
 
 #define DFXG_SND_SERVER_KILL_THREAD_TIMEOUT_MSECS		  3000
 #define DFXG_SND_SERVER_KILL_THREAD_WAIT_PER_LOOP_MSECS   50
@@ -36,6 +37,11 @@ AudioPassthruCallback* AudioPassthruPrivate::s_callback_ = nullptr;
 
 namespace
 {
+void notifyDiagnosticMessage(const std::wstring& message)
+{
+	AudioPassthruPrivate::notifyDiagnostic(message);
+}
+
 void resetLatencyMeasurementState(sndDevicesHdlType::LatencyMeasurementState* latency)
 {
 	if (latency == NULL)
@@ -56,6 +62,25 @@ void resetLatencyMeasurementState(sndDevicesHdlType::LatencyMeasurementState* la
 	latency->estimatedOutputMinMs = 0.0;
 	latency->estimatedOutputMaxMs = 0.0;
 	latency->measurementCount = 0;
+}
+
+float calculateBufferRmsDb(const float* buffer, int sample_count)
+{
+	if ((buffer == nullptr) || (sample_count <= 0))
+		return -160.0f;
+
+	double sum_squares = 0.0;
+	for (int i = 0; i < sample_count; ++i)
+	{
+		const double sample = buffer[i];
+		sum_squares += sample * sample;
+	}
+
+	const double rms = std::sqrt(sum_squares / static_cast<double>(sample_count));
+	if (rms <= 1.0e-9)
+		return -160.0f;
+
+	return static_cast<float>(20.0 * std::log10(rms));
 }
 }
 
@@ -161,6 +186,11 @@ int AudioPassthruPrivate::init(bool enable_output_latency_logging)
 void AudioPassthruPrivate::setDspProcessingModule(DfxDsp* p_dfx_dsp)
 {
 	p_dfx_dsp_ = p_dfx_dsp;
+}
+
+void AudioPassthruPrivate::setDspProcessingEnabled(bool enabled)
+{
+	dsp_processing_enabled_ = enabled;
 }
 
 
@@ -406,6 +436,8 @@ int AudioPassthruPrivate::processTimer()
 	int numRealDevices;
 	int DfxDeviceEnabledFlag;
 	int statusFlag;
+	struct sndDevicesHdlType *cast_handle;
+	cast_handle = (struct sndDevicesHdlType *)hp_sndDevices_;
 	b_need_to_start_thread = FALSE;
 
 	/*
@@ -425,15 +457,29 @@ int AudioPassthruPrivate::processTimer()
 		if (device_change_pending_)
 			return(OKAY);
 
+		last_capture_with_samples_tick_ms_ = 0;
+		last_successful_playback_tick_ms_ = 0;
+		last_capture_input_rms_db_ = -160.0f;
+		last_submitted_playback_rms_db_ = -160.0f;
+
 		/* Initialize flag which can be set by the outside telling thread to end */
 		i_kill_processing_thread_ = IS_FALSE;
 
 		/* Reinit the sndDevices module */
 		if (sndDevicesReInit(hp_sndDevices_, SND_DEVICES_INIT_FOR_PROCESSING, &numRealDevices, &DfxDeviceEnabledFlag, &statusFlag) != OKAY)
+		{
+			wchar_t diagnostic[256];
+			swprintf(diagnostic, 256, L"sndDevicesReInit returned NOT_OKAY statusFlag=%d", statusFlag);
+			notifyDiagnosticMessage(diagnostic);
 			return(NOT_OKAY);
+		}
 
 		if (statusFlag != SND_DEVICES_DEVICE_OPERATION_COMPLETED)
 		{
+			wchar_t diagnostic[256];
+			swprintf(diagnostic, 256, L"sndDevicesReInit completed with non-ready statusFlag=%d numRealDevices=%d dfxEnabled=%d",
+				statusFlag, numRealDevices, DfxDeviceEnabledFlag);
+			notifyDiagnosticMessage(diagnostic);
 			/*
 			if (cast_handle->trace.mode)
 			{
@@ -466,6 +512,10 @@ int AudioPassthruPrivate::processTimer()
 		else
 		{
 			b_no_valid_snd_device_dialog_shown_ = false;
+			wchar_t diagnostic[256];
+			swprintf(diagnostic, 256, L"sndDevicesReInit completed statusFlag=%d numRealDevices=%d dfxEnabled=%d",
+				statusFlag, numRealDevices, DfxDeviceEnabledFlag);
+			notifyDiagnosticMessage(diagnostic);
 		}
 
 		/* PTNOTE - added check on DfxDeviceEnabledFlag status, may need to take additional steps if no DFX device is preset. */
@@ -473,6 +523,14 @@ int AudioPassthruPrivate::processTimer()
 		{
 			hProcessingThread_ = CreateThread(NULL, 0, processingThread, (LPVOID)this, 0L, &ProcessingThreadID_);
 			processing_thread_running_ = (hProcessingThread_ != NULL);
+			if (processing_thread_running_)
+			{
+				notifyDiagnosticMessage(L"Audio passthru processing thread started");
+			}
+			else
+			{
+				notifyDiagnosticMessage(L"CreateThread failed for audio passthru processing thread");
+			}
 		}
 
 		/* Check if a new playback device has been selected */
@@ -497,6 +555,8 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	int i_check_for_duplicate_buffers;
 	int i_valid_bits;
 	int resultFlag;
+	int exitResultFlag = 0;
+	std::wstring exitReason = L"normal_exit";
 	DWORD setReturn;
 	LARGE_INTEGER qpc_frequency;
 	struct sndDevicesHdlType *cast_handle;
@@ -516,7 +576,11 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 
 	// Start capture.
 	if (sndDevicesStartStopCapture(hp_sndDevices_, SND_DEVICES_START_CAPTURE) != OKAY)
+	{
+		notifyDiagnosticMessage(L"sndDevicesStartStopCapture(START) failed");
 		return(NOT_OKAY);
+	}
+	notifyDiagnosticMessage(L"sndDevicesStartStopCapture(START) completed");
 
 	/*
 	* Keep looping until a goto statement is reached to kill the thread
@@ -526,25 +590,45 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	{
 		/* Check if thread has been signaled to end */
 		if (i_kill_processing_thread_)
+		{
+			exitReason = L"kill_flag_before_capture";
 			goto KillProcessingThread;
+		}
 
 		// Does the data capture and returns a pointer to the data and signal info to be used for in place audio processing.
 		// NOT_OKAY is only returned for catastrophic errors but if resultFlag != SND_DEVICES_CAPTURE_PLAYBACK_SUCCESS
 		// then typically a change in a device property has caused the capture or playback operation to fail, in this
 		// case we need to exit this thread so a reinitialization can be done.
 		if (sndDevicesDoCapture(hp_sndDevices_, &fp_buffer, &numSampleSets, &pwfx, &resultFlag) != OKAY)
+		{
+			notifyDiagnosticMessage(L"sndDevicesDoCapture returned NOT_OKAY");
 			return(NOT_OKAY);
+		}
 
 		// A non-successful flag will typically be due to a change in the playback devices properties.
 		if (resultFlag != SND_DEVICES_CAPTURE_PLAYBACK_SUCCESS)
+		{
+			exitReason = L"capture_result_flag";
+			exitResultFlag = resultFlag;
 			goto KillProcessingThread;
+		}
 
 		/* Check if thread has been signaled to end */
 		if (i_kill_processing_thread_)
+		{
+			exitReason = L"kill_flag_after_capture";
 			goto KillProcessingThread;
+		}
 
 		if (numSampleSets > 0)
 		{
+			if (last_capture_with_samples_tick_ms_ == 0)
+			{
+				notifyDiagnosticMessage(L"Audio passthru capture stream received first samples");
+			}
+			last_capture_with_samples_tick_ms_ = GetTickCount64();
+			last_capture_input_rms_db_ = calculateBufferRmsDb(fp_buffer, numSampleSets * pwfx->nChannels);
+
 			/* Set additional processing settings */
 			i_valid_bits = pwfx->wBitsPerSample;
 			i_check_for_duplicate_buffers = IS_FALSE;
@@ -565,7 +649,8 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 			// 2016-08-25: Workaround for crashing when playback device has only one channel (mono). For example, a Bleutooth headset is mono. When such
 			// device is selected as the playback device, we do not apply DFX/DSP processing to the buffer for now. Otherwise it will crash.
 			// NOTE: There will also be no sound with a mono playback device until we add code to fill mono playback buffer in sndDevicesDoCapture.cpp, line 279.
-			if (pwfx->nChannels != 1 || (pwfx->nChannels == 1 && !SND_DEVICES_MONO_BUG_DO_NOT_PROCESS))
+			if (dsp_processing_enabled_ &&
+				(pwfx->nChannels != 1 || (pwfx->nChannels == 1 && !SND_DEVICES_MONO_BUG_DO_NOT_PROCESS)))
 			{
 				// Apply DFX processing here using data and format vars above. Format will always be 32 bit floating point.
 			//	if (dfxpUniversalModifySamples(cast_handle->dfxp_hdl, (short int *)fp_buffer, (short int *)fp_buffer, numSampleSets, i_check_for_duplicate_buffers) != OKAY)
@@ -575,11 +660,18 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 
 			/* Check if thread has been signaled to end */
 			if (i_kill_processing_thread_)
+			{
+				exitReason = L"kill_flag_after_process";
 				goto KillProcessingThread;
+			}
 
 			/* A non-successful flag will typically be due to a change in the playback devices properties. */
 			if (resultFlag != SND_DEVICES_CAPTURE_PLAYBACK_SUCCESS)
+			{
+				exitReason = L"post_process_result_flag";
+				exitResultFlag = resultFlag;
 				goto KillProcessingThread;
+			}
 		}
 
 		/*
@@ -590,19 +682,50 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 		if (!mute_)
 		{
 			if (sndDevicesDoPlayback(hp_sndDevices_, &resultFlag) != OKAY)
+			{
+				notifyDiagnosticMessage(L"sndDevicesDoPlayback returned NOT_OKAY");
 				return(NOT_OKAY);
+			}
+
+			if ((resultFlag == SND_DEVICES_CAPTURE_PLAYBACK_SUCCESS) &&
+				(cast_handle->playbackFrameCount > 0))
+			{
+				if (last_successful_playback_tick_ms_ == 0)
+				{
+					notifyDiagnosticMessage(L"Audio passthru playback stream submitted first frames");
+				}
+				last_successful_playback_tick_ms_ = GetTickCount64();
+				last_submitted_playback_rms_db_ = calculateBufferRmsDb(
+					cast_handle->fPlaybackBuf,
+					static_cast<int>(cast_handle->playbackFrameCount * cast_handle->wfxPlayback.nChannels));
+			}
 		}
 		
 
 		/* Make sure the playback succeeded */
 		if (resultFlag != SND_DEVICES_CAPTURE_PLAYBACK_SUCCESS)
+		{
+			exitReason = L"playback_result_flag";
+			exitResultFlag = resultFlag;
 			goto KillProcessingThread;
+		}
 	}
 
 KillProcessingThread:
 	// Stop capture.
 	if (sndDevicesStartStopCapture(hp_sndDevices_, SND_DEVICES_STOP_CAPTURE) != OKAY)
+	{
+		notifyDiagnosticMessage(L"sndDevicesStartStopCapture(STOP) failed");
 		return(NOT_OKAY);
+	}
+	notifyDiagnosticMessage(L"sndDevicesStartStopCapture(STOP) completed");
+
+	{
+		wchar_t diagnostic[256];
+		swprintf(diagnostic, 256, L"Audio passthru processing thread stopped reason=%ls resultFlag=%d",
+			exitReason.c_str(), exitResultFlag);
+		notifyDiagnosticMessage(diagnostic);
+	}
 
 	/* Simply returning from this function stops the thread */
 	return(OKAY);
@@ -637,6 +760,14 @@ void AudioPassthruPrivate::registerCallback(AudioPassthruCallback* callback)
 	s_callback_ = callback;
 }
 
+void AudioPassthruPrivate::notifyDiagnostic(const std::wstring& message)
+{
+	if (s_callback_ != nullptr)
+	{
+		s_callback_->onAudioPassthruDiagnostic(message);
+	}
+}
+
 bool AudioPassthruPrivate::isPlaybackDeviceAvailable()
 {
     BOOL availability;
@@ -653,24 +784,70 @@ void AudioPassthruPrivate::restoreDefaultPlaybackDevice()
 	int i_resultFlag;
 	/* Change the default soundcard to not be the DFX virtual one but instead the proper real one */
 	if (sndDevicesRestoreDefaultDevice(hp_sndDevices_, &i_resultFlag) != OKAY)
+	{
+		wchar_t diagnostic[256];
+		swprintf(diagnostic, 256, L"sndDevicesRestoreDefaultDevice failed resultFlag=%d", i_resultFlag);
+		notifyDiagnosticMessage(diagnostic);
 		return;
+	}
+
+	notifyDiagnosticMessage(L"sndDevicesRestoreDefaultDevice completed");
 }
 
 bool AudioPassthruPrivate::restartProcessingForDeviceChange()
 {
 	int i_timed_out = IS_FALSE;
 
+	notifyDiagnosticMessage(L"Audio passthru restart requested for device change");
+
 	device_change_pending_ = true;
 
 	if (killProcessingThread(&i_timed_out) != OKAY || i_timed_out)
 	{
+		wchar_t diagnostic[256];
+		swprintf(diagnostic, 256, L"Audio passthru restart failed during thread shutdown timed_out=%d", i_timed_out);
+		notifyDiagnosticMessage(diagnostic);
 		device_change_pending_ = false;
 		return false;
 	}
 
 	device_change_pending_ = false;
 
-	return processTimer() == OKAY;
+	auto restarted = processTimer() == OKAY;
+	notifyDiagnosticMessage(restarted
+		? L"Audio passthru restart completed after device change"
+		: L"Audio passthru restart failed after device change");
+	return restarted;
+}
+
+bool AudioPassthruPrivate::isProcessingThreadRunning()
+{
+	return processing_thread_running_;
+}
+
+bool AudioPassthruPrivate::isMuted()
+{
+	return mute_;
+}
+
+uint64_t AudioPassthruPrivate::getLastCaptureWithSamplesTickMs()
+{
+	return last_capture_with_samples_tick_ms_;
+}
+
+uint64_t AudioPassthruPrivate::getLastSuccessfulPlaybackTickMs()
+{
+	return last_successful_playback_tick_ms_;
+}
+
+float AudioPassthruPrivate::getLastCaptureInputRmsDb()
+{
+	return last_capture_input_rms_db_;
+}
+
+float AudioPassthruPrivate::getLastSubmittedPlaybackRmsDb()
+{
+	return last_submitted_playback_rms_db_;
 }
 
 int AudioPassthruPrivate::setTargetedRealPlaybackDevice(const std::wstring sound_device_guid)
