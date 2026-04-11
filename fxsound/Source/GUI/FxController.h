@@ -85,8 +85,10 @@ public:
 	FxWindow* getMainWindow();
 	Point<int> getSystemTrayWindowPosition(int width, int height);
 	bool exit();
+	void autoSaveModifiedPreset();
 
 	void setPowerState(bool power_state);
+	bool setPreset(const String& preset_name, bool notify=true);
 	bool setPreset(int selected_preset, bool notify=true);
 	void setOutput(const String output_device_id, bool notify=true);
 	void setOutput(int output, bool notify=true);
@@ -258,6 +260,13 @@ private:
 	bool restoreConfiguredPresetForCurrentOutput();
 	// Rebuilds preset state after delete/reset and restores the best preset for the current output.
 	void finalizePresetMutation();
+	File getAutoSaveDir() const;
+	File getAutoSavePresetFile(const String& preset_name) const;
+	void cleanupOrphanedAutoSavedPresets(const Array<FxModel::Preset>& presets);
+	bool savePresetToDirectory(const String& preset_name, const File& directory);
+	void resetAutoSaveState();
+	void autoSavePreset(int preset_index);
+	void deleteAutoSavedPreset(const String& preset_name);
 
 	void powerOn(bool on);
 
@@ -296,6 +305,8 @@ private:
 	std::time_t audio_process_start_time_;
 	int64 audio_process_grace_deadline_ms_;
 	bool output_latency_logging_enabled_;
+	bool preset_dirty_;
+	int auto_save_counter_;
 
 	bool minimize_tip_;
 	bool survey_tip_;
@@ -308,4 +319,5 @@ private:
 	String pending_device_change_id_;
 
 	CriticalSection lock_;
+	CriticalSection save_lock_;
 };

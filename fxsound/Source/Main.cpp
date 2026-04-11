@@ -107,6 +107,7 @@ public:
         if (main_window_.get() != nullptr)
         {
             // Add your application's shutdown code here..
+            FxController::getInstance().autoSaveModifiedPreset();
             FxController::getInstance().releaseRuntimeObjects();
 
             audio_passthru_.reset();

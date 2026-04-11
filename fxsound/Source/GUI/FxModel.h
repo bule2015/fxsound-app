@@ -36,6 +36,12 @@ public:
 		String name;
 		String path;
 		PresetType type;
+		bool modified = false;
+
+		String getDisplayName() const
+		{
+			return modified ? name + L" *" : name;
+		}
 	};
 
 	class Listener
@@ -67,8 +73,9 @@ public:
 	int getPresetCount() const;
 	int getUserPresetCount() const;
 	Preset getPreset(int preset) const;
-	bool isPresetModified() const;
+	bool isPresetModified(int preset_index = -1) const;
 	void setPresetModified(bool preset_modified);
+	void setPresetModified(int preset_index, bool preset_modified);
     bool isPresetNameValid(const String& preset_name);
 
 	bool getPowerState()
@@ -191,7 +198,6 @@ private:
 
 	bool power_state_;
 	Array<Preset> presets_;
-	bool preset_modified_;
 	StringArray output_names_;
 	int selected_preset_;
     bool output_disconnected_;

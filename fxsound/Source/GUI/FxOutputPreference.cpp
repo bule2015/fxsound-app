@@ -94,8 +94,7 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
             if (selected_output_matches)
             {
-                auto selected_preset = FxModel::getModel().selectPreset(preset, false);
-                FxController::getInstance().setPreset(selected_preset);
+                FxController::getInstance().setPreset(preset);
             }
         }
     };

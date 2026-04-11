@@ -173,12 +173,7 @@ void FxView::modelChanged(FxModel::Event model_event)
 				preset_type = preset.type;
 			}
 
-			auto name = preset.name;
-			if (i == FxModel::getModel().getSelectedPreset() && FxModel::getModel().isPresetModified())
-			{
-				name = name + L" *";
-			}
-			preset_list_.addItem(name, i+1);
+			preset_list_.addItem(preset.getDisplayName(), i+1);
 		}
 
 		preset_list_.setSelectedId(FxModel::getModel().getSelectedPreset() + 1, NotificationType::dontSendNotification);
@@ -187,26 +182,23 @@ void FxView::modelChanged(FxModel::Event model_event)
 	if (model_event == FxModel::Event::PresetModified)
 	{
 		auto& model = FxModel::getModel();
-		auto preset = model.getPreset(model.getSelectedPreset());
+		auto selected_preset = model.getSelectedPreset();
+		auto preset = model.getPreset(selected_preset);
 		if (preset.name.isEmpty())
 		{
 			return;
 		}
-		if (model.isPresetModified())
+		if (model.isPresetModified(selected_preset))
 		{
-			preset_list_.changeItemText(model.getSelectedPreset()+1, preset.name + L" *");
+			preset_list_.changeItemText(selected_preset + 1, preset.getDisplayName());
 			if (!preset_list_.isPopupActive())
 			{
-				preset_list_.setText(preset.name + L" *", NotificationType::dontSendNotification);
+				preset_list_.setText(preset.getDisplayName(), NotificationType::dontSendNotification);
 			}
 		}
 		else
 		{
-			auto count = FxModel::getModel().getPresetCount();
-			for (auto i=0; i<count; i++)
-			{
-				preset_list_.changeItemText(i + 1, FxModel::getModel().getPreset(i).name);
-			}
+			preset_list_.changeItemText(selected_preset + 1, preset.name);
 			if (!preset_list_.isPopupActive())
 			{
 				preset_list_.setText(preset.name, NotificationType::dontSendNotification);

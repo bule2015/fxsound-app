@@ -26,7 +26,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "OutputDeviceSelection.h"
 #include "StartupOptionPolicy.h"
 #include "FxEffects.h"
-#include "FxPresetSaveDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
 namespace FxSound
@@ -264,6 +263,8 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 	audio_process_start_time_ = -1LL;
 	audio_process_grace_deadline_ms_ = 0;
 	output_latency_logging_enabled_ = false;
+	preset_dirty_ = false;
+	auto_save_counter_ = 0;
     main_window_ = nullptr;
     audio_passthru_ = nullptr;
 
@@ -615,6 +616,16 @@ void FxController::initPresets()
 		}
 	}
 
+	cleanupOrphanedAutoSavedPresets(presets);
+
+	for (auto& preset : presets)
+	{
+		if (getAutoSavePresetFile(preset.name).existsAsFile())
+		{
+			preset.modified = true;
+		}
+	}
+
 	FxModel::getModel().initPresets(presets);
 }
 
@@ -730,14 +741,103 @@ Point<int> FxController::getSystemTrayWindowPosition(int width, int height)
 	return system_tray_view_->getSystemTrayWindowPosition(width, height);
 }
 
-bool FxController::exit()
+File FxController::getAutoSaveDir() const
 {
-	if (FxModel::getModel().isPresetModified())
+	auto data_dir = File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName());
+	return File(data_dir + L"FxSound\\AutoSave");
+}
+
+File FxController::getAutoSavePresetFile(const String& preset_name) const
+{
+	return getAutoSaveDir().getChildFile(preset_name + L".fac");
+}
+
+void FxController::cleanupOrphanedAutoSavedPresets(const Array<FxModel::Preset>& presets)
+{
+	auto auto_save_dir = getAutoSaveDir();
+	if (!auto_save_dir.isDirectory())
 	{
-		FxPresetSaveDialog preset_save_dialog;
-		preset_save_dialog.runModalLoop();
+		return;
 	}
 
+	auto auto_save_paths = auto_save_dir.findChildFiles(File::findFiles, false, "*.fac");
+	for (const auto& auto_save_path : auto_save_paths)
+	{
+		auto auto_save_name = auto_save_path.getFileNameWithoutExtension();
+		bool matched_preset = false;
+		for (const auto& preset : presets)
+		{
+			if (preset.name.equalsIgnoreCase(auto_save_name))
+			{
+				matched_preset = true;
+				break;
+			}
+		}
+
+		if (!matched_preset)
+		{
+			auto_save_path.deleteFile();
+		}
+	}
+}
+
+bool FxController::savePresetToDirectory(const String& preset_name, const File& directory)
+{
+	if (!directory.isDirectory())
+	{
+		auto create_result = directory.createDirectory();
+		if (create_result.failed())
+		{
+			return false;
+		}
+	}
+
+	return dfx_dsp_.savePreset(preset_name.toWideCharPointer(), directory.getFullPathName().toWideCharPointer()) == 0;
+}
+
+void FxController::resetAutoSaveState()
+{
+	preset_dirty_ = false;
+	auto_save_counter_ = 0;
+}
+
+void FxController::autoSavePreset(int preset_index)
+{
+	ScopedLock auto_lock(save_lock_);
+
+	auto& model = FxModel::getModel();
+	auto preset = model.getPreset(preset_index);
+	if (preset.name.isEmpty())
+	{
+		return;
+	}
+
+	if (!savePresetToDirectory(preset.name, getAutoSaveDir()))
+	{
+		logMessage("Failed to autosave preset " + preset.name + "\n");
+		auto_save_counter_ = 0;
+		return;
+	}
+
+	resetAutoSaveState();
+}
+
+void FxController::deleteAutoSavedPreset(const String& preset_name)
+{
+	getAutoSavePresetFile(preset_name).deleteFile();
+}
+
+void FxController::autoSaveModifiedPreset()
+{
+	auto& model = FxModel::getModel();
+	if (model.isPresetModified())
+	{
+		autoSavePreset(model.getSelectedPreset());
+	}
+}
+
+bool FxController::exit()
+{
 	if (FxModel::getModel().getPowerState())
 	{
 		audio_passthru_->restoreDefaultPlaybackDevice();
@@ -758,6 +858,12 @@ void FxController::setPowerState(bool power_state)
 	main_window_->setIcon(power_state, audio_process_on_);
 }
 
+bool FxController::setPreset(const String& preset_name, bool notify)
+{
+	auto selected_preset = findPresetIndexByName(FxModel::getModel(), preset_name);
+	return setPreset(selected_preset, notify);
+}
+
 bool FxController::setPreset(int selected_preset, bool notify)
 {
 	auto& model = FxModel::getModel();
@@ -771,15 +877,21 @@ bool FxController::setPreset(int selected_preset, bool notify)
 
 	if (model.isPresetModified() && selected_preset != model.getSelectedPreset())
 	{
-		FxPresetSaveDialog preset_save_dialog;
-		preset_save_dialog.runModalLoop();
-
-		model.setPresetModified(false);
+		autoSavePreset(model.getSelectedPreset());
 	}
 
 	if (preset.path.isNotEmpty())
 	{
-		if (dfx_dsp_.loadPreset(preset.path.toWideCharPointer()) != 0)
+		auto auto_save_path = getAutoSavePresetFile(preset.name);
+		auto preset_path = preset.path;
+		auto loaded_auto_save = false;
+		if (auto_save_path.existsAsFile())
+		{
+			preset_path = auto_save_path.getFullPathName();
+			loaded_auto_save = true;
+		}
+
+		if (dfx_dsp_.loadPreset(preset_path.toWideCharPointer()) != 0)
 		{
 			model.pushMessage(FormatString(TRANS("Unable to load preset %s."), preset.name));
 			return false;
@@ -787,7 +899,8 @@ bool FxController::setPreset(int selected_preset, bool notify)
 
 		settings_.setString("preset", preset.name);
 		model.selectPreset(selected_preset, true);
-		model.setPresetModified(false);
+		model.setPresetModified(selected_preset, loaded_auto_save);
+		resetAutoSaveState();
 
         for (auto e=0; e<FxEffects::EffectType::NumEffects; e++)
         {
@@ -879,6 +992,8 @@ bool FxController::isPlaybackDeviceAvailable()
 
 void FxController::savePreset(const String& preset_name)
 {
+	ScopedLock lock(save_lock_);
+
 	auto& model = FxModel::getModel();
 
 	auto preset_index = model.getSelectedPreset();
@@ -886,20 +1001,34 @@ void FxController::savePreset(const String& preset_name)
 
 	if (preset_name.isEmpty())
 	{
-		auto path = File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets";
-		dfx_dsp_.savePreset(preset.name.toWideCharPointer(), path.toWideCharPointer());
+		auto path = File(File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets");
+		if (!savePresetToDirectory(preset.name, path))
+		{
+			model.pushMessage(FormatString(TRANS("Unable to save preset %s."), preset.name));
+			return;
+		}
+
+		deleteAutoSavedPreset(preset.name);
+		resetAutoSaveState();
 
 		model.pushMessage(FormatString(TRANS(L"Changes to preset %s are saved."), preset.name));
 	}
 	else
 	{
-		auto path = File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets";
-		dfx_dsp_.savePreset(preset_name.toWideCharPointer(), path.toWideCharPointer());
+		auto path = File(File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets");
+		if (!savePresetToDirectory(preset_name, path))
+		{
+			model.pushMessage(FormatString(TRANS("Unable to save preset %s."), preset_name));
+			return;
+		}
+
+		deleteAutoSavedPreset(preset.name);
+		getAutoSavePresetFile(preset_name).deleteFile();
+		model.setPresetModified(preset_index, false);
+		resetAutoSaveState();
 
 		initPresets();
-		
-		auto selected_preset = findPresetIndexByName(model, preset_name);
-		setPreset(selected_preset);
+		setPreset(preset_name);
 
 		model.pushMessage(FormatString(TRANS("New preset %s is saved."), preset_name));
 
@@ -915,6 +1044,8 @@ void FxController::savePreset(const String& preset_name)
 
 void FxController::renamePreset(const String& new_name)
 {
+	ScopedLock lock(save_lock_);
+
 	auto& model = FxModel::getModel();
 
 	auto preset_index = model.getSelectedPreset();
@@ -923,23 +1054,33 @@ void FxController::renamePreset(const String& new_name)
 	if (preset.name == new_name) return;
 	if (preset.type == FxModel::PresetType::UserPreset)
 	{
-		auto path = File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets";
-		dfx_dsp_.savePreset(new_name.toWideCharPointer(), path.toWideCharPointer());
-
-		wchar_t old_path[MAX_PATH] = {};
-		wcscpy_s(old_path, preset.path.toWideCharPointer());
-		if (preset.path.length()+1 < MAX_PATH)
+		auto path = File(File::addTrailingSeparator(File::getSpecialLocation(File::SpecialLocationType::userApplicationDataDirectory).getFullPathName()) + L"FxSound\\Presets");
+		if (!savePresetToDirectory(new_name, path))
 		{
-			old_path[preset.path.length() + 1] = L'\0';
+			model.pushMessage(FormatString(TRANS("Unable to rename preset %s."), preset.name));
+			return;
 		}
-		SHFILEOPSTRUCT file_op = { NULL, FO_DELETE, old_path, L"",
-								   FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT, FALSE, 0, L"" };
-		SHFileOperation(&file_op);
+		getAutoSavePresetFile(new_name).deleteFile();
+
+		File new_preset_file(path.getChildFile(new_name + L".fac"));
+		File old_preset_file(preset.path);
+		if (!old_preset_file.deleteFile())
+		{
+			if (new_preset_file.existsAsFile())
+			{
+				new_preset_file.deleteFile();
+			}
+
+			model.pushMessage(FormatString(TRANS("Unable to rename preset %s."), preset.name));
+			return;
+		}
+
+		deleteAutoSavedPreset(preset.name);
+		model.setPresetModified(preset_index, false);
+		resetAutoSaveState();
 
 		initPresets();
-
-		auto selected_preset = findPresetIndexByName(model, new_name);
-		setPreset(selected_preset);
+		setPreset(new_name);
 
 		model.setPresetModified(false);
 	}
@@ -954,6 +1095,8 @@ void FxController::deletePreset()
 
 	if (preset.type == FxModel::PresetType::UserPreset)
 	{
+		deleteAutoSavedPreset(preset.name);
+
 		wchar_t path[MAX_PATH] = {};
 		
 		wcscpy_s(path, preset.path.toWideCharPointer());
@@ -977,10 +1120,13 @@ void FxController::undoPreset()
 	auto& model = FxModel::getModel();
 
 	auto preset_index = model.getSelectedPreset();
+	if (!model.isPresetModified(preset_index))
+	{
+		return;
+	}
 
+	deleteAutoSavedPreset(model.getPreset(preset_index).name);
 	setPreset(preset_index);
-
-	model.setPresetModified(false);
 }
 
 void FxController::resetPresets()
@@ -1000,6 +1146,11 @@ void FxController::resetPresets()
 	for (auto i=0; i<count; i++)
 	{
 		auto preset = model.getPreset(i);
+		if (preset.modified)
+		{
+			deleteAutoSavedPreset(preset.name);
+		}
+
 		if (preset.type == FxModel::PresetType::UserPreset)
 		{
 			wchar_t path[MAX_PATH] = {};
@@ -1383,10 +1534,14 @@ void FxController::setEffectValue(FxEffects::EffectType effect, float value)
 {
 	dfx_dsp_.setEffectValue(static_cast<DfxDsp::Effect>(effect), value);
 
-	if (!FxModel::getModel().isPresetModified())
+	auto& model = FxModel::getModel();
+	if (!model.isPresetModified())
 	{
-		FxModel::getModel().setPresetModified(true);
+		model.setPresetModified(true);
 	}
+
+	preset_dirty_ = true;
+	auto_save_counter_ = 0;
 }
 
 int FxController::getNumEqBands()
@@ -1527,10 +1682,14 @@ void FxController::setEqBandFrequency(int band_num, float freq)
 {
     dfx_dsp_.setEqBandFrequency(band_num, freq);
 
-    if (!FxModel::getModel().isPresetModified())
+    auto& model = FxModel::getModel();
+    if (!model.isPresetModified())
     {
-        FxModel::getModel().setPresetModified(true);
+        model.setPresetModified(true);
     }
+
+	preset_dirty_ = true;
+	auto_save_counter_ = 0;
 }
 
 void FxController::getEqBandFrequencyRange(int band_num, float* min_freq, float* max_freq)
@@ -1547,10 +1706,14 @@ void FxController::setEqBandBoostCut(int band_num, float boost)
 {
 	dfx_dsp_.setEqBandBoostCut(band_num, boost);
 
-	if (!FxModel::getModel().isPresetModified())
+	auto& model = FxModel::getModel();
+	if (!model.isPresetModified())
 	{
-		FxModel::getModel().setPresetModified(true);
+		model.setPresetModified(true);
 	}
+
+	preset_dirty_ = true;
+	auto_save_counter_ = 0;
 }
 
 LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param)
@@ -1734,6 +1897,17 @@ void FxController::timerCallback()
             main_window_->showProView();
 			main_window_->pauseVisualizer();
         }
+	}
+
+	static constexpr int AUTO_SAVE_INTERVAL = 600;
+	if (++auto_save_counter_ >= AUTO_SAVE_INTERVAL)
+	{
+		if (preset_dirty_)
+		{
+			autoSavePreset(FxModel::getModel().getSelectedPreset());
+		}
+
+		auto_save_counter_ = 0;
 	}
 
 	auto current_time = Time::getCurrentTime();
