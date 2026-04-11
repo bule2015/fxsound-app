@@ -198,7 +198,8 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	auto_eq_range_slider_("%0.0f dB", 0.0f),
 	filter_q_slider_("%.1fx", 1.0f), balance_slider_(0.0f),
 	restore_defaults_button_(TRANS("Restore Defaults")),
-	reset_presets_button_(TRANS("Reset presets to factory defaults"))
+	reset_presets_button_(TRANS("Reset presets to factory defaults")),
+	prioritize_new_output_toggle_(TRANS("Prioritize new output devices"))
 {
 	FxModel::getModel().addListener(this);
 
@@ -234,8 +235,16 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	output_preference_.setMouseCursor(MouseCursor::PointingHandCursor);
 	output_preference_.setWantsKeyboardFocus(true);
 	output_preference_.setEnabled(true);
+	prioritize_new_output_toggle_.setMouseCursor(MouseCursor::PointingHandCursor);
+	prioritize_new_output_toggle_.setColour(ToggleButton::ColourIds::tickColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	prioritize_new_output_toggle_.setColour(ToggleButton::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	prioritize_new_output_toggle_.setWantsKeyboardFocus(true);
 
 	auto& controller = FxController::getInstance();
+	prioritize_new_output_toggle_.setToggleState(controller.isNewOutputPrioritized(), NotificationType::dontSendNotification);
+	prioritize_new_output_toggle_.onClick = [this]() {
+		FxController::getInstance().setNewOutputPrioritized(prioritize_new_output_toggle_.getToggleState());
+	};
 
 	equalizer_.setMouseCursor(MouseCursor::PointingHandCursor);
 	equalizer_.setWantsKeyboardFocus(true);
@@ -345,6 +354,7 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 
 	addAndMakeVisible(&output_preference_title_);
 	addAndMakeVisible(&output_preference_);
+	addAndMakeVisible(&prioritize_new_output_toggle_);
 	addAndMakeVisible(&equalizer_title_);
 	addAndMakeVisible(&equalizer_);
 	addAndMakeVisible(&master_gain_title_);
@@ -380,7 +390,8 @@ FxSettingsDialog::AudioSettingsPane::~AudioSettingsPane()
 int FxSettingsDialog::AudioSettingsPane::getPreferredHeight() const
 {
 	int y = ENDPOINT_Y;
-	y += LABEL_HEIGHT + 8 + OUTPUT_PREFERENCE_HEIGHT + 30;
+	y += LABEL_HEIGHT + 8 + OUTPUT_PREFERENCE_HEIGHT + 10;
+	y += TOGGLE_BUTTON_HEIGHT + 20;
 	y += COMBOBOX_HEIGHT + 20;
 	y += SLIDER_HEIGHT + 20; // master gain
 	y += SLIDER_HEIGHT + 20; // normalization
@@ -405,7 +416,10 @@ void FxSettingsDialog::AudioSettingsPane::resized()
 	auto width = getWidth() - ((X_MARGIN + 5) * 2);
 	output_preference_.setBounds(X_MARGIN, y, width, OUTPUT_PREFERENCE_HEIGHT);
 
-	y = output_preference_.getBottom() + 30;
+	y = output_preference_.getBottom() + 10;
+	prioritize_new_output_toggle_.setBounds(X_MARGIN, y, width, TOGGLE_BUTTON_HEIGHT);
+
+	y = prioritize_new_output_toggle_.getBottom() + 20;
 	equalizer_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, COMBOBOX_HEIGHT);
 	width = getWidth() - ((X_MARGIN + 5) * 2) - LABEL_WIDTH - GROUP_MARGIN;
 	equalizer_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, width, COMBOBOX_HEIGHT);
@@ -457,7 +471,7 @@ void FxSettingsDialog::AudioSettingsPane::resized()
 	group_x = output_preference_title_.getX() - GROUP_MARGIN;
 	group_y = output_preference_title_.getY() - GROUP_MARGIN;
 	group_width = output_preference_.getRight() - group_x + GROUP_MARGIN;
-	group_height = output_preference_.getBottom() - group_y + GROUP_MARGIN;
+	group_height = prioritize_new_output_toggle_.getBottom() - group_y + GROUP_MARGIN;
 	output_preference_bounds_ = juce::Rectangle<float>(group_x, group_y, group_width, group_height);
 
 	y = restore_defaults_button_.getBottom();
@@ -485,6 +499,7 @@ void FxSettingsDialog::AudioSettingsPane::setText()
 
 	output_preference_title_.setFont(theme.getNormalFont());
 	output_preference_title_.setText(TRANS("Output Device Preference"), NotificationType::dontSendNotification);	
+	prioritize_new_output_toggle_.setButtonText(TRANS("Prioritize new output devices"));
 
 	equalizer_title_.setFont(theme.getNormalFont());
 	equalizer_title_.setText(TRANS("Equalizer:"), NotificationType::dontSendNotification);

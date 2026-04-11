@@ -147,6 +147,8 @@ public:
 	SoundDevice getPreferredOutput();
 	const String& getOutputName();
     void setOutputName(const String& output_device_name);
+	bool isNewOutputPrioritized();
+	void setNewOutputPrioritized(bool prioritize);
 
 	FxThemeMode getThemeMode();
 	void setThemeMode(FxThemeMode mode);

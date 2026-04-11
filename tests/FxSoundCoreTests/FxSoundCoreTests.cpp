@@ -1089,6 +1089,29 @@ void testMergeOutputPrioritiesAppendsNewOutputs()
 	expect(merge_result.priorities[1].device_id == L"hdmi", "merge should append the new output at the end");
 }
 
+void testMergeOutputPrioritiesPrependsNewOutputsWhenPrioritized()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"spk", L"Speakers"},
+		{L"dac", L"USB DAC"}
+	};
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi"),
+		makeOutput(L"dac", L"USB DAC", L"USB Audio", true, false, false, L"c-dac"),
+		makeOutput(L"bt", L"Bluetooth Headphones", L"Bluetooth", true, false, false, L"c-bt")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices, true);
+
+	expect(merge_result.changed, "merge should report changes when prioritized new outputs appear");
+	expect(merge_result.priorities.size() == 4, "merge should keep existing outputs and add new ones");
+	expect(merge_result.priorities[0].device_id == L"hdmi", "merge should prepend the first new output when prioritization is enabled");
+	expect(merge_result.priorities[1].device_id == L"bt", "merge should preserve discovery order for prepended outputs");
+	expect(merge_result.priorities[2].device_id == L"spk", "merge should keep the original priority order after prepended outputs");
+	expect(merge_result.priorities[3].device_id == L"dac", "merge should keep later existing outputs after prepended outputs");
+}
+
 void testMergeOutputPrioritiesRefreshesReconnectedIds()
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
@@ -1839,6 +1862,7 @@ int main()
 		runTest("build initial output priorities keeps same-name different containers", testBuildInitialOutputPrioritiesKeepsSameNameDifferentContainers);
 		runTest("build initial output priorities skips mono devices", testBuildInitialOutputPrioritiesSkipsMonoDevices);
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
+		runTest("merge output priorities prepends new outputs when prioritized", testMergeOutputPrioritiesPrependsNewOutputsWhenPrioritized);
 		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
 		runTest("merge output priorities matches renamed device by container", testMergeOutputPrioritiesMatchesRenamedDeviceByContainer);
 		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);

@@ -137,6 +137,7 @@ private:
 		Label left_label_;
 		Label right_label_;
 
+		ToggleButton prioritize_new_output_toggle_;
 		FxOutputPreference output_preference_;
 		ComboBox equalizer_;
 		

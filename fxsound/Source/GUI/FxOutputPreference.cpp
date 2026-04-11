@@ -281,6 +281,9 @@ FxOutputPreference::FxOutputPreference()
     };
 
     output_preference_list_.setModel(&output_preference_model_);
+    output_preference_list_.addKeyListener(this);
+    output_preference_list_.setTooltip(TRANS("Use Shift+Up or Shift+Down to change the device priority"));
+    output_preference_list_.setWantsKeyboardFocus(true);
 
     addAndMakeVisible(output_preference_list_);
 
@@ -296,6 +299,31 @@ void FxOutputPreference::update()
     output_preference_list_.updateContent();
     output_preference_list_.resized();
     output_preference_list_.repaint();
+}
+
+bool FxOutputPreference::keyPressed(const KeyPress& key, Component*)
+{
+    auto selected_row = output_preference_list_.getSelectedRow();
+    if (selected_row < 0)
+    {
+        return false;
+    }
+
+    if (key == KeyPress(KeyPress::upKey, ModifierKeys::shiftModifier, 0))
+    {
+        output_preference_model_.moveRowUp(selected_row);
+        output_preference_list_.grabKeyboardFocus();
+        return true;
+    }
+
+    if (key == KeyPress(KeyPress::downKey, ModifierKeys::shiftModifier, 0))
+    {
+        output_preference_model_.moveRowDown(selected_row);
+        output_preference_list_.grabKeyboardFocus();
+        return true;
+    }
+
+    return false;
 }
 
 void FxOutputPreference::resized()

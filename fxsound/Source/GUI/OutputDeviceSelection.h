@@ -352,10 +352,12 @@ namespace FxSound::OutputDeviceSelection
 	// Merges newly discovered devices into the saved priority list while keeping the
 	// original ordering stable across reconnects and endpoint id changes.
 	inline PriorityMergeResult mergeOutputPriorities(const std::vector<PriorityEntry>& existing_priorities,
-		const std::vector<SoundDevice>& sound_devices)
+		const std::vector<SoundDevice>& sound_devices,
+		bool prioritize_new_outputs = false)
 	{
 		PriorityMergeResult result;
 		result.priorities.reserve(existing_priorities.size());
+		std::vector<PriorityEntry> new_priorities;
 
 		auto findMatchingEntry = [&result](const SoundDevice& sound_device)
 		{
@@ -406,7 +408,15 @@ namespace FxSound::OutputDeviceSelection
 
 			if (existing_entry == result.priorities.end())
 			{
-				result.priorities.push_back({ sound_device.pwszID, sound_device.deviceFriendlyName, sound_device.containerId });
+				PriorityEntry entry { sound_device.pwszID, sound_device.deviceFriendlyName, sound_device.containerId };
+				if (prioritize_new_outputs)
+				{
+					new_priorities.push_back(entry);
+				}
+				else
+				{
+					result.priorities.push_back(entry);
+				}
 				result.changed = true;
 				continue;
 			}
@@ -420,6 +430,11 @@ namespace FxSound::OutputDeviceSelection
 				existing_entry->container_id = sound_device.containerId;
 				result.changed = true;
 			}
+		}
+
+		if (!new_priorities.empty())
+		{
+			result.priorities.insert(result.priorities.begin(), new_priorities.begin(), new_priorities.end());
 		}
 
 		return result;

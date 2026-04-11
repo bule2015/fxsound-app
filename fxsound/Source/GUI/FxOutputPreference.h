@@ -85,7 +85,7 @@ private:
 };
 
 
-class FxOutputPreference : public Component
+class FxOutputPreference : public Component, private KeyListener
 {
 public:
     FxOutputPreference();
@@ -95,6 +95,7 @@ public:
 private:
     static constexpr int ROW_HEIGHT = 30;
 
+    bool keyPressed(const KeyPress& key, Component* originating_component) override;
     void resized() override;
     void paint(Graphics& g) override;
 
