@@ -89,7 +89,6 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     preset_list_.setColour(ComboBox::ColourIds::focusedOutlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
     preset_list_.setWantsKeyboardFocus(true);
     preset_list_.setJustificationType(Justification::centredLeft);
-    preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
     preset_list_.onChange = [this]() {
         auto index = preset_list_.getSelectedItemIndex();
         if (index >= 0)
@@ -123,6 +122,21 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
     row_index_ = -1;
     is_row_selected_ = false;
+
+    refreshText();
+}
+
+void FxOutputDeviceRow::lookAndFeelChanged()
+{
+    refreshText();
+    updateSelectionVisuals();
+}
+
+void FxOutputDeviceRow::refreshText()
+{
+    auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+    device_name_.setFont(theme.getNormalFont());
+    preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
 }
 
 void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
@@ -338,7 +352,6 @@ FxOutputPreference::FxOutputPreference()
 
     output_preference_list_.setModel(&output_preference_model_);
     output_preference_list_.addKeyListener(this);
-    output_preference_list_.setTooltip(TRANS("Use Shift+Up or Shift+Down to change the device priority"));
     output_preference_list_.setWantsKeyboardFocus(true);
 
     addAndMakeVisible(output_preference_list_);
@@ -346,6 +359,7 @@ FxOutputPreference::FxOutputPreference()
     output_preference_list_.setRowHeight(ROW_HEIGHT);
     output_preference_list_.setMultipleSelectionEnabled(false);
 
+    refreshText();
     refreshListBox();
 }
 
@@ -384,10 +398,21 @@ void FxOutputPreference::resized()
     output_preference_list_.setBounds(getLocalBounds().reduced(5, 10));
 }
 
+void FxOutputPreference::lookAndFeelChanged()
+{
+    refreshText();
+    refreshListBox();
+}
+
 void FxOutputPreference::paint(Graphics& g)
 {
     g.setFillType(FillType(Colour(FXCOLOR(WidgetBackground)).withAlpha(1.0f)));
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
+}
+
+void FxOutputPreference::refreshText()
+{
+    output_preference_list_.setTooltip(TRANS("Use Shift+Up or Shift+Down to change the device priority"));
 }
 
 void FxOutputPreference::refreshListBox()

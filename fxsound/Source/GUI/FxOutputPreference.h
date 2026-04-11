@@ -36,8 +36,10 @@ private:
     static constexpr int MARGIN = 5;
     static constexpr int PRESET_LIST_WIDTH = 150;
 
+    void lookAndFeelChanged() override;
     void paint(Graphics& g) override;
     void refreshPresetItemsIfNeeded();
+    void refreshText();
     void updateSelectionVisuals();
     
     FxOutputPreferenceListModel& output_preference_list_model_;
@@ -101,10 +103,12 @@ private:
     static constexpr int ROW_HEIGHT = 40;
 
     bool keyPressed(const KeyPress& key, Component* originating_component) override;
+    void lookAndFeelChanged() override;
     void resized() override;
     void paint(Graphics& g) override;
     void refreshListBox();
     void refreshListBox(int selected_row);
+    void refreshText();
 
     ListBox output_preference_list_;
     FxOutputPreferenceListModel output_preference_model_;

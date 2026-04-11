@@ -127,15 +127,37 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 	}
 
 	showPane(PaneId::Audio);
-	setSize(WIDTH, getPreferredHeight());
+	updateWindowSize();
 }
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
-	return jmax(MIN_HEIGHT,
-		jmax(audio_settings_pane_.getPreferredHeight(),
-			jmax(equalizer_settings_pane_.getPreferredHeight(),
-				jmax(general_settings_pane_.getPreferredHeight(), help_settings_pane_.getPreferredHeight()))));
+	int preferred_height = MIN_HEIGHT;
+
+	switch (active_pane_)
+	{
+	case PaneId::Audio:
+		preferred_height = audio_settings_pane_.getPreferredHeight();
+		break;
+
+	case PaneId::Equalizer:
+		preferred_height = equalizer_settings_pane_.getPreferredHeight();
+		break;
+
+	case PaneId::General:
+		preferred_height = general_settings_pane_.getPreferredHeight();
+		break;
+
+	case PaneId::Help:
+		preferred_height = help_settings_pane_.getPreferredHeight();
+		break;
+
+	case PaneId::Count:
+	default:
+		break;
+	}
+
+	return jmax(MIN_HEIGHT, preferred_height);
 }
 
 void FxSettingsDialog::SettingsComponent::resized()
@@ -153,6 +175,17 @@ void FxSettingsDialog::SettingsComponent::resized()
 	{
 		pane->setBounds(pane_rect);
 	}
+}
+
+void FxSettingsDialog::SettingsComponent::lookAndFeelChanged()
+{
+	Component::SafePointer<SettingsComponent> safe_this(this);
+	MessageManager::callAsync([safe_this]() {
+		if (safe_this != nullptr)
+		{
+			safe_this->updateWindowSize();
+		}
+	});
 }
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
@@ -189,6 +222,8 @@ std::array<std::pair<FxSettingsDialog::SettingsButton*, Component*>, 4> FxSettin
 
 void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 {
+	active_pane_ = active_pane;
+
 	auto entries = getPaneEntries();
 	for (int index = 0; index < (int)entries.size(); ++index)
 	{
@@ -196,6 +231,22 @@ void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 		auto is_active = index == (int)active_pane;
 		button->setToggleState(is_active, NotificationType::dontSendNotification);
 		pane->setVisible(is_active);
+	}
+
+	updateWindowSize();
+}
+
+void FxSettingsDialog::SettingsComponent::updateWindowSize()
+{
+	auto preferred_height = getPreferredHeight();
+	if (getWidth() != WIDTH || getHeight() != preferred_height)
+	{
+		setSize(WIDTH, preferred_height);
+	}
+
+	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
+	{
+		dialog->setContent(this);
 	}
 }
 

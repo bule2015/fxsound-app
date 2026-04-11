@@ -257,6 +257,7 @@ private:
 
 		int getPreferredHeight() const;
 		void resized() override;
+		void lookAndFeelChanged() override;
 
 		void buttonClicked(Button* button) override;
 
@@ -272,6 +273,7 @@ private:
 		std::array<Component*, 4> getPanes();
 		std::array<std::pair<SettingsButton*, Component*>, 4> getPaneEntries();
 		void showPane(PaneId active_pane);
+		void updateWindowSize();
 
 		std::unique_ptr<SettingsButton> audio_button_;
 		std::unique_ptr<SettingsButton> equalizer_button_;
@@ -281,7 +283,8 @@ private:
 		AudioSettingsPane audio_settings_pane_;
 		EqualizerSettingsPane equalizer_settings_pane_;
 		GeneralSettingsPane general_settings_pane_;
-		HelpSettingsPane help_settings_pane_; 
+		HelpSettingsPane help_settings_pane_;
+		PaneId active_pane_ = PaneId::Audio;
 	};
 
 	SettingsComponent settings_content_;
