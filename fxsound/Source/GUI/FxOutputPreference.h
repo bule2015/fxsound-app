@@ -29,7 +29,7 @@ class FxOutputDeviceRow : public Component
 {
 public:
     explicit FxOutputDeviceRow(FxOutputPreferenceListModel& model);
-    void update(int index, const DeviceConfig& device_config);
+    void update(int index, bool is_row_selected, const DeviceConfig& device_config);
 
 private:
     static constexpr int BUTTON_WIDTH = 18;
@@ -48,6 +48,7 @@ private:
     ComboBox preset_list_;
 
     int row_index_;
+    bool is_row_selected_;
     DeviceConfig device_config_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxOutputDeviceRow)
@@ -93,7 +94,7 @@ public:
     void update();
 
 private:
-    static constexpr int ROW_HEIGHT = 30;
+    static constexpr int ROW_HEIGHT = 40;
 
     bool keyPressed(const KeyPress& key, Component* originating_component) override;
     void resized() override;

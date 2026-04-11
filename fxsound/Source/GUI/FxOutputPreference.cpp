@@ -54,6 +54,8 @@ bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
 {
+    setInterceptsMouseClicks(false, true);
+
     up_image_ = Drawable::createFromImageData(FXIMAGE(ArrowUp), FXIMAGESIZE(ArrowUp));
     down_image_ = Drawable::createFromImageData(FXIMAGE(ArrowDown), FXIMAGESIZE(ArrowDown));
 
@@ -74,8 +76,8 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
         };
 
     preset_list_.setColour(ComboBox::ColourIds::backgroundColourId, Colour(FXCOLOR(WidgetBackground)).withAlpha(1.0f));
-    preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(DefaultText)).withAlpha(0.5f));
-    preset_list_.setColour(ComboBox::ColourIds::focusedOutlineColourId, Colour(FXCOLOR(DefaultText)).withAlpha(1.0f));
+    preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(1.0f));
+    preset_list_.setColour(ComboBox::ColourIds::focusedOutlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
     preset_list_.setWantsKeyboardFocus(true);
     preset_list_.setJustificationType(Justification::centredLeft);   
     preset_list_.onChange = [this]() {
@@ -109,9 +111,10 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     addAndMakeVisible(preset_list_);
 
     row_index_ = -1;
+    is_row_selected_ = false;
 }
 
-void FxOutputDeviceRow::update(int index, const DeviceConfig& device_config)
+void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConfig& device_config)
 {
     if (index < 0)
         return;
@@ -156,6 +159,14 @@ void FxOutputDeviceRow::update(int index, const DeviceConfig& device_config)
     device_name_.setText(String::formatted("%d. ", row_index_ + 1) +  device_config.device_name, NotificationType::dontSendNotification);
     device_name_.setEnabled(FxController::getInstance().isOutputDeviceConnected(device_config));
 
+    if (is_row_selected_ != is_row_selected)
+    {
+        is_row_selected_ = is_row_selected;
+        auto outline = is_row_selected_ ? FXCOLOR(SelectedRowOutline) : FXCOLOR(RowOutline);
+        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(outline).withAlpha(1.0f));
+        repaint();
+    }
+
     preset_list_.clear();
     preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
     auto& model = FxModel::getModel();
@@ -177,8 +188,16 @@ void FxOutputDeviceRow::update(int index, const DeviceConfig& device_config)
 
 void FxOutputDeviceRow::paint(Graphics& g)
 {
-    g.setColour(Colour(FXCOLOR(DefaultText)).withAlpha(1.0f));
-    g.drawLine(device_name_.getX(), device_name_.getBottom() - 0.5f, device_name_.getRight(), device_name_.getBottom() - 0.5f, 0.5);
+    if (is_row_selected_)
+    {
+        g.setColour(Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
+        g.drawLine(device_name_.getX(), device_name_.getBottom() - 0.5f, device_name_.getRight(), device_name_.getBottom() - 1.0f, 1.0f);
+    }
+    else
+    {
+        g.setColour(Colour(FXCOLOR(RowOutline)).withAlpha(1.0f));
+        g.drawLine(device_name_.getX(), device_name_.getBottom() - 0.5f, device_name_.getRight(), device_name_.getBottom() - 0.5f, 0.5f);
+    }
 }
 
 FxOutputPreferenceListModel::FxOutputPreferenceListModel()
@@ -209,7 +228,7 @@ Component* FxOutputPreferenceListModel::refreshComponentForRow(int rowNumber, bo
     if (row == nullptr)
         row = new FxOutputDeviceRow(*this);
 
-    row->update(rowNumber, device_configs_[rowNumber]);
+    row->update(rowNumber, isRowSelected, device_configs_[rowNumber]);
 
     return row;
 }
@@ -276,7 +295,6 @@ FxOutputPreference::FxOutputPreference()
 
     output_preference_model_.onRowMoved = [this](int row_index) {
         output_preference_list_.updateContent();
-        output_preference_list_.repaintRow(-1);
         output_preference_list_.selectRow(row_index);
     };
 
@@ -328,7 +346,7 @@ bool FxOutputPreference::keyPressed(const KeyPress& key, Component*)
 
 void FxOutputPreference::resized()
 {
-    output_preference_list_.setBounds(getLocalBounds());
+    output_preference_list_.setBounds(getLocalBounds().reduced(5, 10));
 }
 
 void FxOutputPreference::paint(Graphics& g)
