@@ -263,6 +263,8 @@ private:
 		static constexpr int BUTTON_HEIGHT = 40;
 		static constexpr int SEPARATOR_X = 152;
 
+		void showPane(SettingsButton& active_button, Component& active_pane);
+
 		std::unique_ptr<SettingsButton> audio_button_;
 		std::unique_ptr<SettingsButton> equalizer_button_;
 		std::unique_ptr<SettingsButton> general_button_;

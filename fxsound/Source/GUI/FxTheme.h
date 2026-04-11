@@ -84,6 +84,8 @@ public:
 	Font getSmallFont();
 	Font getTitleFont();
     Typeface::Ptr getDefaultTypeface();
+    static std::unique_ptr<Drawable> createSelectedArrowDrawable(bool is_up);
+    static std::unique_ptr<Drawable> createEqualizerButtonIcon();
 
 	static FxThemeMode getThemeMode();
 	static void setThemeMode(FxThemeMode theme_mode);

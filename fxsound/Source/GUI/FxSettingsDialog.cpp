@@ -20,52 +20,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxSettingsDialog.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
-namespace
-{
-std::unique_ptr<Drawable> createEqualizerButtonIcon()
-{
-    auto root = std::make_unique<DrawableComposite>();
-    auto color = Colour(0xFF7E7E7E);
-
-    auto addLine = [&](float x1, float y1, float x2, float y2)
-    {
-        auto line = std::make_unique<DrawablePath>();
-        Path path;
-        path.startNewSubPath(x1, y1);
-        path.lineTo(x2, y2);
-        line->setPath(path);
-        PathStrokeType stroke(2.0f, PathStrokeType::curved, PathStrokeType::rounded);
-        line->setStrokeFill(FillType(color));
-        line->setStrokeType(stroke);
-        root->addAndMakeVisible(line.release());
-    };
-
-    auto addCircle = [&](float cx, float cy)
-    {
-        auto circle = std::make_unique<DrawablePath>();
-        Path path;
-        path.addEllipse(cx - 2.5f, cy - 2.5f, 5.0f, 5.0f);
-        circle->setPath(path);
-        circle->setFill(FillType(color));
-        root->addAndMakeVisible(circle.release());
-    };
-
-    addLine(3.0f, 7.0f, 13.5f, 7.0f);
-    addLine(18.5f, 7.0f, 21.0f, 7.0f);
-    addCircle(16.0f, 7.0f);
-    addLine(3.0f, 12.0f, 9.5f, 12.0f);
-    addLine(14.5f, 12.0f, 21.0f, 12.0f);
-    addCircle(12.0f, 12.0f);
-    addLine(3.0f, 17.0f, 6.5f, 17.0f);
-    addLine(11.5f, 17.0f, 21.0f, 17.0f);
-    addCircle(9.0f, 17.0f);
-
-    root->setContentArea({ 0.0f, 0.0f, 24.0f, 24.0f });
-    return root;
-}
-}
-
-//==============================================================================
 FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(this)
 {
 	setContent(&settings_content_);
@@ -145,7 +99,7 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 	equalizer_button_ = std::make_unique<SettingsButton>("Equalizer");
 	equalizer_button_->setToggleState(false, NotificationType::dontSendNotification);
-	auto equalizer_icon = createEqualizerButtonIcon();
+	auto equalizer_icon = FxTheme::createEqualizerButtonIcon();
 	equalizer_button_->setImage(equalizer_icon.get());
 	equalizer_button_->addListener(this);
 
@@ -199,52 +153,33 @@ void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
 {
 	if (button == audio_button_.get())
 	{
-		button->setToggleState(true, NotificationType::dontSendNotification);
-		equalizer_button_->setToggleState(false, NotificationType::dontSendNotification);
-		general_button_->setToggleState(false, NotificationType::dontSendNotification);
-		help_button_->setToggleState(false, NotificationType::dontSendNotification);
-
-		audio_settings_pane_.setVisible(true);
-		equalizer_settings_pane_.setVisible(false);
-		general_settings_pane_.setVisible(false);
-		help_settings_pane_.setVisible(false);
+		showPane(*audio_button_, audio_settings_pane_);
 	}
 	else if (button == equalizer_button_.get())
 	{
-		button->setToggleState(true, NotificationType::dontSendNotification);
-		audio_button_->setToggleState(false, NotificationType::dontSendNotification);
-		general_button_->setToggleState(false, NotificationType::dontSendNotification);
-		help_button_->setToggleState(false, NotificationType::dontSendNotification);
-
-		equalizer_settings_pane_.setVisible(true);
-		audio_settings_pane_.setVisible(false);
-		general_settings_pane_.setVisible(false);
-		help_settings_pane_.setVisible(false);
+		showPane(*equalizer_button_, equalizer_settings_pane_);
 	}
 	else if (button == general_button_.get())
 	{
-		button->setToggleState(true, NotificationType::dontSendNotification);
-		audio_button_->setToggleState(false, NotificationType::dontSendNotification);
-		equalizer_button_->setToggleState(false, NotificationType::dontSendNotification);
-		help_button_->setToggleState(false, NotificationType::dontSendNotification);
-
-		general_settings_pane_.setVisible(true);
-		audio_settings_pane_.setVisible(false);
-		equalizer_settings_pane_.setVisible(false);
-		help_settings_pane_.setVisible(false);
+		showPane(*general_button_, general_settings_pane_);
 	}
 	else if (button == help_button_.get())
 	{
-		button->setToggleState(true, NotificationType::dontSendNotification);
-		audio_button_->setToggleState(false, NotificationType::dontSendNotification);
-		equalizer_button_->setToggleState(false, NotificationType::dontSendNotification);
-		general_button_->setToggleState(false, NotificationType::dontSendNotification);
-
-		help_settings_pane_.setVisible(true);
-		audio_settings_pane_.setVisible(false);
-		equalizer_settings_pane_.setVisible(false);
-		general_settings_pane_.setVisible(false);
+		showPane(*help_button_, help_settings_pane_);
 	}
+}
+
+void FxSettingsDialog::SettingsComponent::showPane(SettingsButton& active_button, Component& active_pane)
+{
+	audio_button_->setToggleState(audio_button_.get() == &active_button, NotificationType::dontSendNotification);
+	equalizer_button_->setToggleState(equalizer_button_.get() == &active_button, NotificationType::dontSendNotification);
+	general_button_->setToggleState(general_button_.get() == &active_button, NotificationType::dontSendNotification);
+	help_button_->setToggleState(help_button_.get() == &active_button, NotificationType::dontSendNotification);
+
+	audio_settings_pane_.setVisible(&audio_settings_pane_ == &active_pane);
+	equalizer_settings_pane_.setVisible(&equalizer_settings_pane_ == &active_pane);
+	general_settings_pane_.setVisible(&general_settings_pane_ == &active_pane);
+	help_settings_pane_.setVisible(&help_settings_pane_ == &active_pane);
 }
 
 FxSettingsDialog::SettingsPane::SettingsPane(String name)

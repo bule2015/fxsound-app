@@ -472,7 +472,72 @@ Font FxTheme::getTitleFont()
 
 Typeface::Ptr FxTheme::getDefaultTypeface()
 {
-    return font_400_;
+	return font_400_;
+}
+
+std::unique_ptr<Drawable> FxTheme::createSelectedArrowDrawable(bool is_up)
+{
+	auto drawable = std::make_unique<DrawablePath>();
+	Path path;
+	if (is_up)
+	{
+		path.startNewSubPath(3.0f, 1.25f);
+		path.lineTo(0.5f, 3.75f);
+		path.lineTo(5.5f, 3.75f);
+	}
+	else
+	{
+		path.startNewSubPath(0.5f, 1.25f);
+		path.lineTo(5.5f, 1.25f);
+		path.lineTo(3.0f, 3.75f);
+	}
+	path.closeSubPath();
+
+	drawable->setPath(path);
+	drawable->setFill(FillType(Colour(getThemeMode() == FxThemeMode::Dark ? 0xFFB1B1B1u : 0xFF4E4E4Eu)));
+	return drawable;
+}
+
+std::unique_ptr<Drawable> FxTheme::createEqualizerButtonIcon()
+{
+	auto root = std::make_unique<DrawableComposite>();
+	auto color = Colour(0xFF7E7E7E);
+
+	auto addLine = [&](float x1, float y1, float x2, float y2)
+	{
+		auto line = std::make_unique<DrawablePath>();
+		Path path;
+		path.startNewSubPath(x1, y1);
+		path.lineTo(x2, y2);
+		line->setPath(path);
+		PathStrokeType stroke(2.0f, PathStrokeType::curved, PathStrokeType::rounded);
+		line->setStrokeFill(FillType(color));
+		line->setStrokeType(stroke);
+		root->addAndMakeVisible(line.release());
+	};
+
+	auto addCircle = [&](float cx, float cy)
+	{
+		auto circle = std::make_unique<DrawablePath>();
+		Path path;
+		path.addEllipse(cx - 2.5f, cy - 2.5f, 5.0f, 5.0f);
+		circle->setPath(path);
+		circle->setFill(FillType(color));
+		root->addAndMakeVisible(circle.release());
+	};
+
+	addLine(3.0f, 7.0f, 13.5f, 7.0f);
+	addLine(18.5f, 7.0f, 21.0f, 7.0f);
+	addCircle(16.0f, 7.0f);
+	addLine(3.0f, 12.0f, 9.5f, 12.0f);
+	addLine(14.5f, 12.0f, 21.0f, 12.0f);
+	addCircle(12.0f, 12.0f);
+	addLine(3.0f, 17.0f, 6.5f, 17.0f);
+	addLine(11.5f, 17.0f, 21.0f, 17.0f);
+	addCircle(9.0f, 17.0f);
+
+	root->setContentArea({ 0.0f, 0.0f, 24.0f, 24.0f });
+	return root;
 }
 
 FxThemeMode FxTheme::getThemeMode()

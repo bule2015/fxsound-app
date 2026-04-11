@@ -37,6 +37,8 @@ private:
     static constexpr int PRESET_LIST_WIDTH = 150;
 
     void paint(Graphics& g) override;
+    void refreshPresetItemsIfNeeded();
+    void updateSelectionVisuals();
     
     FxOutputPreferenceListModel& output_preference_list_model_;
     
@@ -48,6 +50,7 @@ private:
     DrawableButton down_button_;
     Label device_name_;
     ComboBox preset_list_;
+    StringArray preset_items_;
 
     int row_index_;
     bool is_row_selected_;
@@ -63,8 +66,7 @@ public:
     ~FxOutputPreferenceListModel();
 
     int getNumRows() override;
-
-    void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected) override;
+    void paintListBoxItem(int, juce::Graphics&, int, int, bool) override;
 
     Component* refreshComponentForRow(int rowNumber, bool isRowSelected, Component* existingComponent) override;
 

@@ -51,28 +51,6 @@ bool matchesDeviceConfigEntry(const DeviceConfig& lhs, const DeviceConfig& rhs)
         lhs.device_name == rhs.device_name;
 }
 
-std::unique_ptr<Drawable> createSelectedArrowDrawable(bool is_up)
-{
-    auto drawable = std::make_unique<DrawablePath>();
-    Path path;
-    if (is_up)
-    {
-        path.startNewSubPath(3.0f, 1.25f);
-        path.lineTo(0.5f, 3.75f);
-        path.lineTo(5.5f, 3.75f);
-    }
-    else
-    {
-        path.startNewSubPath(0.5f, 1.25f);
-        path.lineTo(5.5f, 1.25f);
-        path.lineTo(3.0f, 3.75f);
-    }
-    path.closeSubPath();
-
-    drawable->setPath(path);
-    drawable->setFill(FillType(Colour(FxTheme::getThemeMode() == FxThemeMode::Dark ? 0xFFB1B1B1u : 0xFF4E4E4Eu)));
-    return drawable;
-}
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -81,8 +59,8 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
 
     up_image_ = Drawable::createFromImageData(FXIMAGE(ArrowUp), FXIMAGESIZE(ArrowUp));
     down_image_ = Drawable::createFromImageData(FXIMAGE(ArrowDown), FXIMAGESIZE(ArrowDown));
-    up_selected_image_ = createSelectedArrowDrawable(true);
-    down_selected_image_ = createSelectedArrowDrawable(false);
+    up_selected_image_ = FxTheme::createSelectedArrowDrawable(true);
+    down_selected_image_ = FxTheme::createSelectedArrowDrawable(false);
 
     up_button_.setMouseCursor(MouseCursor::PointingHandCursor);
     up_button_.setSize(BUTTON_WIDTH, BUTTON_WIDTH);
@@ -141,6 +119,46 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     is_row_selected_ = false;
 }
 
+void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
+{
+    auto& model = FxModel::getModel();
+    StringArray next_items;
+    next_items.ensureStorageAllocated(model.getPresetCount());
+
+    for (auto i = 0; i < model.getPresetCount(); ++i)
+    {
+        next_items.add(model.getPreset(i).name);
+    }
+
+    if (next_items == preset_items_)
+    {
+        return;
+    }
+
+    preset_items_ = next_items;
+    preset_list_.clear(NotificationType::dontSendNotification);
+    for (auto i = 0; i < preset_items_.size(); ++i)
+    {
+        preset_list_.addItem(preset_items_[i], i + 1);
+    }
+}
+
+void FxOutputDeviceRow::updateSelectionVisuals()
+{
+    if (is_row_selected_)
+    {
+        up_button_.setImages(up_selected_image_.get(), up_selected_image_.get(), up_selected_image_.get());
+        down_button_.setImages(down_selected_image_.get(), down_selected_image_.get(), down_selected_image_.get());
+        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
+    }
+    else
+    {
+        up_button_.setImages(up_image_.get(), up_selected_image_.get(), up_image_.get());
+        down_button_.setImages(down_image_.get(), down_selected_image_.get(), down_image_.get());
+        preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(0.5f));
+    }
+}
+
 void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConfig& device_config)
 {
     if (index < 0)
@@ -189,36 +207,23 @@ void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConf
     if (is_row_selected_ != is_row_selected)
     {
         is_row_selected_ = is_row_selected;
-        if (is_row_selected_)
-        {
-            up_button_.setImages(up_selected_image_.get(), up_selected_image_.get(), up_selected_image_.get());
-            down_button_.setImages(down_selected_image_.get(), down_selected_image_.get(), down_selected_image_.get());
-            preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(SelectedRowOutline)).withAlpha(1.0f));
-        }
-        else
-        {
-            up_button_.setImages(up_image_.get(), up_selected_image_.get(), up_image_.get());
-            down_button_.setImages(down_image_.get(), down_selected_image_.get(), down_image_.get());
-            preset_list_.setColour(ComboBox::ColourIds::outlineColourId, Colour(FXCOLOR(RowOutline)).withAlpha(0.5f));
-        }
+        updateSelectionVisuals();
         repaint();
     }
 
-    preset_list_.clear();
-    auto& model = FxModel::getModel();
+    refreshPresetItemsIfNeeded();
     int selected_id = 0;
-    for (auto i = 0; i < model.getPresetCount(); i++)
+    for (auto i = 0; i < preset_items_.size(); ++i)
     {
-        auto preset = FxModel::getModel().getPreset(i).name;
-        preset_list_.addItem(preset, i + 1);
-        if (preset == device_config.preset)
+        if (preset_items_[i] == device_config.preset)
         {
             selected_id = i + 1;
+            break;
         }
     }
-    if (selected_id != 0)
+    if (preset_list_.getSelectedId() != selected_id)
     {
-        preset_list_.setSelectedId(selected_id, false);
+        preset_list_.setSelectedId(selected_id, NotificationType::dontSendNotification);
     }
 }
 
@@ -253,8 +258,8 @@ int FxOutputPreferenceListModel::getNumRows()
     return device_configs_.size();
 }
 
-void FxOutputPreferenceListModel::paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height, bool rowIsSelected)
-{ 
+void FxOutputPreferenceListModel::paintListBoxItem(int, juce::Graphics&, int, int, bool)
+{
 }
 
 Component* FxOutputPreferenceListModel::refreshComponentForRow(int rowNumber, bool isRowSelected, Component* existingComponent)
@@ -326,7 +331,7 @@ FxOutputPreference::FxOutputPreference()
 {
     output_preference_model_.onModelChanged = [this]() {
         output_preference_list_.updateContent();
-        output_preference_list_.repaintRow(-1);
+        output_preference_list_.repaint();
     };
 
     output_preference_model_.onRowMoved = [this](int row_index) {
@@ -351,7 +356,6 @@ FxOutputPreference::FxOutputPreference()
 void FxOutputPreference::update()
 {
     output_preference_list_.updateContent();
-    output_preference_list_.resized();
     output_preference_list_.repaint();
 }
 
