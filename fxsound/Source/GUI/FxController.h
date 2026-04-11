@@ -254,6 +254,10 @@ private:
 	bool applyRoutingActions(const SoundDevice& sound_device, const FxSound::OutputDeviceSelection::OutputRoutingActions& actions);
 	// Applies a configured device preset when an output change warrants it.
 	String tryApplyAutoPresetForCurrentOutput(bool trigger_change);
+	// Restores the configured preset for the selected output after preset list mutations.
+	bool restoreConfiguredPresetForCurrentOutput();
+	// Rebuilds preset state after delete/reset and restores the best preset for the current output.
+	void finalizePresetMutation();
 
 	void powerOn(bool on);
 

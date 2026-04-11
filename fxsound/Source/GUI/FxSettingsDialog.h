@@ -117,8 +117,8 @@ private:
 		void setText();
 		void resizeResetButton(int x, int y);
 		void modelChanged(FxModel::Event model_event);
-		void updateEndpointList();
 		void updateEqualizerBandsText();
+		void updateResetPresetsButton();
 		void selectEqualizerBands();
 		void restoreDefaults();
 

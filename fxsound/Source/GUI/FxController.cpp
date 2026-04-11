@@ -966,9 +966,7 @@ void FxController::deletePreset()
 								   FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT, FALSE, 0, L"" };
 		SHFileOperation(&file_op);
 
-		initPresets();
-
-		setPreset(0);
+		finalizePresetMutation();
 
 		FxModel::getModel().pushMessage(FormatString(TRANS("Preset %s is deleted."), preset.name));
 	}
@@ -1018,9 +1016,7 @@ void FxController::resetPresets()
 		}
 	}
 	
-	initPresets();
-
-	setPreset(0);
+	finalizePresetMutation();
 
 	FxModel::getModel().pushMessage(TRANS("Presets are restored to factory defaults"));
 }
@@ -1311,6 +1307,47 @@ String FxController::tryApplyAutoPresetForCurrentOutput(bool trigger_change)
 	}
 
 	return String(auto_preset_decision.preset_name.c_str());
+}
+
+bool FxController::restoreConfiguredPresetForCurrentOutput()
+{
+	auto& model = FxModel::getModel();
+	auto device_config = DeviceConfig::getDeviceConfig(settings_, model.getSelectedOutput());
+	if (device_config.preset.isEmpty())
+	{
+		return false;
+	}
+
+	auto selected_preset = findPresetIndexByName(model, device_config.preset);
+	if (selected_preset < 0)
+	{
+		auto device_configs = getDeviceConfigs();
+		for (auto& config : device_configs)
+		{
+			if (matchesConfiguredOutput(config, model.getSelectedOutput()))
+			{
+				config.preset = {};
+				break;
+			}
+		}
+
+		saveDeviceConfigs(device_configs);
+		return false;
+	}
+
+	return setPreset(selected_preset, false);
+}
+
+void FxController::finalizePresetMutation()
+{
+	auto& model = FxModel::getModel();
+	model.setPresetModified(false);
+	initPresets();
+
+	if (!restoreConfiguredPresetForCurrentOutput())
+	{
+		setPreset(0);
+	}
 }
 
 void FxController::powerOn(bool on)

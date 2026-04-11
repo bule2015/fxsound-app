@@ -332,16 +332,16 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 
 	reset_presets_button_.setSize(RESET_PRESETS_BUTTON_WIDTH, BUTTON_HEIGHT);
 	reset_presets_button_.setMouseCursor(MouseCursor::PointingHandCursor);
-	reset_presets_button_.setEnabled(FxModel::getModel().getUserPresetCount() > 0);
+	updateResetPresetsButton();
 	reset_presets_button_.onClick = [this]() {
 		auto& controller = FxController::getInstance();
 
 		controller.resetPresets();
-		reset_presets_button_.setEnabled(false);
+		updateResetPresetsButton();
 		};
 
 	setText();
-	updateEndpointList();
+	output_preference_.update();
 
 	addAndMakeVisible(&output_preference_title_);
 	addAndMakeVisible(&output_preference_);
@@ -593,16 +593,12 @@ void FxSettingsDialog::AudioSettingsPane::modelChanged(FxModel::Event model_even
 {
 	if (model_event == FxModel::Event::OutputListUpdated)
 	{
-		updateEndpointList();
+		output_preference_.update();
 	}
-}
-
-void FxSettingsDialog::AudioSettingsPane::updateEndpointList()
-{
-	auto& controller = FxController::getInstance();
-	auto device_configs = controller.getDeviceConfigs();
-
-	auto pref_device_index = 0;
+	else if (model_event == FxModel::Event::PresetModified || model_event == FxModel::Event::PresetListUpdated)
+	{
+		updateResetPresetsButton();
+	}
 }
 
 void FxSettingsDialog::AudioSettingsPane::updateEqualizerBandsText()
@@ -620,11 +616,18 @@ void FxSettingsDialog::AudioSettingsPane::updateEqualizerBandsText()
 	}
 }
 
+void FxSettingsDialog::AudioSettingsPane::updateResetPresetsButton()
+{
+	auto& model = FxModel::getModel();
+	reset_presets_button_.setEnabled(model.getUserPresetCount() > 0 || model.isPresetModified());
+}
+
 void FxSettingsDialog::AudioSettingsPane::visibilityChanged()
 {
 	if (isVisible())
 	{
 		output_preference_.update();
+		updateResetPresetsButton();
     }
 }
 
