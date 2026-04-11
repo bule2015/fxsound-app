@@ -37,6 +37,10 @@ public:
 
 	void modelChanged(FxModel::Event model_event) override;
 	void setStatus(bool power, bool processing);
+	void clearIconRegistration();
+	bool restoreIconRegistration(bool power, bool processing);
+	bool hasRegisteredIcon() const;
+	bool ensureIconRegistration(bool power, bool processing);
 	Point<int> getSystemTrayWindowPosition(int width, int height);
 
 private:

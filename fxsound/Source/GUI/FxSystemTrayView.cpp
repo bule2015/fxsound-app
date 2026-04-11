@@ -66,6 +66,58 @@ FxSystemTrayView::~FxSystemTrayView()
     removeFromDesktop();
 }
 
+void FxSystemTrayView::clearIconRegistration()
+{
+    if (!icon_added_)
+    {
+        setVisible(false);
+        return;
+    }
+
+    NOTIFYICONDATA nid = { sizeof(nid) };
+    nid.hWnd = (HWND)getWindowHandle();
+    setNotifyIconIdentity(nid, use_guid_registration_);
+    Shell_NotifyIcon(NIM_DELETE, &nid);
+
+    icon_added_ = false;
+    setVisible(false);
+}
+
+bool FxSystemTrayView::restoreIconRegistration(bool power, bool processing)
+{
+    clearIconRegistration();
+    addIcon(power, processing);
+    setStatus(power, processing);
+    return hasRegisteredIcon();
+}
+
+bool FxSystemTrayView::hasRegisteredIcon() const
+{
+    if (!icon_added_)
+    {
+        return false;
+    }
+
+    NOTIFYICONIDENTIFIER icon_id = {};
+    RECT rect = {};
+
+    icon_id.cbSize = sizeof(NOTIFYICONIDENTIFIER);
+    icon_id.hWnd = (HWND)getWindowHandle();
+    setNotifyIconIdentity(icon_id);
+
+    return SUCCEEDED(Shell_NotifyIconGetRect(&icon_id, &rect));
+}
+
+bool FxSystemTrayView::ensureIconRegistration(bool power, bool processing)
+{
+    if (!hasRegisteredIcon())
+    {
+        return restoreIconRegistration(power, processing);
+    }
+
+    return true;
+}
+
 void FxSystemTrayView::modelChanged(FxModel::Event model_event)
 {
     if (!FxController::getInstance().isNotificationsHidden() && model_event == FxModel::Event::Notification)

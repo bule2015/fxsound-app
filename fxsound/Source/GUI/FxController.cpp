@@ -266,6 +266,8 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 	output_latency_logging_enabled_ = false;
 	preset_dirty_ = false;
 	auto_save_counter_ = 0;
+	tray_icon_health_check_counter_ = 0;
+	tray_icon_recovery_pending_ = false;
     main_window_ = nullptr;
     audio_passthru_ = nullptr;
 
@@ -1730,7 +1732,6 @@ void FxController::setEqBandBoostCut(int band_num, float boost)
 
 LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param)
 {
-	static auto os = SystemStats::getOperatingSystemType();
 	FxController* controller = (FxController*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
 	if (controller == nullptr)
@@ -1841,14 +1842,35 @@ LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, cons
 
 		case WM_WTSSESSION_CHANGE:
 		{
-			WPARAM login_event = (os == SystemStats::OperatingSystemType::Windows7) ? WTS_CONSOLE_CONNECT : WTS_SESSION_DESKTOP_READY;
+			auto session_reconnect =
+				w_param == WTS_CONSOLE_CONNECT ||
+				w_param == WTS_SESSION_LOGON ||
+				w_param == WTS_SESSION_UNLOCK ||
+				w_param == WTS_SESSION_DESKTOP_READY;
 
-			if (w_param == login_event || w_param == WTS_SESSION_UNLOCK)
+			if (session_reconnect)
 			{
+				if (controller->system_tray_view_ != nullptr)
+				{
+					controller->tray_icon_recovery_pending_ = !controller->system_tray_view_->restoreIconRegistration(
+						FxModel::getModel().getPowerState(),
+						controller->isAudioProcessing());
+				}
+				else
+				{
+					controller->tray_icon_recovery_pending_ = false;
+				}
+
 				controller->setPowerState(FxModel::getModel().getPowerState());
 			}
-			else if (w_param == WTS_CONSOLE_DISCONNECT)
+			else if (w_param == WTS_CONSOLE_DISCONNECT || w_param == WTS_SESSION_LOCK)
 			{
+				if (controller->system_tray_view_ != nullptr)
+				{
+					controller->system_tray_view_->clearIconRegistration();
+				}
+
+				controller->tray_icon_recovery_pending_ = true;
 				controller->powerOn(false);
 			}
 		}
@@ -1864,6 +1886,25 @@ void FxController::timerCallback()
 		output_changed_ = false;
 		Thread::sleep(200);
 		return;
+	}
+
+	if (tray_icon_recovery_pending_ && system_tray_view_ != nullptr)
+	{
+		if (++tray_icon_health_check_counter_ >= 10)
+		{
+			tray_icon_health_check_counter_ = 0;
+
+			if (session_id_ == WTSGetActiveConsoleSessionId())
+			{
+				tray_icon_recovery_pending_ = !system_tray_view_->ensureIconRegistration(
+					FxModel::getModel().getPowerState(),
+					audio_process_on_);
+			}
+		}
+	}
+	else
+	{
+		tray_icon_health_check_counter_ = 0;
 	}
 
     audio_passthru_->processTimer();

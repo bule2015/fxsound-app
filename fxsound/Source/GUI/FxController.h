@@ -307,6 +307,8 @@ private:
 	bool output_latency_logging_enabled_;
 	bool preset_dirty_;
 	int auto_save_counter_;
+	int tray_icon_health_check_counter_;
+	bool tray_icon_recovery_pending_;
 
 	bool minimize_tip_;
 	bool survey_tip_;
