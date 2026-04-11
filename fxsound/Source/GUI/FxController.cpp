@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
 #include "OutputDeviceSelection.h"
+#include "PresetAutoSavePolicy.h"
 #include "StartupOptionPolicy.h"
 #include "FxEffects.h"
 #include "../Utils/SysInfo/SysInfo.h"
@@ -760,21 +761,20 @@ void FxController::cleanupOrphanedAutoSavedPresets(const Array<FxModel::Preset>&
 		return;
 	}
 
+	std::vector<std::wstring> preset_names;
+	preset_names.reserve(static_cast<size_t>(presets.size()));
+	for (const auto& preset : presets)
+	{
+		preset_names.push_back(preset.name.toWideCharPointer());
+	}
+
 	auto auto_save_paths = auto_save_dir.findChildFiles(File::findFiles, false, "*.fac");
 	for (const auto& auto_save_path : auto_save_paths)
 	{
 		auto auto_save_name = auto_save_path.getFileNameWithoutExtension();
-		bool matched_preset = false;
-		for (const auto& preset : presets)
-		{
-			if (preset.name.equalsIgnoreCase(auto_save_name))
-			{
-				matched_preset = true;
-				break;
-			}
-		}
-
-		if (!matched_preset)
+		if (!FxSound::PresetAutoSavePolicy::shouldKeepAutoSavedPreset(
+			auto_save_name.toWideCharPointer(),
+			preset_names))
 		{
 			auto_save_path.deleteFile();
 		}
@@ -874,21 +874,24 @@ bool FxController::setPreset(int selected_preset, bool notify)
 	}
 
     auto preset = model.getPreset(selected_preset);
+	auto switch_decision = FxSound::PresetAutoSavePolicy::buildPresetSwitchDecision(
+		model.isPresetModified(),
+		model.getSelectedPreset(),
+		selected_preset,
+		getAutoSavePresetFile(preset.name).existsAsFile());
 
-	if (model.isPresetModified() && selected_preset != model.getSelectedPreset())
+	if (switch_decision.should_auto_save_current)
 	{
 		autoSavePreset(model.getSelectedPreset());
 	}
 
 	if (preset.path.isNotEmpty())
 	{
-		auto auto_save_path = getAutoSavePresetFile(preset.name);
 		auto preset_path = preset.path;
-		auto loaded_auto_save = false;
-		if (auto_save_path.existsAsFile())
+		if (switch_decision.should_load_auto_saved_preset)
 		{
+			auto auto_save_path = getAutoSavePresetFile(preset.name);
 			preset_path = auto_save_path.getFullPathName();
-			loaded_auto_save = true;
 		}
 
 		if (dfx_dsp_.loadPreset(preset_path.toWideCharPointer()) != 0)
@@ -899,7 +902,7 @@ bool FxController::setPreset(int selected_preset, bool notify)
 
 		settings_.setString("preset", preset.name);
 		model.selectPreset(selected_preset, true);
-		model.setPresetModified(selected_preset, loaded_auto_save);
+		model.setPresetModified(selected_preset, switch_decision.should_mark_loaded_preset_modified);
 		resetAutoSaveState();
 
         for (auto e=0; e<FxEffects::EffectType::NumEffects; e++)
@@ -1464,13 +1467,18 @@ bool FxController::restoreConfiguredPresetForCurrentOutput()
 {
 	auto& model = FxModel::getModel();
 	auto device_config = DeviceConfig::getDeviceConfig(settings_, model.getSelectedOutput());
-	if (device_config.preset.isEmpty())
+	std::vector<std::wstring> preset_names;
+	preset_names.reserve(static_cast<size_t>(model.getPresetCount()));
+	for (int index = 0; index < model.getPresetCount(); ++index)
 	{
-		return false;
+		preset_names.push_back(model.getPreset(index).name.toWideCharPointer());
 	}
 
-	auto selected_preset = findPresetIndexByName(model, device_config.preset);
-	if (selected_preset < 0)
+	auto decision = FxSound::OutputDeviceSelection::buildConfiguredPresetRestoreDecision(
+		device_config.preset.toWideCharPointer(),
+		preset_names);
+
+	if (decision.should_clear_stale_configured_preset)
 	{
 		auto device_configs = getDeviceConfigs();
 		for (auto& config : device_configs)
@@ -1483,10 +1491,14 @@ bool FxController::restoreConfiguredPresetForCurrentOutput()
 		}
 
 		saveDeviceConfigs(device_configs);
+	}
+
+	if (!decision.should_apply)
+	{
 		return false;
 	}
 
-	return setPreset(selected_preset, false);
+	return setPreset(decision.preset_index, false);
 }
 
 void FxController::finalizePresetMutation()

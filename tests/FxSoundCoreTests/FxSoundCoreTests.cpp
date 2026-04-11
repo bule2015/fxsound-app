@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
+#include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
 #include "../../dsp/include/AutoEqPolicy.h"
 #include "../../dsp/include/VolumeLevelingQuietPolicy.h"
@@ -651,6 +652,58 @@ void testAutoEqPolicyDisablesAfterManualBandFrequencyEdit()
 		"manual band frequency edits should disable auto eq while preserving the current curve");
 }
 
+void testPresetSwitchDecisionAutoSavesModifiedCurrentPreset()
+{
+	auto decision = FxSound::PresetAutoSavePolicy::buildPresetSwitchDecision(
+		true,
+		1,
+		2,
+		false);
+
+	expect(decision.should_auto_save_current,
+		"switching away from a modified preset should autosave the current preset");
+	expect(!decision.should_load_auto_saved_preset,
+		"switching to a preset without an autosave file should keep loading the original preset");
+}
+
+void testPresetSwitchDecisionSkipsAutoSaveWhenSelectionDoesNotChange()
+{
+	auto decision = FxSound::PresetAutoSavePolicy::buildPresetSwitchDecision(
+		true,
+		2,
+		2,
+		true);
+
+	expect(!decision.should_auto_save_current,
+		"re-selecting the current preset should not autosave it again");
+	expect(decision.should_load_auto_saved_preset,
+		"loading the current preset should still prefer its autosave copy when one exists");
+	expect(decision.should_mark_loaded_preset_modified,
+		"loading an autosave copy should keep the preset marked modified");
+}
+
+void testAutoSaveCleanupKeepsCaseInsensitivePresetMatch()
+{
+	std::vector<std::wstring> preset_names {
+		L"General",
+		L"Movies"
+	};
+
+	expect(FxSound::PresetAutoSavePolicy::shouldKeepAutoSavedPreset(L"general", preset_names),
+		"autosave cleanup should keep autosave files that match presets case-insensitively");
+}
+
+void testAutoSaveCleanupDropsUnknownPreset()
+{
+	std::vector<std::wstring> preset_names {
+		L"General",
+		L"Movies"
+	};
+
+	expect(!FxSound::PresetAutoSavePolicy::shouldKeepAutoSavedPreset(L"Podcast", preset_names),
+		"autosave cleanup should remove autosave files that no longer match any preset");
+}
+
 void testStartupOptionPolicyFindsExactOutputLatencyFlag()
 {
 	const std::vector<std::wstring> arguments {
@@ -699,6 +752,66 @@ void testPresetApplyUsesNameFallbackOnlyForLegacyEntries()
 
 	expect(should_apply,
 		"preset application should still support legacy entries that only store the device name");
+}
+
+void testConfiguredPresetRestoreDecisionAppliesExistingPreset()
+{
+	std::vector<std::wstring> preset_names {
+		L"General",
+		L"Movies",
+		L"Music"
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildConfiguredPresetRestoreDecision(
+		L"Movies",
+		preset_names);
+
+	expect(decision.should_apply,
+		"configured preset restore should apply when the configured preset still exists");
+	expect(decision.preset_index == 1,
+		"configured preset restore should return the matching preset index");
+	expect(!decision.should_clear_stale_configured_preset,
+		"configured preset restore should not clear a valid preset mapping");
+	expect(!decision.should_fallback_to_default_preset,
+		"configured preset restore should skip the default fallback when the preset exists");
+}
+
+void testConfiguredPresetRestoreDecisionClearsMissingPreset()
+{
+	std::vector<std::wstring> preset_names {
+		L"General",
+		L"Music"
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildConfiguredPresetRestoreDecision(
+		L"Movies",
+		preset_names);
+
+	expect(!decision.should_apply,
+		"configured preset restore should not apply when the preset has been deleted");
+	expect(decision.should_clear_stale_configured_preset,
+		"configured preset restore should clear stale preset names from device config");
+	expect(decision.should_fallback_to_default_preset,
+		"configured preset restore should fall back to the default preset when the configured preset is missing");
+}
+
+void testConfiguredPresetRestoreDecisionFallsBackWhenPresetIsUnset()
+{
+	std::vector<std::wstring> preset_names {
+		L"General",
+		L"Movies"
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildConfiguredPresetRestoreDecision(
+		L"",
+		preset_names);
+
+	expect(!decision.should_apply,
+		"configured preset restore should not apply when no preset is configured");
+	expect(!decision.should_clear_stale_configured_preset,
+		"configured preset restore should not clear anything when the device has no configured preset");
+	expect(decision.should_fallback_to_default_preset,
+		"configured preset restore should fall back to the default preset when nothing is configured");
 }
 
 void testAudioPassthruCleanupContinuesAfterRestoreFailure()
@@ -1596,10 +1709,17 @@ int main()
 		runTest("auto eq policy resets after band frequency change", testAutoEqPolicyResetsAnalysisAfterBandFrequencyChange);
 		runTest("auto eq policy disables after manual band gain edit", testAutoEqPolicyDisablesAfterManualBandGainEdit);
 		runTest("auto eq policy disables after manual band frequency edit", testAutoEqPolicyDisablesAfterManualBandFrequencyEdit);
+		runTest("preset switch decision autosaves modified current preset", testPresetSwitchDecisionAutoSavesModifiedCurrentPreset);
+		runTest("preset switch decision skips autosave when selection does not change", testPresetSwitchDecisionSkipsAutoSaveWhenSelectionDoesNotChange);
+		runTest("autosave cleanup keeps case-insensitive preset matches", testAutoSaveCleanupKeepsCaseInsensitivePresetMatch);
+		runTest("autosave cleanup drops unknown presets", testAutoSaveCleanupDropsUnknownPreset);
 		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
 		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
 		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
+		runTest("configured preset restore applies existing preset", testConfiguredPresetRestoreDecisionAppliesExistingPreset);
+		runTest("configured preset restore clears missing preset", testConfiguredPresetRestoreDecisionClearsMissingPreset);
+		runTest("configured preset restore falls back when preset is unset", testConfiguredPresetRestoreDecisionFallsBackWhenPresetIsUnset);
 		runTest("audio passthru cleanup continues after restore failure", testAudioPassthruCleanupContinuesAfterRestoreFailure);
 		runTest("audio passthru cleanup stops after thread shutdown timeout", testAudioPassthruCleanupStopsAfterThreadShutdownTimeout);
 		runTest("buffer policy migrates legacy machine default", testBufferPolicyMigratesLegacyMachineDefaultToLowLatencyDefault);

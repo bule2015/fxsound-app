@@ -196,6 +196,14 @@ namespace FxSound::OutputDeviceSelection
 		std::wstring container_id;
 	};
 
+	struct ConfiguredPresetRestoreDecision
+	{
+		bool should_apply = false;
+		bool should_clear_stale_configured_preset = false;
+		bool should_fallback_to_default_preset = true;
+		int preset_index = -1;
+	};
+
 	inline bool shouldApplyPresetToSelectedOutput(const PresetApplyIdentity& identity,
 		const SoundDevice& selected_output,
 		const std::wstring& current_output_name)
@@ -217,6 +225,31 @@ namespace FxSound::OutputDeviceSelection
 			identity.container_id.empty() &&
 			!identity.device_name.empty() &&
 			identity.device_name == current_output_name;
+	}
+
+	inline ConfiguredPresetRestoreDecision buildConfiguredPresetRestoreDecision(
+		const std::wstring& configured_preset,
+		const std::vector<std::wstring>& preset_names)
+	{
+		ConfiguredPresetRestoreDecision decision;
+		if (configured_preset.empty())
+		{
+			return decision;
+		}
+
+		for (size_t index = 0; index < preset_names.size(); ++index)
+		{
+			if (preset_names[index] == configured_preset)
+			{
+				decision.should_apply = true;
+				decision.should_fallback_to_default_preset = false;
+				decision.preset_index = static_cast<int>(index);
+				return decision;
+			}
+		}
+
+		decision.should_clear_stale_configured_preset = true;
+		return decision;
 	}
 
 	inline SoundDevice restorePersistedOutput(const PersistedOutputState& persisted_output)
