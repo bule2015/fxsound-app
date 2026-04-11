@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
+#include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
 #include "../../dsp/include/AutoEqPolicy.h"
@@ -41,8 +42,15 @@ struct FakeAudioPassthru : IAudioPassthru
 	int mute_false_call_count = 0;
 	int set_playback_call_count = 0;
 	int restart_call_count = 0;
+	int set_dsp_processing_call_count = 0;
 	std::wstring last_playback_device_id;
 	AudioPassthruCallback* callback = nullptr;
+	bool processing_thread_running = true;
+	uint64_t last_capture_with_samples_tick_ms = 0;
+	uint64_t last_successful_playback_tick_ms = 0;
+	float last_capture_input_rms_db = -160.0f;
+	float last_submitted_playback_rms_db = -160.0f;
+	bool dsp_processing_enabled = true;
 
 	int init(bool = false) override
 	{
@@ -96,6 +104,12 @@ struct FakeAudioPassthru : IAudioPassthru
 	{
 	}
 
+	void setDspProcessingEnabled(bool enabled) override
+	{
+		dsp_processing_enabled = enabled;
+		++set_dsp_processing_call_count;
+	}
+
 	void setAsPlaybackDevice(const SoundDevice sound_device) override
 	{
 		last_playback_device_id = sound_device.pwszID;
@@ -138,6 +152,36 @@ struct FakeAudioPassthru : IAudioPassthru
 
 		playback_device_available = targeted_device != sound_devices.end() && targeted_device->isActive;
 		return playback_device_available;
+	}
+
+	bool isProcessingThreadRunning() override
+	{
+		return processing_thread_running;
+	}
+
+	bool isMuted() override
+	{
+		return muted;
+	}
+
+	uint64_t getLastCaptureWithSamplesTickMs() override
+	{
+		return last_capture_with_samples_tick_ms;
+	}
+
+	uint64_t getLastSuccessfulPlaybackTickMs() override
+	{
+		return last_successful_playback_tick_ms;
+	}
+
+	float getLastCaptureInputRmsDb() override
+	{
+		return last_capture_input_rms_db;
+	}
+
+	float getLastSubmittedPlaybackRmsDb() override
+	{
+		return last_submitted_playback_rms_db;
 	}
 };
 
@@ -1684,6 +1728,64 @@ void testRuntimeIdleSyncRecoversReconnectedSelectedOutputWithoutAudioCalls()
 	expect(harness.state.playback_device_available, "idle sync should mark the recovered selected output available");
 }
 
+void testAudioSignalPolicyUsesCaptureOnlyForSignalPresence()
+{
+	const int64_t now_ms = 2000;
+	expect(
+		FxSound::AudioSignalPolicy::isCaptureSignalPresent(now_ms, 1700, -80.0f),
+		"recent capture above threshold should count as signal");
+	expect(
+		!FxSound::AudioSignalPolicy::isCaptureSignalPresent(now_ms, 1400, -80.0f),
+		"stale capture should not count as signal");
+	expect(
+		!FxSound::AudioSignalPolicy::isCaptureSignalPresent(now_ms, 1700, -120.0f),
+		"quiet capture should not count as signal");
+}
+
+void testAudioSignalPolicyGraceResetsSignalCounters()
+{
+	const auto counters = FxSound::AudioSignalPolicy::advanceSignalCounters(true, true, 4, 3);
+	expect(counters.signal_present_after == 0, "grace period should clear signal present counter");
+	expect(counters.signal_absent_after == 0, "grace period should clear signal absent counter");
+}
+
+void testAudioSignalPolicyEnablesDspOnFirstSignalTick()
+{
+	auto counters = FxSound::AudioSignalPolicy::CounterState {};
+	counters = FxSound::AudioSignalPolicy::advanceSignalCounters(true, false, counters.signal_present_after, counters.signal_absent_after);
+
+	expect(
+		FxSound::AudioSignalPolicy::shouldEnableDsp(counters.signal_present_after, false),
+		"first signal tick should enable dsp");
+}
+
+void testAudioSignalPolicyDisablesDspAfterFiveSilentTicks()
+{
+	auto counters = FxSound::AudioSignalPolicy::CounterState {};
+	for (int index = 0; index < 5; ++index)
+	{
+		counters = FxSound::AudioSignalPolicy::advanceSignalCounters(false, false, counters.signal_present_after, counters.signal_absent_after);
+	}
+
+	expect(
+		FxSound::AudioSignalPolicy::shouldDisableDsp(counters.signal_absent_after, true),
+		"five silent ticks should disable dsp");
+}
+
+void testAudioSignalPolicyDetectsPlaybackStallWithLiveCapture()
+{
+	expect(
+		FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(0, true, 5000, 4200, 3000, true),
+		"audible live capture with stale playback should trigger stall detection");
+}
+
+void testAudioSignalPolicySkipsRestartWithoutAudibleCapture()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(0, true, 5000, 4200, 3000, false),
+		"silent capture should not trigger playback stall recovery");
+}
+
 void runTest(const std::string& name, const std::function<void()>& test)
 {
 	test();
@@ -1769,6 +1871,12 @@ int main()
 		runTest("runtime startup recovers reconnected selected output", testRuntimeStartupRecoversReconnectedSelectedOutput);
 		runTest("runtime idle sync preserves inactive selected output without audio calls", testRuntimeIdleSyncPreservesInactiveSelectedOutputWithoutAudioCalls);
 		runTest("runtime idle sync recovers reconnected selected output without audio calls", testRuntimeIdleSyncRecoversReconnectedSelectedOutputWithoutAudioCalls);
+		runTest("audio signal policy uses capture only for signal presence", testAudioSignalPolicyUsesCaptureOnlyForSignalPresence);
+		runTest("audio signal policy grace resets signal counters", testAudioSignalPolicyGraceResetsSignalCounters);
+		runTest("audio signal policy enables dsp on first signal tick", testAudioSignalPolicyEnablesDspOnFirstSignalTick);
+		runTest("audio signal policy disables dsp after five silent ticks", testAudioSignalPolicyDisablesDspAfterFiveSilentTicks);
+		runTest("audio signal policy detects playback stall with live capture", testAudioSignalPolicyDetectsPlaybackStallWithLiveCapture);
+		runTest("audio signal policy skips restart without audible capture", testAudioSignalPolicySkipsRestartWithoutAudibleCapture);
 	}
 	catch (const std::exception& exception)
 	{
