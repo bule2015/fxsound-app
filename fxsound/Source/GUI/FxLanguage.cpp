@@ -24,17 +24,9 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
 {
     languages_ = { "en", "ar", "ba", "hr", "de", "es", "fr", "hu", "id", "it", "ja", "ko", "nl", "no", "fa", "pl", "pt", "pt-br", "ro", "ru", "sl", "sv", "th", "tr", "ua", "vi", "zh-CN", "zh-TW"};
 
-    language_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
     language_.setJustificationType(Justification::centred);
 
-    auto next_normal = Drawable::createFromImageData(FXIMAGE(ArrowNext), FXIMAGESIZE(ArrowNext));
-    auto next_disabled = Drawable::createFromImageData(FXIMAGE(ArrowNextBW), FXIMAGESIZE(ArrowNextBW));
-    next_button_.setImages(next_normal.get(), nullptr, next_disabled.get());
     next_button_.setMouseCursor(MouseCursor::PointingHandCursor);
-
-    auto prev_normal = Drawable::createFromImageData(FXIMAGE(ArrowPrev), FXIMAGESIZE(ArrowPrev));
-    auto prev_disabled = Drawable::createFromImageData(FXIMAGE(ArrowPrevBW), FXIMAGESIZE(ArrowPrevBW));
-    prev_button_.setImages(prev_normal.get(), nullptr, prev_disabled.get());
     prev_button_.setMouseCursor(MouseCursor::PointingHandCursor);
     
     setSize(WIDTH, HEIGHT);
@@ -55,26 +47,18 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
         this->onNextLanguage();
     };
 
-    String language_code = FxController::getInstance().getLanguage();
-    language_.setText(FxController::getInstance().getLanguageName(language_code), NotificationType::dontSendNotification);
-
-    language_index_ = -1;
-    auto i = 0;
-    for (auto lng : languages_)
-    {        
-        if (language_code.startsWith(lng))
-        {
-            language_index_ = i;
-        }
-
-        i++;
-    }
+    refreshSelector();
 }
 
 void FxLanguage::paint(Graphics& g)
 {
     g.setFillType(FillType(Colour(FXCOLOR(ControlBackground)).withAlpha(1.0f)));
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 5.0f);
+}
+
+void FxLanguage::lookAndFeelChanged()
+{
+    refreshSelector();
 }
 
 void FxLanguage::onNextLanguage()
@@ -86,11 +70,7 @@ void FxLanguage::onNextLanguage()
 
     String language_code = languages_[language_index_];
     FxController::getInstance().setLanguage(language_code);
-
-    auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
-    language_.setFont(theme.getNormalFont());
-
-    language_.setText(FxController::getInstance().getLanguageName(language_code), NotificationType::dontSendNotification);
+    refreshSelector();
 }
 
 void FxLanguage::onPrevLanguage()
@@ -102,9 +82,42 @@ void FxLanguage::onPrevLanguage()
 
     String language_code = languages_[language_index_];
     FxController::getInstance().setLanguage(language_code);
+    refreshSelector();
+}
 
-	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
-    language_.setFont(theme.getNormalFont());
+void FxLanguage::refreshSelector()
+{
+    refreshButtonImages();
 
-    language_.setText(FxController::getInstance().getLanguageName(language_code), NotificationType::dontSendNotification);
+    auto& controller = FxController::getInstance();
+    auto language_code = controller.getLanguage();
+
+    language_index_ = 0;
+    for (int i = 0; i < languages_.size(); ++i)
+    {
+        if (language_code.startsWith(languages_[i]))
+        {
+            language_index_ = i;
+            break;
+        }
+    }
+
+    if (auto* theme = dynamic_cast<FxTheme*>(&getLookAndFeel()))
+    {
+        language_.setFont(theme->getNormalFont());
+    }
+
+    language_.setColour(Label::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+    language_.setText(controller.getLanguageName(language_code), NotificationType::dontSendNotification);
+}
+
+void FxLanguage::refreshButtonImages()
+{
+    auto next_normal = Drawable::createFromImageData(FXIMAGE(ArrowNext), FXIMAGESIZE(ArrowNext));
+    auto next_disabled = Drawable::createFromImageData(FXIMAGE(ArrowNextBW), FXIMAGESIZE(ArrowNextBW));
+    next_button_.setImages(next_normal.get(), nullptr, next_disabled.get());
+
+    auto prev_normal = Drawable::createFromImageData(FXIMAGE(ArrowPrev), FXIMAGESIZE(ArrowPrev));
+    auto prev_disabled = Drawable::createFromImageData(FXIMAGE(ArrowPrevBW), FXIMAGESIZE(ArrowPrevBW));
+    prev_button_.setImages(prev_normal.get(), nullptr, prev_disabled.get());
 }

@@ -38,9 +38,12 @@ private:
     static constexpr int LABEL_HEIGHT = 22;
 
     void paint(Graphics& g) override;
+    void lookAndFeelChanged() override;
 
     void onNextLanguage();
     void onPrevLanguage();
+    void refreshSelector();
+    void refreshButtonImages();
     
     Label language_;
     DrawableButton next_button_;
