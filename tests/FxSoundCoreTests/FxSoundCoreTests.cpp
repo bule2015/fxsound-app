@@ -930,6 +930,52 @@ void testSettingsDialogLayoutUsesActivePaneHeight()
 		"settings dialog layout should use the active pane height");
 }
 
+void testSettingsDialogLayoutUsesActivePaneWidth()
+{
+	const auto preferred_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWidth(
+		600,
+		1,
+		{ 620, 760, 680, 610 });
+
+	expect(preferred_width == 760,
+		"settings dialog layout should use the active pane width");
+}
+
+void testSettingsDialogLayoutAddsPaneChromeToWindowWidth()
+{
+	const auto preferred_window_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWindowWidth(
+		600,
+		151,
+		1,
+		{ 620, 760, 680, 610 });
+
+	expect(preferred_window_width == 911,
+		"settings dialog layout should add the settings sidebar width to the active pane width");
+}
+
+void testSettingsDialogLayoutAppliesMinimumWidthFloor()
+{
+	const auto preferred_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWidth(
+		600,
+		3,
+		{ 620, 760, 680, 520 });
+
+	expect(preferred_width == 600,
+		"settings dialog layout should respect the minimum width floor");
+}
+
+void testSettingsDialogLayoutAppliesMinimumWindowWidthFloor()
+{
+	const auto preferred_window_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWindowWidth(
+		600,
+		151,
+		3,
+		{ 120, 160, 180, 200 });
+
+	expect(preferred_window_width == 600,
+		"settings dialog layout should keep the minimum width when pane width plus chrome is still smaller");
+}
+
 void testSettingsDialogLayoutAppliesMinimumHeightFloor()
 {
 	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
@@ -945,6 +991,8 @@ void testSettingsDialogLayoutSkipsRedundantResize()
 {
 	expect(!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 180),
 		"settings dialog layout should skip redundant window resizing");
+	expect(FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 720, 180),
+		"settings dialog layout should resize when the active pane width changes");
 	expect(FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 240),
 		"settings dialog layout should resize when the active pane height changes");
 }
@@ -2026,6 +2074,10 @@ int main()
 		runTest("autosave cleanup drops unknown presets", testAutoSaveCleanupDropsUnknownPreset);
 		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
 		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
+		runTest("settings dialog layout uses active pane width", testSettingsDialogLayoutUsesActivePaneWidth);
+		runTest("settings dialog layout adds pane chrome to window width", testSettingsDialogLayoutAddsPaneChromeToWindowWidth);
+		runTest("settings dialog layout applies minimum width floor", testSettingsDialogLayoutAppliesMinimumWidthFloor);
+		runTest("settings dialog layout applies minimum window width floor", testSettingsDialogLayoutAppliesMinimumWindowWidthFloor);
 		runTest("settings dialog layout uses active pane height", testSettingsDialogLayoutUsesActivePaneHeight);
 		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
 		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);

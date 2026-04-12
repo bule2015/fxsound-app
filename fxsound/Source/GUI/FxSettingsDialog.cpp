@@ -21,6 +21,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "SettingsDialogLayoutPolicy.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
+namespace
+{
+int measureTextWidth(const Font& font, const String& text, int padding = 0)
+{
+	return font.getStringWidth(text) + padding;
+}
+
+int getTogglePreferredWidth(const ToggleButton& toggle, const Font& font)
+{
+	return font.getStringWidth(toggle.getButtonText()) + 34;
+}
+}
+
 FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(this)
 {
 	setContent(&settings_content_);
@@ -137,6 +150,20 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 	updateWindowSize();
 }
 
+int FxSettingsDialog::SettingsComponent::getPreferredWidth() const
+{
+	return FxSound::SettingsDialogLayoutPolicy::getPreferredWindowWidth(
+		MIN_WIDTH,
+		SEPARATOR_X - 1,
+		static_cast<int>(active_pane_),
+		{
+			audio_settings_pane_.getPreferredWidth(),
+			equalizer_settings_pane_.getPreferredWidth(),
+			general_settings_pane_.getPreferredWidth(),
+			help_settings_pane_.getPreferredWidth()
+		});
+}
+
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
 	return FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
@@ -169,13 +196,28 @@ void FxSettingsDialog::SettingsComponent::resized()
 
 void FxSettingsDialog::SettingsComponent::lookAndFeelChanged()
 {
+	for (auto* pane : getPanes())
+	{
+		pane->refreshPaneContent();
+	}
+
+	for (auto* button : getPaneButtons())
+	{
+		button->repaint();
+	}
+
 	Component::SafePointer<SettingsComponent> safe_this(this);
 	MessageManager::callAsync([safe_this]() {
 		if (safe_this != nullptr)
 		{
-			safe_this->updateWindowSize();
+			safe_this->refreshWindowSize();
 		}
 	});
+}
+
+void FxSettingsDialog::SettingsComponent::refreshWindowSize()
+{
+	updateWindowSize();
 }
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
@@ -195,18 +237,18 @@ std::array<FxSettingsDialog::SettingsButton*, 4> FxSettingsDialog::SettingsCompo
 	return { audio_button_.get(), equalizer_button_.get(), general_button_.get(), help_button_.get() };
 }
 
-std::array<Component*, 4> FxSettingsDialog::SettingsComponent::getPanes()
+std::array<FxSettingsDialog::SettingsPane*, 4> FxSettingsDialog::SettingsComponent::getPanes()
 {
 	return { &audio_settings_pane_, &equalizer_settings_pane_, &general_settings_pane_, &help_settings_pane_ };
 }
 
-std::array<std::pair<FxSettingsDialog::SettingsButton*, Component*>, 4> FxSettingsDialog::SettingsComponent::getPaneEntries()
+std::array<std::pair<FxSettingsDialog::SettingsButton*, FxSettingsDialog::SettingsPane*>, 4> FxSettingsDialog::SettingsComponent::getPaneEntries()
 {
 	return {
-		std::make_pair(audio_button_.get(), static_cast<Component*>(&audio_settings_pane_)),
-		std::make_pair(equalizer_button_.get(), static_cast<Component*>(&equalizer_settings_pane_)),
-		std::make_pair(general_button_.get(), static_cast<Component*>(&general_settings_pane_)),
-		std::make_pair(help_button_.get(), static_cast<Component*>(&help_settings_pane_))
+		std::make_pair(audio_button_.get(), &audio_settings_pane_),
+		std::make_pair(equalizer_button_.get(), &equalizer_settings_pane_),
+		std::make_pair(general_button_.get(), &general_settings_pane_),
+		std::make_pair(help_button_.get(), &help_settings_pane_)
 	};
 }
 
@@ -228,13 +270,14 @@ void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 
 void FxSettingsDialog::SettingsComponent::updateWindowSize()
 {
+	auto preferred_width = getPreferredWidth();
 	auto preferred_height = getPreferredHeight();
-	if (!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(getWidth(), getHeight(), WIDTH, preferred_height))
+	if (!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(getWidth(), getHeight(), preferred_width, preferred_height))
 	{
 		return;
 	}
 
-	setSize(WIDTH, preferred_height);
+	setSize(preferred_width, preferred_height);
 
 	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
 	{
@@ -248,6 +291,11 @@ FxSettingsDialog::SettingsPane::SettingsPane(String name)
 	title_.setJustificationType(Justification::centredLeft);
 	addAndMakeVisible(title_);
 	lookAndFeelChanged();
+}
+
+int FxSettingsDialog::SettingsPane::getPreferredWidth() const
+{
+	return 0;
 }
 
 void FxSettingsDialog::SettingsPane::lookAndFeelChanged()
@@ -266,6 +314,21 @@ void FxSettingsDialog::SettingsPane::paint(Graphics& g)
 void FxSettingsDialog::SettingsPane::refreshText()
 {
 	title_.setText(TRANS(name_), NotificationType::dontSendNotification);
+}
+
+void FxSettingsDialog::SettingsPane::refreshPaneContent()
+{
+	lookAndFeelChanged();
+	resized();
+	repaint();
+}
+
+void FxSettingsDialog::SettingsPane::requestWindowSizeUpdate()
+{
+	if (auto* settings_component = findParentComponentOfClass<FxSettingsDialog::SettingsComponent>())
+	{
+		settings_component->refreshWindowSize();
+	}
 }
 
 FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
@@ -318,6 +381,23 @@ FxSettingsDialog::AudioSettingsPane::~AudioSettingsPane()
 	FxModel::getModel().removeListener(this);
 }
 
+int FxSettingsDialog::AudioSettingsPane::getPreferredWidth() const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	auto preferred_width = X_MARGIN * 2;
+
+	preferred_width = juce::jmax(preferred_width,
+		output_preference_.getPreferredWidth() + (X_MARGIN * 2));
+	preferred_width = juce::jmax(preferred_width,
+		measureTextWidth(theme.getNormalFont(), output_preference_title_.getText(), X_MARGIN * 2 + 20));
+	preferred_width = juce::jmax(preferred_width,
+		measureTextWidth(theme.getNormalFont(), prioritize_new_output_toggle_.getButtonText(), X_MARGIN * 2 + 50));
+	preferred_width = juce::jmax(preferred_width,
+		reset_presets_button_.getWidth() + (X_MARGIN * 2));
+
+	return preferred_width;
+}
+
 int FxSettingsDialog::AudioSettingsPane::getPreferredHeight() const
 {
 	int y = ENDPOINT_Y;
@@ -333,7 +413,8 @@ void FxSettingsDialog::AudioSettingsPane::resized()
 	auto bounds = getLocalBounds().withLeft(X_MARGIN).withTop(Y_MARGIN).withHeight(TITLE_HEIGHT);
 	title_.setBounds(bounds);
 
-	output_preference_title_.setBounds(X_MARGIN, ENDPOINT_Y, LABEL_WIDTH, LABEL_HEIGHT);
+	auto title_width = juce::jmax(LABEL_WIDTH, output_preference_title_.getFont().getStringWidth(output_preference_title_.getText()) + 20);
+	output_preference_title_.setBounds(X_MARGIN, ENDPOINT_Y, title_width, LABEL_HEIGHT);
 	int y = output_preference_title_.getBottom() + 8;
 	auto width = getWidth() - ((X_MARGIN + 5) * 2);
 	output_preference_.setBounds(X_MARGIN, y, width, OUTPUT_PREFERENCE_HEIGHT);
@@ -377,6 +458,7 @@ void FxSettingsDialog::AudioSettingsPane::refreshText()
 void FxSettingsDialog::AudioSettingsPane::refreshOutputPreference()
 {
 	output_preference_.update();
+	requestWindowSizeUpdate();
 }
 
 void FxSettingsDialog::AudioSettingsPane::resizeResetButton(int x, int y)
@@ -412,11 +494,13 @@ void FxSettingsDialog::AudioSettingsPane::modelChanged(FxModel::Event model_even
 	if (model_event == FxModel::Event::OutputListUpdated)
 	{
 		refreshOutputPreference();
+		requestWindowSizeUpdate();
 	}
 	else if (model_event == FxModel::Event::PresetModified || model_event == FxModel::Event::PresetListUpdated)
 	{
 		refreshOutputPreference();
 		updateResetPresetsButton();
+		requestWindowSizeUpdate();
 	}
 }
 
@@ -432,6 +516,7 @@ void FxSettingsDialog::AudioSettingsPane::visibilityChanged()
 	{
 		refreshOutputPreference();
 		updateResetPresetsButton();
+		requestWindowSizeUpdate();
     }
 }
 
@@ -587,6 +672,12 @@ FxSettingsDialog::EqualizerSettingsPane::~EqualizerSettingsPane()
 	filter_q_slider_.onValueChange = nullptr;
 }
 
+int FxSettingsDialog::EqualizerSettingsPane::getPreferredWidth() const
+{
+	constexpr int kMinimumSliderWidth = 260;
+	return (X_MARGIN * 2) + getLabelColumnWidth() + 10 + kMinimumSliderWidth + GROUP_MARGIN;
+}
+
 int FxSettingsDialog::EqualizerSettingsPane::getPreferredHeight() const
 {
 	int y = TITLE_HEIGHT + Y_MARGIN + 20;
@@ -609,37 +700,38 @@ void FxSettingsDialog::EqualizerSettingsPane::resized()
 	title_.setBounds(bounds);
 
 	int y = TITLE_HEIGHT + Y_MARGIN + 20;
-	auto slider_width = getWidth() - ((X_MARGIN + 5) * 2) - LABEL_WIDTH - GROUP_MARGIN;
+	auto label_width = getLabelColumnWidth();
+	auto slider_width = getWidth() - ((X_MARGIN + 5) * 2) - label_width - GROUP_MARGIN;
 
-	equalizer_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, COMBOBOX_HEIGHT);
-	equalizer_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, COMBOBOX_HEIGHT);
+	equalizer_title_.setBounds(X_MARGIN, y, label_width, COMBOBOX_HEIGHT);
+	equalizer_.setBounds(label_width + X_MARGIN + 10, y, slider_width, COMBOBOX_HEIGHT);
 
 	y = equalizer_.getBottom() + 20;
-	master_gain_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	master_gain_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
+	master_gain_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	master_gain_slider_.setBounds(label_width + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
 
 	y = master_gain_slider_.getBottom() + 20;
-	normalizer_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	normalizer_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
+	normalizer_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	normalizer_slider_.setBounds(label_width + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
 
 	y = normalizer_slider_.getBottom() + 20;
-	volume_leveling_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	volume_leveling_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
+	volume_leveling_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	volume_leveling_slider_.setBounds(label_width + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
 
 	y = volume_leveling_slider_.getBottom() + 20;
-	auto_eq_range_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	auto_eq_range_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
+	auto_eq_range_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	auto_eq_range_slider_.setBounds(label_width + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
 
 	y = auto_eq_range_slider_.getBottom() + 20;
-	filter_q_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	filter_q_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
+	filter_q_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	filter_q_slider_.setBounds(label_width + X_MARGIN + 10, y, slider_width, SLIDER_HEIGHT);
 
 	y = filter_q_slider_.getBottom() + 20;
-	balance_title_.setBounds(X_MARGIN, y, LABEL_WIDTH, SLIDER_HEIGHT);
-	balance_slider_.setBounds(LABEL_WIDTH + X_MARGIN + 15, y, slider_width, SLIDER_HEIGHT);
+	balance_title_.setBounds(X_MARGIN, y, label_width, SLIDER_HEIGHT);
+	balance_slider_.setBounds(label_width + X_MARGIN + 15, y, slider_width, SLIDER_HEIGHT);
 
 	y = balance_slider_.getBottom();
-	left_label_.setBounds(LABEL_WIDTH + X_MARGIN + 15, y, slider_width / 2 - 10, LABEL_HEIGHT);
+	left_label_.setBounds(label_width + X_MARGIN + 15, y, slider_width / 2 - 10, LABEL_HEIGHT);
 	right_label_.setBounds(left_label_.getRight() + 10, y, slider_width / 2 - (FxTheme::SLIDER_THUMB_RADIUS * 4), LABEL_HEIGHT);
 
 	y = left_label_.getBottom() + 20;
@@ -696,6 +788,19 @@ void FxSettingsDialog::EqualizerSettingsPane::refreshText()
 		button_width = RESTORE_DEFAULTS_BUTTON_WIDTH;
 	}
 	restore_defaults_button_.setBounds(restore_defaults_button_.getX(), restore_defaults_button_.getY(), button_width, BUTTON_HEIGHT);
+}
+
+int FxSettingsDialog::EqualizerSettingsPane::getLabelColumnWidth() const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	auto label_width = LABEL_WIDTH;
+
+	for (auto* label : { &equalizer_title_, &master_gain_title_, &normalizer_title_, &volume_leveling_title_, &auto_eq_range_title_, &filter_q_title_, &balance_title_ })
+	{
+		label_width = juce::jmax(label_width, measureTextWidth(theme.getNormalFont(), label->getText(), 20));
+	}
+
+	return label_width;
 }
 
 void FxSettingsDialog::EqualizerSettingsPane::updateEqualizerBandsText()
@@ -839,9 +944,40 @@ FxSettingsDialog::GeneralSettingsPane::~GeneralSettingsPane()
 {
 }
 
+int FxSettingsDialog::GeneralSettingsPane::getPreferredWidth() const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	auto preferred_width = X_MARGIN * 2 + language_switch_.getPreferredWidth();
+	auto toggle_width = 0;
+
+	for (auto* toggle : { &launch_toggle_, &hide_help_tips_toggle_, &hide_notifications_toggle_, &hotkeys_toggle_ })
+	{
+		toggle_width = juce::jmax(toggle_width, getTogglePreferredWidth(*toggle, theme.getNormalFont()));
+	}
+
+	auto hotkey_label_width = 0;
+	auto hotkey_editor_width = 0;
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
+		hotkey_editor_width = juce::jmax(hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
+	}
+	auto hotkey_width = hotkey_label_width + HOTKEY_COLUMN_GAP + hotkey_editor_width;
+
+	preferred_width = juce::jmax(preferred_width, X_MARGIN * 2 + toggle_width);
+	preferred_width = juce::jmax(preferred_width, HOTKEY_LABEL_X + hotkey_width + X_MARGIN);
+
+	return preferred_width;
+}
+
 int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
 {
 	int y = LANGUAGE_SWITCH_Y + FxLanguage::HEIGHT + 20;
+	auto hotkey_label_width = 0;
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
+	}
 
 	if (launch_toggle_.isVisible())
 	{
@@ -851,7 +987,10 @@ int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
 	y += TOGGLE_BUTTON_HEIGHT + 10;
 	y += TOGGLE_BUTTON_HEIGHT + 10;
 	y += TOGGLE_BUTTON_HEIGHT + 5;
-	y += hotkey_labels_.size() * (HOTKEY_LABEL_HEIGHT + 10);
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		y += hotkey_label->getPreferredHeight(hotkey_label_width) + 10;
+	}
 
 	return y + Y_MARGIN + 20;
 }
@@ -861,7 +1000,8 @@ void FxSettingsDialog::GeneralSettingsPane::resized()
 	auto bounds = getLocalBounds().withLeft(X_MARGIN).withTop(Y_MARGIN).withHeight(TITLE_HEIGHT);
 	title_.setBounds(bounds);
 
-    language_switch_.setBounds(X_MARGIN, LANGUAGE_SWITCH_Y, FxLanguage::WIDTH, FxLanguage::HEIGHT);
+    auto language_switch_width = juce::jmin(language_switch_.getPreferredWidth(), getWidth() - X_MARGIN * 2);
+    language_switch_.setBounds(X_MARGIN, LANGUAGE_SWITCH_Y, language_switch_width, FxLanguage::HEIGHT);
 
     int y = language_switch_.getBottom() + 20;
 	if (launch_toggle_.isVisible())
@@ -879,10 +1019,20 @@ void FxSettingsDialog::GeneralSettingsPane::resized()
 	hotkeys_toggle_.setBounds(X_MARGIN, y, getWidth()-X_MARGIN, TOGGLE_BUTTON_HEIGHT);
 
 	y = hotkeys_toggle_.getBottom() + 5;
+	auto hotkey_label_width = 0;
+	auto hotkey_editor_width = 0;
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
+		hotkey_editor_width = juce::jmax(hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
+	}
+	auto hotkey_row_width = hotkey_label_width + HOTKEY_COLUMN_GAP + hotkey_editor_width;
 	for (auto hotkey_label : hotkey_labels_)
 	{
-		hotkey_label->setBounds(HOTKEY_LABEL_X, y, getWidth()-HOTKEY_LABEL_X, HOTKEY_LABEL_HEIGHT);
-		y += HOTKEY_LABEL_HEIGHT + 10;
+		auto hotkey_height = hotkey_label->getPreferredHeight(hotkey_label_width);
+		hotkey_label->setLayoutMetrics(hotkey_label_width, hotkey_editor_width, HOTKEY_COLUMN_GAP);
+		hotkey_label->setBounds(HOTKEY_LABEL_X, y, hotkey_row_width, hotkey_height);
+		y += hotkey_height + 10;
 	}
 }
 
@@ -901,6 +1051,10 @@ void FxSettingsDialog::GeneralSettingsPane::refreshText()
 	hide_notifications_toggle_.setButtonText(TRANS("Hide notifications"));
 
     hotkeys_toggle_.setButtonText(TRANS("Disable keyboard shortcuts"));
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		hotkey_label->refreshText();
+	}
 }
 
 FxSettingsDialog::HelpSettingsPane::HelpSettingsPane() : SettingsPane("Help"), auto_updates_toggle_(TRANS("Automatic updates"))
@@ -942,6 +1096,32 @@ FxSettingsDialog::HelpSettingsPane::HelpSettingsPane() : SettingsPane("Help"), a
 	addChildComponent(submitlogs_link_);
 	addAndMakeVisible(helpcenter_link_);
 	addAndMakeVisible(auto_updates_toggle_);
+}
+
+int FxSettingsDialog::HelpSettingsPane::getPreferredWidth() const
+{
+    auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+    auto preferred_width = X_MARGIN * 2;
+
+    for (auto* label : { &version_title_, &support_title_, &maintenance_title_ })
+    {
+        preferred_width = juce::jmax(preferred_width,
+            measureTextWidth(theme.getNormalFont(), label->getText(), X_MARGIN * 2 + 20));
+    }
+
+    preferred_width = juce::jmax(preferred_width,
+        measureTextWidth(theme.getSmallFont(), version_text_.getText(), X_MARGIN * 2 + 20));
+
+    for (auto* link : { &changelog_link_, &quicktour_link_, &submitlogs_link_, &helpcenter_link_, &feedback_link_ })
+    {
+        preferred_width = juce::jmax(preferred_width,
+            measureTextWidth(theme.getNormalFont(), link->getButtonText(), X_MARGIN * 2 + 25));
+    }
+
+    preferred_width = juce::jmax(preferred_width,
+        measureTextWidth(theme.getNormalFont(), auto_updates_toggle_.getButtonText(), X_MARGIN * 2 + 50));
+
+    return preferred_width;
 }
 
 int FxSettingsDialog::HelpSettingsPane::getPreferredHeight() const

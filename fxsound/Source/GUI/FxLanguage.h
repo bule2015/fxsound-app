@@ -26,11 +26,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 class FxLanguage : public Component
 {
 public:
-    static constexpr int WIDTH = 180;
+    static constexpr int WIDTH = 120;
     static constexpr int HEIGHT = 30;
 
     FxLanguage();
     ~FxLanguage() = default;
+
+    int getPreferredWidth() const;
 
 private:
     static constexpr int BUTTON_WIDTH = 14;
@@ -39,6 +41,7 @@ private:
 
     void paint(Graphics& g) override;
     void lookAndFeelChanged() override;
+    void resized() override;
 
     void onNextLanguage();
     void onPrevLanguage();

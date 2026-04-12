@@ -80,6 +80,7 @@ public:
     void modelChanged(FxModel::Event model_event);
 
     void updateDeviceConfig(const DeviceConfig& device_config);
+    int getPreferredWidth(const Font& font) const;
 
     std::function<void()> onModelChanged;
     std::function<void(int row_index)> onRowMoved;
@@ -99,6 +100,7 @@ public:
     FxOutputPreference();
 
     void update();
+    int getPreferredWidth() const;
 
 private:
     static constexpr int ROW_HEIGHT = 40;

@@ -23,14 +23,17 @@ class FxHotkeyEditor : public Label
 {
 public:
 	FxHotkeyEditor(const String& command);
+	int getPreferredEditorWidth() const;
 
 private:
-	static constexpr int HOTKEY_EDITOR_WIDTH = 120;
+	static constexpr int HOTKEY_EDITOR_MIN_WIDTH = 88;
 	static constexpr int HOTKEY_EDITOR_HEIGHT = 20;
+	static constexpr int HOTKEY_EDITOR_PADDING = 16;
 
 	bool keyPressed(const KeyPress& key) override;
 	void focusGained(FocusChangeType cause) override;
 	void focusLost(FocusChangeType cause) override;
+	void lookAndFeelChanged() override;
 	void paint(juce::Graphics& g) override;
 
 	void setKeyText();
@@ -45,14 +48,25 @@ class FxHotkeyLabel : public Component
 {
 public:
 	FxHotkeyLabel(const String& name, const String& command);
+	int getPreferredLabelWidth() const;
+	int getPreferredEditorWidth() const;
+	int getPreferredWidth() const;
+	int getPreferredHeight(int labelWidth) const;
+	void refreshText();
+	void setLayoutMetrics(int labelWidth, int editorWidth, int gap);
 
 private:
-	static constexpr int HOTKEY_LABEL_WIDTH = 170;
+	static constexpr int HOTKEY_LABEL_MIN_WIDTH = 0;
+	static constexpr int HOTKEY_LABEL_PADDING = 12;
+	static constexpr int HOTKEY_DEFAULT_GAP = 8;
 
+	void lookAndFeelChanged() override;
 	void resized() override;
-	void paint(Graphics& g) override;
 
 	String name_;
 	Label label_;
 	FxHotkeyEditor hotkey_editor_;
+	int label_width_ = HOTKEY_LABEL_MIN_WIDTH;
+	int editor_width_ = 96;
+	int control_gap_ = HOTKEY_DEFAULT_GAP;
 };

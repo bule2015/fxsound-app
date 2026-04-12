@@ -77,6 +77,24 @@ std::wstring getPresetNameAtIndex(const StringArray& preset_option_labels, int p
     return std::wstring(preset_option_labels[preset_index + 1].toWideCharPointer());
 }
 
+int getOutputPreferencePreferredWidth(const Font& font, const juce::Array<DeviceConfig>& device_configs)
+{
+    constexpr int kButtonWidth = 18;
+    constexpr int kMargin = 5;
+    constexpr int kPresetListWidth = 150;
+    constexpr int kMinimumDeviceNameWidth = 240;
+    constexpr int kOuterPadding = 8;
+
+    auto max_device_name_width = kMinimumDeviceNameWidth;
+    for (auto index = 0; index < device_configs.size(); ++index)
+    {
+        auto label_text = String::formatted("%d. ", index + 1) + device_configs[index].device_name;
+        max_device_name_width = juce::jmax(max_device_name_width, font.getStringWidth(label_text) + 20);
+    }
+
+    return (kMargin * 4) + (kButtonWidth * 2) + kPresetListWidth + max_device_name_width + kOuterPadding;
+}
+
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -141,7 +159,8 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
     device_name_.setInterceptsMouseClicks(false, false);
     device_name_.setFont(theme.getNormalFont());
-    device_name_.setMinimumHorizontalScale(1.0f);
+    device_name_.setJustificationType(Justification::centredLeft);
+    device_name_.setMinimumHorizontalScale(0.85f);
 
     addAndMakeVisible(up_button_);
     addAndMakeVisible(down_button_);
@@ -348,6 +367,11 @@ void FxOutputPreferenceListModel::updateDeviceConfig(const DeviceConfig& device_
     persist();
 }
 
+int FxOutputPreferenceListModel::getPreferredWidth(const Font& font) const
+{
+    return getOutputPreferencePreferredWidth(font, device_configs_);
+}
+
 void FxOutputPreferenceListModel::persist()
 {
     FxController::getInstance().saveDeviceConfigs(device_configs_);
@@ -395,6 +419,16 @@ FxOutputPreference::FxOutputPreference()
 void FxOutputPreference::update()
 {
     refreshListBox();
+}
+
+int FxOutputPreference::getPreferredWidth() const
+{
+    if (auto* theme = dynamic_cast<FxTheme*>(&LookAndFeel::getDefaultLookAndFeel()))
+    {
+        return output_preference_model_.getPreferredWidth(theme->getNormalFont());
+    }
+
+    return output_preference_model_.getPreferredWidth(Font());
 }
 
 bool FxOutputPreference::keyPressed(const KeyPress& key, Component*)

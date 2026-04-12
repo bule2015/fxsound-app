@@ -15,42 +15,102 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <cmath>
+
 #include "FxHotkeyLabel.h"
 #include "FxController.h"
 #include "FxTheme.h"
 
+namespace
+{
+int getWrappedTextHeight(const Font& font, const String& text, int width)
+{
+	AttributedString attributed_text;
+	attributed_text.setWordWrap(AttributedString::WordWrap::byWord);
+	attributed_text.append(text, font, Colours::white);
+
+	TextLayout layout;
+	layout.createLayout(attributed_text, static_cast<float>(juce::jmax(1, width)));
+	return static_cast<int>(std::ceil(layout.getHeight()));
+}
+}
+
 FxHotkeyLabel::FxHotkeyLabel(const String& name, const String& command) : name_(name), hotkey_editor_(command)
 {
-	auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
-
 	label_.setJustificationType(Justification::topLeft);
-	label_.setFont(theme.getSmallFont());
-	label_.setText(TRANS(name_), NotificationType::dontSendNotification);
 
 	addAndMakeVisible(label_);
 	addAndMakeVisible(hotkey_editor_);
+	lookAndFeelChanged();
+}
+
+int FxHotkeyEditor::getPreferredEditorWidth() const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	return juce::jmax(HOTKEY_EDITOR_MIN_WIDTH, theme.getSmallFont().getStringWidth(getText()) + HOTKEY_EDITOR_PADDING);
+}
+
+int FxHotkeyLabel::getPreferredLabelWidth() const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	return juce::jmax(HOTKEY_LABEL_MIN_WIDTH, theme.getSmallFont().getStringWidth(TRANS(name_)) + HOTKEY_LABEL_PADDING);
+}
+
+int FxHotkeyLabel::getPreferredEditorWidth() const
+{
+	return hotkey_editor_.getPreferredEditorWidth();
+}
+
+int FxHotkeyLabel::getPreferredWidth() const
+{
+	return getPreferredLabelWidth() + HOTKEY_DEFAULT_GAP + getPreferredEditorWidth();
+}
+
+int FxHotkeyLabel::getPreferredHeight(int labelWidth) const
+{
+	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+	return juce::jmax(hotkey_editor_.getHeight(), getWrappedTextHeight(theme.getSmallFont(), TRANS(name_), juce::jmax(1, labelWidth)));
+}
+
+void FxHotkeyLabel::refreshText()
+{
+	label_.setText(TRANS(name_), NotificationType::dontSendNotification);
+}
+
+void FxHotkeyLabel::setLayoutMetrics(int labelWidth, int editorWidth, int gap)
+{
+	label_width_ = juce::jmax(HOTKEY_LABEL_MIN_WIDTH, labelWidth);
+	editor_width_ = juce::jmax(hotkey_editor_.getPreferredEditorWidth(), editorWidth);
+	control_gap_ = juce::jmax(0, gap);
+}
+
+void FxHotkeyLabel::lookAndFeelChanged()
+{
+	auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+	label_.setFont(theme.getSmallFont());
+	refreshText();
 }
 
 void FxHotkeyLabel::resized()
 {
-	auto editor_bounds = hotkey_editor_.getBounds();
 	auto bounds = getLocalBounds();
+	auto editor_bounds = hotkey_editor_.getBounds();
 
-	label_.setBounds(bounds.getX(), bounds.getY(), HOTKEY_LABEL_WIDTH, editor_bounds.getHeight());
-	editor_bounds.setX(label_.getRight()+1);
-	editor_bounds.setY(label_.getY());
+	label_.setBounds(bounds.getX(), bounds.getY(), juce::jmin(label_width_, bounds.getWidth()), bounds.getHeight());
+	editor_bounds.setSize(juce::jmin(editor_width_, juce::jmax(1, bounds.getWidth() - label_.getWidth() - control_gap_)), editor_bounds.getHeight());
+	editor_bounds.setX(label_.getRight() + control_gap_);
+	editor_bounds.setY(bounds.getY() + juce::jmax(0, (bounds.getHeight() - editor_bounds.getHeight()) / 2));
 	hotkey_editor_.setBounds(editor_bounds);
 }
 
-void FxHotkeyLabel::paint(Graphics& g)
+void FxHotkeyEditor::lookAndFeelChanged()
 {
 	auto& theme = dynamic_cast<FxTheme&>(getLookAndFeel());
+	setFont(theme.getSmallFont());
+	setKeyText();
+	setTooltip(TRANS("Press Ctrl + Alt/Shift + 0-9/A-Z to change the hotkey"));
 
-	label_.setJustificationType(Justification::topLeft);
-	label_.setFont(theme.getSmallFont());
-	label_.setText(TRANS(name_), NotificationType::dontSendNotification);
-
-	Component::paint(g);
+	repaint();
 }
 
 FxHotkeyEditor::FxHotkeyEditor(const String& command)
@@ -70,7 +130,7 @@ FxHotkeyEditor::FxHotkeyEditor(const String& command)
 	String tooltip = TRANS("Press Ctrl + Alt/Shift + 0-9/A-Z to change the hotkey");
 	setTooltip(tooltip);
 
-	setBounds(0, 0, HOTKEY_EDITOR_WIDTH, HOTKEY_EDITOR_HEIGHT);
+	setBounds(0, 0, getPreferredEditorWidth(), HOTKEY_EDITOR_HEIGHT);
 }
 
 bool FxHotkeyEditor::keyPressed(const KeyPress& key)
@@ -214,6 +274,7 @@ void FxHotkeyEditor::setKeyText()
 	if (mod_ == 0)
 	{
 		key_text_ = TRANS("Not configured");
+		setText(key_text_, NotificationType::dontSendNotification);
 	}
 	else
 	{

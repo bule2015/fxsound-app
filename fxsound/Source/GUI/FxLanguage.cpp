@@ -32,10 +32,6 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
     
     setSize(WIDTH, HEIGHT);
 
-    prev_button_.setBounds(10, (HEIGHT - BUTTON_HEIGHT) / 2, BUTTON_WIDTH, BUTTON_HEIGHT);
-    next_button_.setBounds(WIDTH - BUTTON_WIDTH - 10, (HEIGHT - BUTTON_HEIGHT) / 2, BUTTON_WIDTH, BUTTON_HEIGHT);
-    language_.setBounds(prev_button_.getRight(), (HEIGHT - LABEL_HEIGHT)/2, next_button_.getX() - prev_button_.getRight(), LABEL_HEIGHT);
-
     addAndMakeVisible(&prev_button_);
     addAndMakeVisible(&language_);
     addAndMakeVisible(&next_button_);
@@ -49,6 +45,17 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
     };
 
     refreshSelector();
+    resized();
+}
+
+int FxLanguage::getPreferredWidth() const
+{
+    const auto label_font = language_.getFont().getHeight() > 0.0f
+        ? language_.getFont()
+        : Font();
+    const auto label_width = label_font.getStringWidth(language_.getText());
+    const auto preferred_width = label_width + 48;
+    return preferred_width > WIDTH ? preferred_width : WIDTH;
 }
 
 void FxLanguage::paint(Graphics& g)
@@ -60,6 +67,13 @@ void FxLanguage::paint(Graphics& g)
 void FxLanguage::lookAndFeelChanged()
 {
     refreshSelector();
+}
+
+void FxLanguage::resized()
+{
+    prev_button_.setBounds(10, (getHeight() - BUTTON_HEIGHT) / 2, BUTTON_WIDTH, BUTTON_HEIGHT);
+    next_button_.setBounds(getWidth() - BUTTON_WIDTH - 10, (getHeight() - BUTTON_HEIGHT) / 2, BUTTON_WIDTH, BUTTON_HEIGHT);
+    language_.setBounds(prev_button_.getRight(), (getHeight() - LABEL_HEIGHT) / 2, next_button_.getX() - prev_button_.getRight(), LABEL_HEIGHT);
 }
 
 void FxLanguage::onNextLanguage()

@@ -81,11 +81,14 @@ private:
 	public:    
 		SettingsPane(String name);
 		~SettingsPane() = default;
+		virtual int getPreferredWidth() const;
+		void refreshPaneContent();
 
 	protected:
 		void lookAndFeelChanged() override;
         void paint(Graphics& g) override;
 		virtual void refreshText();
+		void requestWindowSizeUpdate();
 
 		static constexpr int X_MARGIN = 20;
 		static constexpr int Y_MARGIN = 5;
@@ -102,6 +105,7 @@ private:
 		AudioSettingsPane();
 		~AudioSettingsPane();
 
+		int getPreferredWidth() const override;
 		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
@@ -140,6 +144,7 @@ private:
 		EqualizerSettingsPane();
 		~EqualizerSettingsPane();
 
+		int getPreferredWidth() const override;
 		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
@@ -160,6 +165,7 @@ private:
 		void updateEqualizerBandsText();
 		void selectEqualizerBands();
 		void restoreDefaults();
+		int getLabelColumnWidth() const;
 
 		Label equalizer_title_;
 		Label master_gain_title_;
@@ -189,6 +195,7 @@ private:
 		GeneralSettingsPane();
 		~GeneralSettingsPane();
 
+		int getPreferredWidth() const override;
 		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
@@ -196,8 +203,9 @@ private:
 	private:
 		static constexpr int LANGUAGE_SWITCH_Y = 50;
 		static constexpr int TOGGLE_BUTTON_HEIGHT = 30;
-		static constexpr int HOTKEY_LABEL_X = X_MARGIN + 25;
+		static constexpr int HOTKEY_LABEL_X = X_MARGIN + 12;
 		static constexpr int HOTKEY_LABEL_HEIGHT = 20;
+		static constexpr int HOTKEY_COLUMN_GAP = 8;
 		static constexpr int LANGUAGE_LABEL_HEIGHT = 24;
 		static constexpr int LANGUAGE_LIST_WIDTH = 120;
 		static constexpr int LANGUAGE_LIST_HEIGHT = 30;
@@ -218,6 +226,7 @@ private:
 		HelpSettingsPane();
 		~HelpSettingsPane() = default;
 
+		int getPreferredWidth() const override;
 		int getPreferredHeight() const;
 		void resized() override;
 		void paint(Graphics& g) override;
@@ -249,16 +258,18 @@ private:
 	class SettingsComponent : public Component, public Button::Listener
 	{
 	public:
-        static constexpr int WIDTH = 600;
+        static constexpr int MIN_WIDTH = 100;
         static constexpr int MIN_HEIGHT = 100;
 		enum class PaneId : int { Audio = 0, Equalizer, General, Help, Count };
 
 		SettingsComponent();
         ~SettingsComponent() = default;
 
+		int getPreferredWidth() const;
 		int getPreferredHeight() const;
 		void resized() override;
 		void lookAndFeelChanged() override;
+		void refreshWindowSize();
 
 		void buttonClicked(Button* button) override;
 
@@ -270,8 +281,8 @@ private:
 		static constexpr int SEPARATOR_X = 152;
 
 		std::array<SettingsButton*, 4> getPaneButtons();
-		std::array<Component*, 4> getPanes();
-		std::array<std::pair<SettingsButton*, Component*>, 4> getPaneEntries();
+		std::array<SettingsPane*, 4> getPanes();
+		std::array<std::pair<SettingsButton*, SettingsPane*>, 4> getPaneEntries();
 		void showPane(PaneId active_pane);
 		void updateWindowSize();
 
