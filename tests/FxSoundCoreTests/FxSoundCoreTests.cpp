@@ -689,7 +689,7 @@ void testRenameAssignedPresetSkipsNoOpChanges()
 	const auto unchanged_same_name = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
 		L"General",
 		L"General",
-		L"general");
+		L"General");
 	const auto unchanged_empty_target = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
 		L"General",
 		L"General",
@@ -697,6 +697,16 @@ void testRenameAssignedPresetSkipsNoOpChanges()
 
 	expect(unchanged_same_name == L"General", "renaming to the same preset name should be a no-op");
 	expect(unchanged_empty_target == L"General", "empty rename targets should preserve stored preset names");
+}
+
+void testRenameAssignedPresetUpdatesCaseOnlyRename()
+{
+	const auto renamed_case_only = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"General",
+		L"General",
+		L"general");
+
+	expect(renamed_case_only == L"general", "case-only preset renames should update stored output preset names");
 }
 
 void testRenameAssignedPresetInPlaceReportsChanges()
@@ -723,6 +733,28 @@ void testLanguageSelectorPrefersLongestMatchingPrefix()
 		});
 
 	expect(resolved_index == 1, "language selector should prefer the longest matching prefix");
+}
+
+void testLanguageSelectorMatchesCaseInsensitiveCodes()
+{
+	const std::vector<std::wstring> languages { L"pt", L"pt-br", L"zh-CN" };
+	const auto resolved_index = FxSound::LanguageSelectorPolicy::resolveLanguageIndex(
+		L"PT-BR",
+		static_cast<int>(languages.size()),
+		[&](int index)
+		{
+			return std::wstring_view(languages[static_cast<size_t>(index)]);
+		});
+	const auto simplified_case_index = FxSound::LanguageSelectorPolicy::resolveLanguageIndex(
+		L"zh-cn",
+		static_cast<int>(languages.size()),
+		[&](int index)
+		{
+			return std::wstring_view(languages[static_cast<size_t>(index)]);
+		});
+
+	expect(resolved_index == 1, "language selector should resolve mixed-case locale codes");
+	expect(simplified_case_index == 2, "language selector should resolve case-insensitive exact codes");
 }
 
 void testLanguageSelectorFallsBackToFirstLanguage()
@@ -1975,8 +2007,10 @@ int main()
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
 		runTest("rename assigned preset updates matching device configs", testRenameAssignedPresetUpdatesMatchingDeviceConfigs);
 		runTest("rename assigned preset skips no-op changes", testRenameAssignedPresetSkipsNoOpChanges);
+		runTest("rename assigned preset updates case-only rename", testRenameAssignedPresetUpdatesCaseOnlyRename);
 		runTest("rename assigned preset in-place reports changes", testRenameAssignedPresetInPlaceReportsChanges);
 		runTest("language selector prefers longest matching prefix", testLanguageSelectorPrefersLongestMatchingPrefix);
+		runTest("language selector matches case-insensitive codes", testLanguageSelectorMatchesCaseInsensitiveCodes);
 		runTest("language selector falls back to first language", testLanguageSelectorFallsBackToFirstLanguage);
 		runTest("output preset selection returns empty for no preset", testOutputPresetSelectionReturnsEmptyForNoPreset);
 		runTest("output preset selection maps preset ids and names", testOutputPresetSelectionMapsPresetIdsAndNames);

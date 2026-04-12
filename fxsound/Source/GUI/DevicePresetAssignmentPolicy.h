@@ -31,7 +31,7 @@ namespace FxSound
         {
             if (old_preset_name.empty() ||
                 new_preset_name.empty() ||
-                equalsIgnoreCase(old_preset_name, new_preset_name))
+                old_preset_name == new_preset_name)
             {
                 return assigned_preset_name;
             }
