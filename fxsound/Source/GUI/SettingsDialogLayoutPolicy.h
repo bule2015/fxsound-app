@@ -22,6 +22,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace FxSound::SettingsDialogLayoutPolicy
 {
+	inline int clampWidth(int preferred_width, int min_width, int max_width)
+	{
+		if (max_width < min_width)
+		{
+			return min_width;
+		}
+
+		if (preferred_width < min_width)
+		{
+			return min_width;
+		}
+
+		if (preferred_width > max_width)
+		{
+			return max_width;
+		}
+
+		return preferred_width;
+	}
+
 	inline int getPreferredWidth(int min_width, int active_pane_index, const std::array<int, 4>& pane_widths)
 	{
 		if (active_pane_index < 0 || active_pane_index >= static_cast<int>(pane_widths.size()))
@@ -37,6 +57,14 @@ namespace FxSound::SettingsDialogLayoutPolicy
 	{
 		auto preferred_width = getPreferredWidth(0, active_pane_index, pane_widths) + pane_chrome_width;
 		return preferred_width >= min_width ? preferred_width : min_width;
+	}
+
+	inline int getClampedPreferredWindowWidth(int min_width, int max_width, int pane_chrome_width, int active_pane_index, const std::array<int, 4>& pane_widths)
+	{
+		return clampWidth(
+			getPreferredWindowWidth(min_width, pane_chrome_width, active_pane_index, pane_widths),
+			min_width,
+			max_width);
 	}
 
 	inline int getPreferredHeight(int min_height, int active_pane_index, const std::array<int, 4>& pane_heights)

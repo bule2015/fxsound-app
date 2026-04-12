@@ -279,10 +279,12 @@ private:
 		static constexpr int BUTTON_WIDTH = 150;
 		static constexpr int BUTTON_HEIGHT = 40;
 		static constexpr int SEPARATOR_X = 152;
+		static constexpr int WINDOW_WIDTH_MARGIN = 32;
 
 		std::array<SettingsButton*, 4> getPaneButtons();
 		std::array<SettingsPane*, 4> getPanes();
 		std::array<std::pair<SettingsButton*, SettingsPane*>, 4> getPaneEntries();
+		int getMaximumWidth() const;
 		void showPane(PaneId active_pane);
 		void updateWindowSize();
 

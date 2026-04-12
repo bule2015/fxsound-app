@@ -44,18 +44,14 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
         this->onNextLanguage();
     };
 
+    updatePreferredWidth();
     refreshSelector();
     resized();
 }
 
 int FxLanguage::getPreferredWidth() const
 {
-    const auto label_font = language_.getFont().getHeight() > 0.0f
-        ? language_.getFont()
-        : Font();
-    const auto label_width = label_font.getStringWidth(language_.getText());
-    const auto preferred_width = label_width + 48;
-    return preferred_width > WIDTH ? preferred_width : WIDTH;
+    return preferred_width_;
 }
 
 void FxLanguage::paint(Graphics& g)
@@ -98,6 +94,21 @@ void FxLanguage::onPrevLanguage()
     String language_code = languages_[language_index_];
     FxController::getInstance().setLanguage(language_code);
     refreshSelector();
+}
+
+void FxLanguage::updatePreferredWidth()
+{
+    auto& controller = FxController::getInstance();
+    auto label_width = 0;
+
+    for (const auto& language_code : languages_)
+    {
+        auto label_font = FxTheme::getNormalFontForLanguage(language_code);
+        label_width = juce::jmax(label_width, label_font.getStringWidth(controller.getLanguageName(language_code)));
+    }
+
+    const auto preferred_width = label_width + 48;
+    preferred_width_ = juce::jmax(WIDTH, preferred_width);
 }
 
 void FxLanguage::refreshSelector()

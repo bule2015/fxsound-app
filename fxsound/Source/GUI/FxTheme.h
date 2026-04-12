@@ -79,7 +79,8 @@ public:
 									   const Image* icon, bool drawTitleTextOnLeft) override;
 	Button* createDocumentWindowButton(int buttonType) override;
 
-    void loadFont(String language);
+	void loadFont(String language);
+	static Font getNormalFontForLanguage(String language);
 	Font getNormalFont();
 	Font getSmallFont();
 	Font getTitleFont();
@@ -97,7 +98,8 @@ private:
 	void init();
 
     TextLayout layoutTooltipText(const String& text, Colour colour) noexcept;
-    Typeface::Ptr loadTypeface(String fileName);
+    static Typeface::Ptr loadTypeface(String fileName);
+    static Typeface::Ptr loadMediumTypefaceForLanguage(String language);
 
 	std::unique_ptr<Drawable> drop_down_arrow_;
 	std::unique_ptr<Drawable> slider_thumb_;

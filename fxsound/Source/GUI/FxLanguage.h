@@ -45,6 +45,7 @@ private:
 
     void onNextLanguage();
     void onPrevLanguage();
+    void updatePreferredWidth();
     void refreshSelector();
     void refreshButtonImages();
     
@@ -54,4 +55,5 @@ private:
 
     StringArray languages_;
     int language_index_;
+    int preferred_width_ = WIDTH;
 };

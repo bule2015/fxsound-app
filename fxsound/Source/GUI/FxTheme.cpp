@@ -450,6 +450,12 @@ void FxTheme::loadFont(String language)
     setDefaultSansSerifTypeface(font_600_);
 }
 
+Font FxTheme::getNormalFontForLanguage(String language)
+{
+    auto typeface = loadMediumTypefaceForLanguage(language);
+    return Font(typeface).withHeight(17.0f);
+}
+
 Font FxTheme::getTextButtonFont(TextButton&, int button_height)
 {
 	return Font(font_600_.get()).withHeight(jmin(17.0f, (float)button_height));
@@ -759,4 +765,49 @@ Typeface::Ptr FxTheme::loadTypeface(String fileName)
     }
         
     return nullptr;
+}
+
+Typeface::Ptr FxTheme::loadMediumTypefaceForLanguage(String language)
+{
+    Typeface::Ptr typeface;
+
+    if (language.startsWithIgnoreCase("ko"))
+    {
+        typeface = loadTypeface("NotoSansKR-Medium.otf");
+    }
+    else if (language.startsWithIgnoreCase("zh-CN"))
+    {
+        typeface = loadTypeface("NotoSansSC-Medium.otf");
+    }
+    else if (language.startsWithIgnoreCase("zh-TW"))
+    {
+        typeface = loadTypeface("NotoSansTC-Medium.ttf");
+    }
+    else if (language.startsWithIgnoreCase("th"))
+    {
+        typeface = loadTypeface("NotoSansThai-Medium.ttf");
+    }
+    else if (language.startsWithIgnoreCase("vi"))
+    {
+        typeface = loadTypeface("MontserratAlternates-Medium.ttf");
+    }
+    else if (language.startsWithIgnoreCase("ja"))
+    {
+        typeface = loadTypeface("NotoSansJP-Medium.ttf");
+    }
+    else if (language.startsWithIgnoreCase("ar") || language.startsWithIgnoreCase("fa"))
+    {
+        typeface = loadTypeface("IBMPlexSansArabic-Medium.ttf");
+    }
+    else
+    {
+        typeface = Typeface::createSystemTypefaceFor(BinaryData::GilroySemibold_ttf, BinaryData::GilroySemibold_ttfSize);
+    }
+
+    if (typeface == nullptr)
+    {
+        typeface = Typeface::createSystemTypefaceFor(BinaryData::GilroySemibold_ttf, BinaryData::GilroySemibold_ttfSize);
+    }
+
+    return typeface;
 }

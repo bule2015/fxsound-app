@@ -976,6 +976,19 @@ void testSettingsDialogLayoutAppliesMinimumWindowWidthFloor()
 		"settings dialog layout should keep the minimum width when pane width plus chrome is still smaller");
 }
 
+void testSettingsDialogLayoutClampsWindowWidthToMaximum()
+{
+	const auto preferred_window_width = FxSound::SettingsDialogLayoutPolicy::getClampedPreferredWindowWidth(
+		600,
+		880,
+		151,
+		1,
+		{ 620, 900, 680, 610 });
+
+	expect(preferred_window_width == 880,
+		"settings dialog layout should clamp the active pane width when it exceeds the available window width");
+}
+
 void testSettingsDialogLayoutAppliesMinimumHeightFloor()
 {
 	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
@@ -2078,6 +2091,7 @@ int main()
 		runTest("settings dialog layout adds pane chrome to window width", testSettingsDialogLayoutAddsPaneChromeToWindowWidth);
 		runTest("settings dialog layout applies minimum width floor", testSettingsDialogLayoutAppliesMinimumWidthFloor);
 		runTest("settings dialog layout applies minimum window width floor", testSettingsDialogLayoutAppliesMinimumWindowWidthFloor);
+		runTest("settings dialog layout clamps window width to maximum", testSettingsDialogLayoutClampsWindowWidthToMaximum);
 		runTest("settings dialog layout uses active pane height", testSettingsDialogLayoutUsesActivePaneHeight);
 		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
 		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);

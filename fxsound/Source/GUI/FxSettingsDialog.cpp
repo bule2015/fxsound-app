@@ -152,8 +152,9 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 int FxSettingsDialog::SettingsComponent::getPreferredWidth() const
 {
-	return FxSound::SettingsDialogLayoutPolicy::getPreferredWindowWidth(
+	return FxSound::SettingsDialogLayoutPolicy::getClampedPreferredWindowWidth(
 		MIN_WIDTH,
+		getMaximumWidth(),
 		SEPARATOR_X - 1,
 		static_cast<int>(active_pane_),
 		{
@@ -250,6 +251,23 @@ std::array<std::pair<FxSettingsDialog::SettingsButton*, FxSettingsDialog::Settin
 		std::make_pair(general_button_.get(), &general_settings_pane_),
 		std::make_pair(help_button_.get(), &help_settings_pane_)
 	};
+}
+
+int FxSettingsDialog::SettingsComponent::getMaximumWidth() const
+{
+	auto& displays = Desktop::getInstance().getDisplays();
+	const auto* display = displays.getDisplayForRect(getScreenBounds());
+	if (display == nullptr)
+	{
+		display = displays.getPrimaryDisplay();
+	}
+
+	if (display == nullptr)
+	{
+		return MIN_WIDTH;
+	}
+
+	return juce::jmax(MIN_WIDTH, display->userArea.getWidth() - WINDOW_WIDTH_MARGIN);
 }
 
 void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
@@ -494,13 +512,11 @@ void FxSettingsDialog::AudioSettingsPane::modelChanged(FxModel::Event model_even
 	if (model_event == FxModel::Event::OutputListUpdated)
 	{
 		refreshOutputPreference();
-		requestWindowSizeUpdate();
 	}
 	else if (model_event == FxModel::Event::PresetModified || model_event == FxModel::Event::PresetListUpdated)
 	{
 		refreshOutputPreference();
 		updateResetPresetsButton();
-		requestWindowSizeUpdate();
 	}
 }
 
@@ -516,7 +532,6 @@ void FxSettingsDialog::AudioSettingsPane::visibilityChanged()
 	{
 		refreshOutputPreference();
 		updateResetPresetsButton();
-		requestWindowSizeUpdate();
     }
 }
 
