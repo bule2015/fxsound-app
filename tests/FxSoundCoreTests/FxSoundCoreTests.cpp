@@ -7,6 +7,7 @@
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
+#include "../../fxsound/Source/GUI/DevicePresetAssignmentPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
 #include "../../fxsound/Source/GUI/SettingsDialogLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
@@ -659,6 +660,41 @@ void testAutoPresetDecisionSkipsEmptyPreset()
 		true);
 
 	expect(!decision.should_apply, "auto preset should not apply when no preset is configured");
+}
+
+void testRenameAssignedPresetUpdatesMatchingDeviceConfigs()
+{
+	const auto renamed_primary = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"General",
+		L"General",
+		L"Studio");
+	const auto renamed_case_variant = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"general",
+		L"General",
+		L"Studio");
+	const auto unchanged = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"Bass Boost",
+		L"General",
+		L"Studio");
+
+	expect(renamed_primary == L"Studio", "matching output preset should be renamed");
+	expect(renamed_case_variant == L"Studio", "rename should handle case-insensitive stored names");
+	expect(unchanged == L"Bass Boost", "unrelated output preset should remain unchanged");
+}
+
+void testRenameAssignedPresetSkipsNoOpChanges()
+{
+	const auto unchanged_same_name = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"General",
+		L"General",
+		L"general");
+	const auto unchanged_empty_target = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+		L"General",
+		L"General",
+		L"");
+
+	expect(unchanged_same_name == L"General", "renaming to the same preset name should be a no-op");
+	expect(unchanged_empty_target == L"General", "empty rename targets should preserve stored preset names");
 }
 
 void testAutoEqPolicyResetsAnalysisAfterPresetLoad()
@@ -1859,6 +1895,8 @@ int main()
 		runTest("auto preset decision skips modified preset", testAutoPresetDecisionSkipsModifiedPreset);
 		runTest("auto preset decision skips when not triggered", testAutoPresetDecisionSkipsWhenNotTriggered);
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
+		runTest("rename assigned preset updates matching device configs", testRenameAssignedPresetUpdatesMatchingDeviceConfigs);
+		runTest("rename assigned preset skips no-op changes", testRenameAssignedPresetSkipsNoOpChanges);
 		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
 		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);
 		runTest("auto eq policy resets after band count change", testAutoEqPolicyResetsAnalysisAfterBandCountChange);

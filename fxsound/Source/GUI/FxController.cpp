@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
 #include "AudioSignalPolicy.h"
+#include "DevicePresetAssignmentPolicy.h"
 #include "OutputDeviceSelection.h"
 #include "PresetAutoSavePolicy.h"
 #include "StartupOptionPolicy.h"
@@ -1086,6 +1087,27 @@ void FxController::renamePreset(const String& new_name)
 		deleteAutoSavedPreset(preset.name);
 		model.setPresetModified(preset_index, false);
 		resetAutoSaveState();
+
+		auto device_configs = getDeviceConfigs();
+		bool updated_device_configs = false;
+		for (auto& device_config : device_configs)
+		{
+			const auto current_preset_name = std::wstring(device_config.preset.toWideCharPointer());
+			const auto renamed_preset_name = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
+				current_preset_name,
+				std::wstring(preset.name.toWideCharPointer()),
+				std::wstring(new_name.toWideCharPointer()));
+
+			if (renamed_preset_name != current_preset_name)
+			{
+				device_config.preset = renamed_preset_name.c_str();
+				updated_device_configs = true;
+			}
+		}
+		if (updated_device_configs)
+		{
+			saveDeviceConfigs(device_configs);
+		}
 
 		initPresets();
 		setPreset(new_name);
