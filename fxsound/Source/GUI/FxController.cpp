@@ -1913,6 +1913,12 @@ LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, cons
 			controller->showMainWindow();
 		}
 		break;
+
+		case WMAPP_AUDIO_SIGNAL_DETECTED:
+		{
+			controller->resumeAudioProcessingImmediately();
+		}
+		break;
 	}
 
 	return DefWindowProc(hwnd, message, w_param, l_param);
@@ -2023,35 +2029,62 @@ void FxController::updateAudioSignalCounters(const AudioPipelineSnapshot& snapsh
 
 void FxController::syncAudioProcessingState(const AudioPipelineSnapshot& snapshot)
 {
-	auto power = FxModel::getModel().getPowerState();
 	if (FxSound::AudioSignalPolicy::shouldEnableDsp(audio_signal_counters_.present, audio_process_on_))
 	{
-		audio_process_on_ = true;
-		audio_passthru_->setDspProcessingEnabled(true);
-		logAudioPipelineMessage("Audio DSP processing resumed after signal detection");
-		system_tray_view_->setStatus(power, true);
-		main_window_->setIcon(power, true);
-		main_window_->startLogoAnimation();
-        if (view_ == ViewType::Pro)
-        {
-            main_window_->showProView();
-			main_window_->startVisualizer();
-        }
+		resumeAudioProcessingImmediately();
 	}
 	if (FxSound::AudioSignalPolicy::shouldDisableDsp(audio_signal_counters_.absent, audio_process_on_))
 	{
-		logAudioPipelineSnapshot("audio_processing_stopped", snapshot);
-		audio_process_on_ = false;
-		audio_passthru_->setDspProcessingEnabled(false);
-		logAudioPipelineMessage("Audio DSP processing paused while signal is absent");
-		system_tray_view_->setStatus(power, false);
-		main_window_->setIcon(power, false);
-		main_window_->stopLogoAnimation();
-        if (view_ == ViewType::Pro)
-        {
-            main_window_->showProView();
-			main_window_->pauseVisualizer();
-        }
+		pauseAudioProcessing(snapshot);
+	}
+}
+
+void FxController::resumeAudioProcessingImmediately()
+{
+	if (audio_process_on_ || audio_passthru_ == nullptr || main_window_ == nullptr || system_tray_view_ == nullptr)
+	{
+		return;
+	}
+
+	if (!FxModel::getModel().getPowerState())
+	{
+		return;
+	}
+
+	audio_signal_counters_.present = juce::jmax(audio_signal_counters_.present, 1);
+	audio_signal_counters_.absent = 0;
+	audio_process_on_ = true;
+	audio_passthru_->setDspProcessingEnabled(true);
+	logAudioPipelineMessage("Audio DSP processing resumed after signal detection");
+	system_tray_view_->setStatus(true, true);
+	main_window_->setIcon(true, true);
+	main_window_->startLogoAnimation();
+	if (view_ == ViewType::Pro)
+	{
+		main_window_->showProView();
+		main_window_->startVisualizer();
+	}
+}
+
+void FxController::pauseAudioProcessing(const AudioPipelineSnapshot& snapshot)
+{
+	if (!audio_process_on_ || audio_passthru_ == nullptr || main_window_ == nullptr || system_tray_view_ == nullptr)
+	{
+		return;
+	}
+
+	auto power = FxModel::getModel().getPowerState();
+	logAudioPipelineSnapshot("audio_processing_stopped", snapshot);
+	audio_process_on_ = false;
+	audio_passthru_->setDspProcessingEnabled(false);
+	logAudioPipelineMessage("Audio DSP processing paused while signal is absent");
+	system_tray_view_->setStatus(power, false);
+	main_window_->setIcon(power, false);
+	main_window_->stopLogoAnimation();
+	if (view_ == ViewType::Pro)
+	{
+		main_window_->showProView();
+		main_window_->pauseVisualizer();
 	}
 }
 
@@ -2173,6 +2206,16 @@ void FxController::onAudioPassthruDiagnostic(const std::wstring& message)
 {
 	auto now = Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S");
 	logMessage("[" + now + "] AudioPassthru: " + String(message.c_str()));
+}
+
+void FxController::onAudioSignalDetected()
+{
+	if (shutting_down_)
+	{
+		return;
+	}
+
+	PostMessage(message_window_.getHandle(), WMAPP_AUDIO_SIGNAL_DETECTED, 0, 0);
 }
 
 void FxController::onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id)

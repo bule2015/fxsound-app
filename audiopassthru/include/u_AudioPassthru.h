@@ -77,8 +77,10 @@ private:
 	std::atomic<bool> processing_thread_running_ = false;
 	std::atomic<uint64_t> last_capture_with_samples_tick_ms_ = 0;
 	std::atomic<uint64_t> last_successful_playback_tick_ms_ = 0;
+	std::atomic<uint64_t> last_capture_signal_tick_ms_ = 0;
 	std::atomic<float> last_capture_input_rms_db_ = -160.0f;
 	std::atomic<float> last_submitted_playback_rms_db_ = -160.0f;
+	std::atomic<bool> capture_signal_latched_ = false;
 	wchar_t wcp_playback_device_guid_[PT_MAX_GENERIC_STRLEN];
 	bool b_no_valid_snd_device_dialog_shown_; /* Flag stating whether we have shown the user a message to select a valid snd device.  We only want it shown once per session. */
 	int debug_;

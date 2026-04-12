@@ -37,6 +37,9 @@ AudioPassthruCallback* AudioPassthruPrivate::s_callback_ = nullptr;
 
 namespace
 {
+constexpr float kImmediateSignalThresholdDb = -100.0f;
+constexpr uint64_t kImmediateSignalResetWindowMs = 500;
+
 void notifyDiagnosticMessage(const std::wstring& message)
 {
 	AudioPassthruPrivate::notifyDiagnostic(message);
@@ -81,6 +84,11 @@ float calculateBufferRmsDb(const float* buffer, int sample_count)
 		return -160.0f;
 
 	return static_cast<float>(20.0 * std::log10(rms));
+}
+
+bool isImmediateSignalPresent(float rms_db)
+{
+	return rms_db > kImmediateSignalThresholdDb;
 }
 }
 
@@ -459,8 +467,10 @@ int AudioPassthruPrivate::processTimer()
 
 		last_capture_with_samples_tick_ms_ = 0;
 		last_successful_playback_tick_ms_ = 0;
+		last_capture_signal_tick_ms_ = 0;
 		last_capture_input_rms_db_ = -160.0f;
 		last_submitted_playback_rms_db_ = -160.0f;
+		capture_signal_latched_ = false;
 
 		/* Initialize flag which can be set by the outside telling thread to end */
 		i_kill_processing_thread_ = IS_FALSE;
@@ -588,6 +598,15 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	*/
 	while (1)
 	{
+		const auto now_tick_ms = GetTickCount64();
+		if (capture_signal_latched_ &&
+			last_capture_signal_tick_ms_ > 0 &&
+			now_tick_ms >= last_capture_signal_tick_ms_ &&
+			(now_tick_ms - last_capture_signal_tick_ms_) > kImmediateSignalResetWindowMs)
+		{
+			capture_signal_latched_ = false;
+		}
+
 		/* Check if thread has been signaled to end */
 		if (i_kill_processing_thread_)
 		{
@@ -628,6 +647,18 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 			}
 			last_capture_with_samples_tick_ms_ = GetTickCount64();
 			last_capture_input_rms_db_ = calculateBufferRmsDb(fp_buffer, numSampleSets * pwfx->nChannels);
+			if (isImmediateSignalPresent(last_capture_input_rms_db_))
+			{
+				last_capture_signal_tick_ms_ = last_capture_with_samples_tick_ms_.load();
+				if (!capture_signal_latched_.exchange(true) && s_callback_ != nullptr)
+				{
+					s_callback_->onAudioSignalDetected();
+				}
+			}
+			else
+			{
+				capture_signal_latched_ = false;
+			}
 
 			/* Set additional processing settings */
 			i_valid_bits = pwfx->wBitsPerSample;
@@ -719,6 +750,7 @@ KillProcessingThread:
 		return(NOT_OKAY);
 	}
 	notifyDiagnosticMessage(L"sndDevicesStartStopCapture(STOP) completed");
+	capture_signal_latched_ = false;
 
 	{
 		wchar_t diagnostic[256];

@@ -61,6 +61,7 @@ public:
 	static constexpr char HK_CMD_PREVIOUS_PRESET[] = "cmd_previous_preset";
 	static constexpr char HK_CMD_NEXT_OUTPUT[] = "cmd_change_output";
 	static constexpr UINT WMAPP_SHOW_MAIN_WINDOW = WM_APP + 2;
+	static constexpr UINT WMAPP_AUDIO_SIGNAL_DETECTED = WM_APP + 3;
 	
 	static FxController& getInstance()
 	{
@@ -273,10 +274,13 @@ private:
 	AudioPipelineSnapshot createAudioPipelineSnapshot(int process_timer_result) const;
 	void updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot);
 	void syncAudioProcessingState(const AudioPipelineSnapshot& snapshot);
+	void resumeAudioProcessingImmediately();
+	void pauseAudioProcessing(const AudioPipelineSnapshot& snapshot);
 	void maybeRecoverAudioPassthru(const AudioPipelineSnapshot& snapshot);
 	void logAudioPipelineSnapshot(const String& reason, const AudioPipelineSnapshot& snapshot);
 	void logAudioPipelineMessage(const String& message);
 	void onAudioPassthruDiagnostic(const std::wstring& message) override;
+	void onAudioSignalDetected() override;
 	void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) override;
 	void handleSoundDeviceChange();
 	void beginAudioProcessingGracePeriod();

@@ -68,6 +68,7 @@ public:
 	virtual ~AudioPassthruCallback() = default;
 	virtual void onSoundDeviceChange(AudioDeviceChangeKind change_kind, const std::wstring& device_id) = 0;
 	virtual void onAudioPassthruDiagnostic(const std::wstring&) {}
+	virtual void onAudioSignalDetected() {}
 };
 
 class IAudioPassthru
