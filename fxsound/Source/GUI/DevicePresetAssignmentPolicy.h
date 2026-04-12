@@ -40,5 +40,19 @@ namespace FxSound
                 ? new_preset_name
                 : assigned_preset_name;
         }
+
+        inline bool renameAssignedPresetInPlace(std::wstring& assigned_preset_name,
+            const std::wstring& old_preset_name,
+            const std::wstring& new_preset_name)
+        {
+            auto renamed_preset_name = renameAssignedPreset(assigned_preset_name, old_preset_name, new_preset_name);
+            if (renamed_preset_name == assigned_preset_name)
+            {
+                return false;
+            }
+
+            assigned_preset_name = std::move(renamed_preset_name);
+            return true;
+        }
     }
 }

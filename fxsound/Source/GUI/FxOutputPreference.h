@@ -41,6 +41,8 @@ private:
     void paint(Graphics& g) override;
     void refreshPresetItemsIfNeeded();
     void refreshText();
+    String getPresetNameForSelectedId(int selected_id) const;
+    int getSelectedIdForPresetName(const String& preset_name) const;
     void syncSelectedPreset();
     void updateSelectionVisuals();
     
@@ -54,8 +56,7 @@ private:
     DrawableButton down_button_;
     Label device_name_;
     ComboBox preset_list_;
-    StringArray preset_items_;
-    String no_preset_label_;
+    StringArray preset_option_labels_;
 
     int row_index_;
     bool is_row_selected_;

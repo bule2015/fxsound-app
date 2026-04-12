@@ -57,6 +57,20 @@ void setArrowButtonImages(DrawableButton& button, Drawable* normal_image, Drawab
 	button.setImages(active_image, selected_image, active_image);
 }
 
+StringArray buildPresetOptionLabels(const FxModel& model)
+{
+    StringArray preset_option_labels;
+    preset_option_labels.ensureStorageAllocated(model.getPresetCount() + 1);
+    preset_option_labels.add(TRANS("No preset"));
+
+    for (auto i = 0; i < model.getPresetCount(); ++i)
+    {
+        preset_option_labels.add(model.getPreset(i).name);
+    }
+
+    return preset_option_labels;
+}
+
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -93,7 +107,7 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
         auto selected_id = preset_list_.getSelectedId();
         if (selected_id > 0)
         {
-            auto preset = selected_id == NO_PRESET_ID ? String() : preset_list_.getText();
+            auto preset = getPresetNameForSelectedId(selected_id);
             device_config_.preset = preset;
             output_preference_list_model_.updateDeviceConfig(device_config_);
 
@@ -145,27 +159,18 @@ void FxOutputDeviceRow::refreshText()
 void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
 {
     auto& model = FxModel::getModel();
-    StringArray next_items;
-    next_items.ensureStorageAllocated(model.getPresetCount());
-    auto next_no_preset_label = TRANS("No preset");
+    auto next_preset_option_labels = buildPresetOptionLabels(model);
 
-    for (auto i = 0; i < model.getPresetCount(); ++i)
-    {
-        next_items.add(model.getPreset(i).name);
-    }
-
-    if (next_items == preset_items_ && next_no_preset_label == no_preset_label_)
+    if (next_preset_option_labels == preset_option_labels_)
     {
         return;
     }
 
-    preset_items_ = next_items;
-    no_preset_label_ = next_no_preset_label;
+    preset_option_labels_ = next_preset_option_labels;
     preset_list_.clear(NotificationType::dontSendNotification);
-    preset_list_.addItem(no_preset_label_, NO_PRESET_ID);
-    for (auto i = 0; i < preset_items_.size(); ++i)
+    for (auto i = 0; i < preset_option_labels_.size(); ++i)
     {
-        preset_list_.addItem(preset_items_[i], i + NO_PRESET_ID + 1);
+        preset_list_.addItem(preset_option_labels_[i], i + 1);
     }
 
     syncSelectedPreset();
@@ -338,23 +343,40 @@ void FxOutputPreferenceListModel::persist()
 
 void FxOutputDeviceRow::syncSelectedPreset()
 {
-    int selected_id = 0;
-    if (device_config_.preset.isNotEmpty())
-    {
-        for (auto i = 0; i < preset_items_.size(); ++i)
-        {
-            if (preset_items_[i] == device_config_.preset)
-            {
-                selected_id = i + NO_PRESET_ID + 1;
-                break;
-            }
-        }
-    }
+    auto selected_id = getSelectedIdForPresetName(device_config_.preset);
 
     if (preset_list_.getSelectedId() != selected_id)
     {
         preset_list_.setSelectedId(selected_id, NotificationType::dontSendNotification);
     }
+}
+
+String FxOutputDeviceRow::getPresetNameForSelectedId(int selected_id) const
+{
+    if (selected_id <= NO_PRESET_ID || selected_id > preset_option_labels_.size())
+    {
+        return {};
+    }
+
+    return preset_option_labels_[selected_id - 1];
+}
+
+int FxOutputDeviceRow::getSelectedIdForPresetName(const String& preset_name) const
+{
+    if (preset_name.isEmpty())
+    {
+        return 0;
+    }
+
+    for (auto i = NO_PRESET_ID; i < preset_option_labels_.size(); ++i)
+    {
+        if (preset_option_labels_[i] == preset_name)
+        {
+            return i + 1;
+        }
+    }
+
+    return 0;
 }
 
 FxOutputPreference::FxOutputPreference()

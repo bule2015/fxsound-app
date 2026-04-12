@@ -77,6 +77,30 @@ int findPresetIndexByName(const FxModel& model, const String& preset_name)
     return -1;
 }
 
+bool renameAssignedDeviceConfigPresets(juce::Array<DeviceConfig>& device_configs,
+	const String& old_preset_name,
+	const String& new_preset_name)
+{
+	const auto old_preset_name_w = std::wstring(old_preset_name.toWideCharPointer());
+	const auto new_preset_name_w = std::wstring(new_preset_name.toWideCharPointer());
+	bool updated_device_configs = false;
+
+	for (auto& device_config : device_configs)
+	{
+		auto assigned_preset_name = std::wstring(device_config.preset.toWideCharPointer());
+		if (FxSound::DevicePresetAssignmentPolicy::renameAssignedPresetInPlace(
+			assigned_preset_name,
+			old_preset_name_w,
+			new_preset_name_w))
+		{
+			device_config.preset = assigned_preset_name.c_str();
+			updated_device_configs = true;
+		}
+	}
+
+	return updated_device_configs;
+}
+
 // Loads the persisted UI priority order into the pure helper representation.
 std::vector<FxSound::OutputDeviceSelection::PriorityEntry> loadOutputPriorities(FxSound::Settings& settings)
 {
@@ -1089,22 +1113,7 @@ void FxController::renamePreset(const String& new_name)
 		resetAutoSaveState();
 
 		auto device_configs = getDeviceConfigs();
-		bool updated_device_configs = false;
-		for (auto& device_config : device_configs)
-		{
-			const auto current_preset_name = std::wstring(device_config.preset.toWideCharPointer());
-			const auto renamed_preset_name = FxSound::DevicePresetAssignmentPolicy::renameAssignedPreset(
-				current_preset_name,
-				std::wstring(preset.name.toWideCharPointer()),
-				std::wstring(new_name.toWideCharPointer()));
-
-			if (renamed_preset_name != current_preset_name)
-			{
-				device_config.preset = renamed_preset_name.c_str();
-				updated_device_configs = true;
-			}
-		}
-		if (updated_device_configs)
+		if (renameAssignedDeviceConfigPresets(device_configs, preset.name, new_name))
 		{
 			saveDeviceConfigs(device_configs);
 		}
