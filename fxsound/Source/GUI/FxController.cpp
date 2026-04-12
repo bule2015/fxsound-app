@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "FxController.h"
 #include "FxMainWindow.h"
+#include "FxSettingsDialog.h"
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
 #include "AudioSignalPolicy.h"
@@ -269,6 +270,7 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 	tray_icon_recovery_pending_ = false;
 	audio_recovery_state_ = {};
     main_window_ = nullptr;
+	settings_dialog_ = nullptr;
     audio_passthru_ = nullptr;
 
 	file_logger_.reset(FileLogger::createDefaultAppLogger(L"FxSound", L"fxsound.log", L"FxSound logs"));
@@ -2521,6 +2523,24 @@ void FxController::setLanguage(String language_code)
     {
         main_window_->sendLookAndFeelChange();
     }
+
+	if (settings_dialog_ != nullptr)
+	{
+		settings_dialog_->sendLookAndFeelChange();
+	}
+}
+
+void FxController::registerSettingsDialog(FxSettingsDialog* settings_dialog)
+{
+	settings_dialog_ = settings_dialog;
+}
+
+void FxController::unregisterSettingsDialog(FxSettingsDialog* settings_dialog)
+{
+	if (settings_dialog_ == settings_dialog)
+	{
+		settings_dialog_ = nullptr;
+	}
 }
 
 String FxController::getLanguageName(String language_code) const

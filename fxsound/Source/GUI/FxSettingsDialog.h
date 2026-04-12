@@ -40,7 +40,7 @@ class FxSettingsDialog : public FxWindow
 {
 public:
     FxSettingsDialog();
-    ~FxSettingsDialog() = default;
+    ~FxSettingsDialog();
 
 	void closeButtonPressed() override;
 
@@ -251,6 +251,7 @@ private:
 	public:
         static constexpr int WIDTH = 600;
         static constexpr int MIN_HEIGHT = 100;
+		enum class PaneId : int { Audio = 0, Equalizer, General, Help, Count };
 
 		SettingsComponent();
         ~SettingsComponent() = default;
@@ -262,7 +263,6 @@ private:
 		void buttonClicked(Button* button) override;
 
 	private:
-		enum class PaneId : int { Audio = 0, Equalizer, General, Help, Count };
 		static constexpr int BUTTON_X = 20;
 		static constexpr int BUTTON_Y = 50;
 		static constexpr int BUTTON_WIDTH = 150;

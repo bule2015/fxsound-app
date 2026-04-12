@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <JuceHeader.h>
 #include "FxSettingsDialog.h"
+#include "SettingsDialogLayoutPolicy.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
 FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(this)
@@ -27,6 +28,12 @@ FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(thi
 	addToDesktop(0);
 	toFront(true);
 	setAlwaysOnTop(true);
+	FxController::getInstance().registerSettingsDialog(this);
+}
+
+FxSettingsDialog::~FxSettingsDialog()
+{
+	FxController::getInstance().unregisterSettingsDialog(this);
 }
 
 void FxSettingsDialog::closeButtonPressed()
@@ -132,32 +139,35 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
-	int preferred_height = MIN_HEIGHT;
-
+	auto active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Help;
 	switch (active_pane_)
 	{
 	case PaneId::Audio:
-		preferred_height = audio_settings_pane_.getPreferredHeight();
+		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Audio;
 		break;
 
 	case PaneId::Equalizer:
-		preferred_height = equalizer_settings_pane_.getPreferredHeight();
+		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Equalizer;
 		break;
 
 	case PaneId::General:
-		preferred_height = general_settings_pane_.getPreferredHeight();
+		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::General;
 		break;
 
 	case PaneId::Help:
-		preferred_height = help_settings_pane_.getPreferredHeight();
-		break;
-
 	case PaneId::Count:
 	default:
+		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Help;
 		break;
 	}
 
-	return jmax(MIN_HEIGHT, preferred_height);
+	return FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
+		MIN_HEIGHT,
+		active_pane,
+		audio_settings_pane_.getPreferredHeight(),
+		equalizer_settings_pane_.getPreferredHeight(),
+		general_settings_pane_.getPreferredHeight(),
+		help_settings_pane_.getPreferredHeight());
 }
 
 void FxSettingsDialog::SettingsComponent::resized()
@@ -239,10 +249,12 @@ void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 void FxSettingsDialog::SettingsComponent::updateWindowSize()
 {
 	auto preferred_height = getPreferredHeight();
-	if (getWidth() != WIDTH || getHeight() != preferred_height)
+	if (!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(getWidth(), getHeight(), WIDTH, preferred_height))
 	{
-		setSize(WIDTH, preferred_height);
+		return;
 	}
+
+	setSize(WIDTH, preferred_height);
 
 	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
 	{

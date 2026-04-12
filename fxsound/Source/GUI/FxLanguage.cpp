@@ -18,7 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "FxLanguage.h"
 #include "FxController.h"
-#include "FxSettingsDialog.h"
 #include "FxTheme.h"
 
 FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::ImageFitted), prev_button_("prev", DrawableButton::ButtonStyle::ImageFitted)
@@ -88,16 +87,10 @@ void FxLanguage::onNextLanguage()
     String language_code = languages_[language_index_];
     FxController::getInstance().setLanguage(language_code);
 
-	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
+    auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
     language_.setFont(theme.getNormalFont());
 
     language_.setText(FxController::getInstance().getLanguageName(language_code), NotificationType::dontSendNotification);
-
-    if (auto* settings_dialog = findParentComponentOfClass<FxSettingsDialog>())
-    {
-        settings_dialog->sendLookAndFeelChange();
-    }
-    
 }
 
 void FxLanguage::onPrevLanguage()
@@ -114,9 +107,4 @@ void FxLanguage::onPrevLanguage()
     language_.setFont(theme.getNormalFont());
 
     language_.setText(FxController::getInstance().getLanguageName(language_code), NotificationType::dontSendNotification);
-
-    if (auto* settings_dialog = findParentComponentOfClass<FxSettingsDialog>())
-    {
-        settings_dialog->sendLookAndFeelChange();
-    }
 }

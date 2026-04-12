@@ -8,6 +8,7 @@
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
+#include "../../fxsound/Source/GUI/SettingsDialogLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
 #include "../../dsp/include/AutoEqPolicy.h"
 #include "../../dsp/include/VolumeLevelingQuietPolicy.h"
@@ -770,6 +771,42 @@ void testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags()
 
 	expect(!FxSound::StartupOptionPolicy::shouldEnableOutputLatencyLogging(arguments),
 		"startup option policy should ignore similar but non-exact latency logging flags");
+}
+
+void testSettingsDialogLayoutUsesActivePaneHeight()
+{
+	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
+		100,
+		FxSound::SettingsDialogLayoutPolicy::PaneId::General,
+		240,
+		420,
+		180,
+		160);
+
+	expect(preferred_height == 180,
+		"settings dialog layout should use the active pane height");
+}
+
+void testSettingsDialogLayoutAppliesMinimumHeightFloor()
+{
+	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
+		100,
+		FxSound::SettingsDialogLayoutPolicy::PaneId::Help,
+		240,
+		420,
+		180,
+		80);
+
+	expect(preferred_height == 100,
+		"settings dialog layout should respect the minimum height floor");
+}
+
+void testSettingsDialogLayoutSkipsRedundantResize()
+{
+	expect(!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 180),
+		"settings dialog layout should skip redundant window resizing");
+	expect(FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 240),
+		"settings dialog layout should resize when the active pane height changes");
 }
 
 void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
@@ -1840,6 +1877,9 @@ int main()
 		runTest("autosave cleanup drops unknown presets", testAutoSaveCleanupDropsUnknownPreset);
 		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
 		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
+		runTest("settings dialog layout uses active pane height", testSettingsDialogLayoutUsesActivePaneHeight);
+		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
+		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);
 		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
 		runTest("configured preset restore applies existing preset", testConfiguredPresetRestoreDecisionAppliesExistingPreset);

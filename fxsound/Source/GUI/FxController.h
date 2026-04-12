@@ -37,6 +37,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using namespace FxSound;
 
 class FxMainWindow;
+class FxSettingsDialog;
 class FxWindow;
 class FxSystemTrayView;
 
@@ -168,6 +169,8 @@ public:
     String getLanguage() const;
     void setLanguage(String language_code);
     String getLanguageName(String language_code) const;
+	void registerSettingsDialog(FxSettingsDialog* settings_dialog);
+	void unregisterSettingsDialog(FxSettingsDialog* settings_dialog);
 	int getMaxUserPresets() const;
 
 	bool getAutoUpdates();
@@ -320,6 +323,7 @@ private:
 	bool hotkeys_registered_;
 
 	FxMainWindow* main_window_;
+	FxSettingsDialog* settings_dialog_;
 	FxSystemTrayView* system_tray_view_;
 	IAudioPassthru* audio_passthru_;
 	DfxDsp dfx_dsp_;
