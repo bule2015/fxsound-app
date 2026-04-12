@@ -2519,15 +2519,7 @@ void FxController::setLanguage(String language_code)
 		theme->loadFont(language_);
 	}
 
-    if (main_window_ != nullptr)
-    {
-        main_window_->sendLookAndFeelChange();
-    }
-
-	if (settings_dialog_ != nullptr)
-	{
-		settings_dialog_->sendLookAndFeelChange();
-	}
+	sendLookAndFeelChangeToWindows();
 }
 
 void FxController::registerSettingsDialog(FxSettingsDialog* settings_dialog)
@@ -2540,6 +2532,19 @@ void FxController::unregisterSettingsDialog(FxSettingsDialog* settings_dialog)
 	if (settings_dialog_ == settings_dialog)
 	{
 		settings_dialog_ = nullptr;
+	}
+}
+
+void FxController::sendLookAndFeelChangeToWindows()
+{
+	if (main_window_ != nullptr)
+	{
+		main_window_->sendLookAndFeelChange();
+	}
+
+	if (settings_dialog_ != nullptr)
+	{
+		settings_dialog_->sendLookAndFeelChange();
 	}
 }
 
@@ -2799,8 +2804,7 @@ void FxController::setThemeMode(FxThemeMode mode)
 
 	FxTheme::setThemeMode(mode);
 	settings_.setInt("theme_mode", static_cast<int>(mode));
-    setLanguage(getLanguage()); // To reload font for the new theme
-	main_window_->sendLookAndFeelChange();
+	setLanguage(getLanguage()); // Reloads fonts and refreshes open windows for the new theme.
 
 	auto power = FxModel::getModel().getPowerState();
 	main_window_->setIcon(power, audio_process_on_);

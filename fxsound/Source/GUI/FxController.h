@@ -268,6 +268,7 @@ private:
 	FxController();
 
 	static LRESULT CALLBACK eventCallback(HWND hwnd, const UINT message, const WPARAM w_param, const LPARAM l_param);
+	void sendLookAndFeelChangeToWindows();
 	void timerCallback() override;
 	AudioPipelineSnapshot createAudioPipelineSnapshot(int process_timer_result) const;
 	void updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot);

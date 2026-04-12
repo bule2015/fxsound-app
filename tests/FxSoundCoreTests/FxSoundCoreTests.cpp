@@ -777,11 +777,8 @@ void testSettingsDialogLayoutUsesActivePaneHeight()
 {
 	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
 		100,
-		FxSound::SettingsDialogLayoutPolicy::PaneId::General,
-		240,
-		420,
-		180,
-		160);
+		2,
+		{ 240, 420, 180, 160 });
 
 	expect(preferred_height == 180,
 		"settings dialog layout should use the active pane height");
@@ -791,11 +788,8 @@ void testSettingsDialogLayoutAppliesMinimumHeightFloor()
 {
 	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
 		100,
-		FxSound::SettingsDialogLayoutPolicy::PaneId::Help,
-		240,
-		420,
-		180,
-		80);
+		3,
+		{ 240, 420, 180, 80 });
 
 	expect(preferred_height == 100,
 		"settings dialog layout should respect the minimum height floor");

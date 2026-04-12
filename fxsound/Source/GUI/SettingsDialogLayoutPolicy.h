@@ -18,44 +18,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <array>
+
 namespace FxSound::SettingsDialogLayoutPolicy
 {
-	enum class PaneId : int
+	inline int getPreferredHeight(int min_height, int active_pane_index, const std::array<int, 4>& pane_heights)
 	{
-		Audio = 0,
-		Equalizer,
-		General,
-		Help
-	};
-
-	inline int getPreferredHeight(int min_height,
-		PaneId active_pane,
-		int audio_height,
-		int equalizer_height,
-		int general_height,
-		int help_height)
-	{
-		int preferred_height = min_height;
-
-		switch (active_pane)
+		if (active_pane_index < 0 || active_pane_index >= static_cast<int>(pane_heights.size()))
 		{
-		case PaneId::Audio:
-			preferred_height = audio_height;
-			break;
-
-		case PaneId::Equalizer:
-			preferred_height = equalizer_height;
-			break;
-
-		case PaneId::General:
-			preferred_height = general_height;
-			break;
-
-		case PaneId::Help:
-			preferred_height = help_height;
-			break;
+			return min_height;
 		}
 
+		auto preferred_height = pane_heights[static_cast<size_t>(active_pane_index)];
 		return preferred_height >= min_height ? preferred_height : min_height;
 	}
 

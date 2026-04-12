@@ -139,35 +139,15 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
-	auto active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Help;
-	switch (active_pane_)
-	{
-	case PaneId::Audio:
-		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Audio;
-		break;
-
-	case PaneId::Equalizer:
-		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Equalizer;
-		break;
-
-	case PaneId::General:
-		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::General;
-		break;
-
-	case PaneId::Help:
-	case PaneId::Count:
-	default:
-		active_pane = FxSound::SettingsDialogLayoutPolicy::PaneId::Help;
-		break;
-	}
-
 	return FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
 		MIN_HEIGHT,
-		active_pane,
-		audio_settings_pane_.getPreferredHeight(),
-		equalizer_settings_pane_.getPreferredHeight(),
-		general_settings_pane_.getPreferredHeight(),
-		help_settings_pane_.getPreferredHeight());
+		static_cast<int>(active_pane_),
+		{
+			audio_settings_pane_.getPreferredHeight(),
+			equalizer_settings_pane_.getPreferredHeight(),
+			general_settings_pane_.getPreferredHeight(),
+			help_settings_pane_.getPreferredHeight()
+		});
 }
 
 void FxSettingsDialog::SettingsComponent::resized()
