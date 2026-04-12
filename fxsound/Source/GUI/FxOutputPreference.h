@@ -35,14 +35,11 @@ private:
     static constexpr int BUTTON_WIDTH = 18;
     static constexpr int MARGIN = 5;
     static constexpr int PRESET_LIST_WIDTH = 150;
-    static constexpr int NO_PRESET_ID = 1;
 
     void lookAndFeelChanged() override;
     void paint(Graphics& g) override;
     void refreshPresetItemsIfNeeded();
     void refreshText();
-    String getPresetNameForSelectedId(int selected_id) const;
-    int getSelectedIdForPresetName(const String& preset_name) const;
     void syncSelectedPreset();
     void updateSelectionVisuals();
     

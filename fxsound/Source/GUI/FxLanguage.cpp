@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "FxLanguage.h"
 #include "FxController.h"
+#include "LanguageSelectorPolicy.h"
 #include "FxTheme.h"
 
 FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::ImageFitted), prev_button_("prev", DrawableButton::ButtonStyle::ImageFitted)
@@ -92,15 +93,13 @@ void FxLanguage::refreshSelector()
     auto& controller = FxController::getInstance();
     auto language_code = controller.getLanguage();
 
-    language_index_ = 0;
-    for (int i = 0; i < languages_.size(); ++i)
-    {
-        if (language_code.startsWith(languages_[i]))
+    language_index_ = FxSound::LanguageSelectorPolicy::resolveLanguageIndex(
+        std::wstring_view(language_code.toWideCharPointer()),
+        languages_.size(),
+        [this](int language_index)
         {
-            language_index_ = i;
-            break;
-        }
-    }
+            return std::wstring_view(languages_[language_index].toWideCharPointer());
+        });
 
     if (auto* theme = dynamic_cast<FxTheme*>(&getLookAndFeel()))
     {

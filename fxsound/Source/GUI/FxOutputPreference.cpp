@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxController.h"
 #include "FxOutputPreference.h"
 #include "OutputDeviceSelection.h"
+#include "OutputPresetSelectionPolicy.h"
 
 namespace
 {
@@ -71,6 +72,11 @@ StringArray buildPresetOptionLabels(const FxModel& model)
     return preset_option_labels;
 }
 
+std::wstring getPresetNameAtIndex(const StringArray& preset_option_labels, int preset_index)
+{
+    return std::wstring(preset_option_labels[preset_index + 1].toWideCharPointer());
+}
+
 }
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
@@ -107,7 +113,13 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
         auto selected_id = preset_list_.getSelectedId();
         if (selected_id > 0)
         {
-            auto preset = getPresetNameForSelectedId(selected_id);
+            auto preset = String(FxSound::OutputPresetSelectionPolicy::getPresetNameForSelectedId(
+                selected_id,
+                preset_option_labels_.size() - 1,
+                [this](int preset_index)
+                {
+                    return getPresetNameAtIndex(preset_option_labels_, preset_index);
+                }).c_str());
             device_config_.preset = preset;
             output_preference_list_model_.updateDeviceConfig(device_config_);
 
@@ -343,40 +355,18 @@ void FxOutputPreferenceListModel::persist()
 
 void FxOutputDeviceRow::syncSelectedPreset()
 {
-    auto selected_id = getSelectedIdForPresetName(device_config_.preset);
+    auto selected_id = FxSound::OutputPresetSelectionPolicy::getSelectedIdForPresetName(
+        std::wstring_view(device_config_.preset.toWideCharPointer()),
+        preset_option_labels_.size() - 1,
+        [this](int preset_index)
+        {
+            return getPresetNameAtIndex(preset_option_labels_, preset_index);
+        });
 
     if (preset_list_.getSelectedId() != selected_id)
     {
         preset_list_.setSelectedId(selected_id, NotificationType::dontSendNotification);
     }
-}
-
-String FxOutputDeviceRow::getPresetNameForSelectedId(int selected_id) const
-{
-    if (selected_id <= NO_PRESET_ID || selected_id > preset_option_labels_.size())
-    {
-        return {};
-    }
-
-    return preset_option_labels_[selected_id - 1];
-}
-
-int FxOutputDeviceRow::getSelectedIdForPresetName(const String& preset_name) const
-{
-    if (preset_name.isEmpty())
-    {
-        return 0;
-    }
-
-    for (auto i = NO_PRESET_ID; i < preset_option_labels_.size(); ++i)
-    {
-        if (preset_option_labels_[i] == preset_name)
-        {
-            return i + 1;
-        }
-    }
-
-    return 0;
 }
 
 FxOutputPreference::FxOutputPreference()

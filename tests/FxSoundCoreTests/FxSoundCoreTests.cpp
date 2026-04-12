@@ -8,6 +8,8 @@
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
 #include "../../fxsound/Source/GUI/DevicePresetAssignmentPolicy.h"
+#include "../../fxsound/Source/GUI/LanguageSelectorPolicy.h"
+#include "../../fxsound/Source/GUI/OutputPresetSelectionPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
 #include "../../fxsound/Source/GUI/SettingsDialogLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
@@ -695,6 +697,82 @@ void testRenameAssignedPresetSkipsNoOpChanges()
 
 	expect(unchanged_same_name == L"General", "renaming to the same preset name should be a no-op");
 	expect(unchanged_empty_target == L"General", "empty rename targets should preserve stored preset names");
+}
+
+void testRenameAssignedPresetInPlaceReportsChanges()
+{
+	std::wstring assigned_preset_name = L"General";
+	const auto changed = FxSound::DevicePresetAssignmentPolicy::renameAssignedPresetInPlace(
+		assigned_preset_name,
+		L"General",
+		L"Studio");
+
+	expect(changed, "in-place rename should report when the preset name changes");
+	expect(assigned_preset_name == L"Studio", "in-place rename should update the stored preset name");
+}
+
+void testLanguageSelectorPrefersLongestMatchingPrefix()
+{
+	const std::vector<std::wstring> languages { L"pt", L"pt-br", L"en" };
+	const auto resolved_index = FxSound::LanguageSelectorPolicy::resolveLanguageIndex(
+		L"pt-br",
+		static_cast<int>(languages.size()),
+		[&](int index)
+		{
+			return std::wstring_view(languages[static_cast<size_t>(index)]);
+		});
+
+	expect(resolved_index == 1, "language selector should prefer the longest matching prefix");
+}
+
+void testLanguageSelectorFallsBackToFirstLanguage()
+{
+	const std::vector<std::wstring> languages { L"en", L"ja" };
+	const auto resolved_index = FxSound::LanguageSelectorPolicy::resolveLanguageIndex(
+		L"xx",
+		static_cast<int>(languages.size()),
+		[&](int index)
+		{
+			return std::wstring_view(languages[static_cast<size_t>(index)]);
+		});
+
+	expect(resolved_index == 0, "language selector should fall back to the first language when no match exists");
+}
+
+void testOutputPresetSelectionReturnsEmptyForNoPreset()
+{
+	const std::vector<std::wstring> preset_names { L"General", L"Studio" };
+	const auto preset_name = FxSound::OutputPresetSelectionPolicy::getPresetNameForSelectedId(
+		FxSound::OutputPresetSelectionPolicy::kNoPresetId,
+		static_cast<int>(preset_names.size()),
+		[&](int index)
+		{
+			return std::wstring_view(preset_names[static_cast<size_t>(index)]);
+		});
+
+	expect(preset_name.empty(), "no preset selection should resolve to an empty preset name");
+}
+
+void testOutputPresetSelectionMapsPresetIdsAndNames()
+{
+	const std::vector<std::wstring> preset_names { L"General", L"Studio" };
+	const auto selected_id = FxSound::OutputPresetSelectionPolicy::getSelectedIdForPresetName(
+		L"Studio",
+		static_cast<int>(preset_names.size()),
+		[&](int index)
+		{
+			return std::wstring_view(preset_names[static_cast<size_t>(index)]);
+		});
+	const auto preset_name = FxSound::OutputPresetSelectionPolicy::getPresetNameForSelectedId(
+		selected_id,
+		static_cast<int>(preset_names.size()),
+		[&](int index)
+		{
+			return std::wstring_view(preset_names[static_cast<size_t>(index)]);
+		});
+
+	expect(selected_id == FxSound::OutputPresetSelectionPolicy::kNoPresetId + 2, "preset selection should reserve the no-preset id");
+	expect(preset_name == L"Studio", "preset selection should round-trip real preset names");
 }
 
 void testAutoEqPolicyResetsAnalysisAfterPresetLoad()
@@ -1897,6 +1975,11 @@ int main()
 		runTest("auto preset decision skips empty preset", testAutoPresetDecisionSkipsEmptyPreset);
 		runTest("rename assigned preset updates matching device configs", testRenameAssignedPresetUpdatesMatchingDeviceConfigs);
 		runTest("rename assigned preset skips no-op changes", testRenameAssignedPresetSkipsNoOpChanges);
+		runTest("rename assigned preset in-place reports changes", testRenameAssignedPresetInPlaceReportsChanges);
+		runTest("language selector prefers longest matching prefix", testLanguageSelectorPrefersLongestMatchingPrefix);
+		runTest("language selector falls back to first language", testLanguageSelectorFallsBackToFirstLanguage);
+		runTest("output preset selection returns empty for no preset", testOutputPresetSelectionReturnsEmptyForNoPreset);
+		runTest("output preset selection maps preset ids and names", testOutputPresetSelectionMapsPresetIdsAndNames);
 		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
 		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);
 		runTest("auto eq policy resets after band count change", testAutoEqPolicyResetsAnalysisAfterBandCountChange);
