@@ -35,11 +35,13 @@ private:
     static constexpr int BUTTON_WIDTH = 18;
     static constexpr int MARGIN = 5;
     static constexpr int PRESET_LIST_WIDTH = 150;
+    static constexpr int NO_PRESET_ID = 1;
 
     void lookAndFeelChanged() override;
     void paint(Graphics& g) override;
     void refreshPresetItemsIfNeeded();
     void refreshText();
+    void syncSelectedPreset();
     void updateSelectionVisuals();
     
     FxOutputPreferenceListModel& output_preference_list_model_;
@@ -53,6 +55,7 @@ private:
     Label device_name_;
     ComboBox preset_list_;
     StringArray preset_items_;
+    String no_preset_label_;
 
     int row_index_;
     bool is_row_selected_;

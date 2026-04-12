@@ -90,10 +90,10 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
     preset_list_.setWantsKeyboardFocus(true);
     preset_list_.setJustificationType(Justification::centredLeft);
     preset_list_.onChange = [this]() {
-        auto index = preset_list_.getSelectedItemIndex();
-        if (index >= 0)
+        auto selected_id = preset_list_.getSelectedId();
+        if (selected_id > 0)
         {
-            auto preset = preset_list_.getItemText(index);
+            auto preset = selected_id == NO_PRESET_ID ? String() : preset_list_.getText();
             device_config_.preset = preset;
             output_preference_list_model_.updateDeviceConfig(device_config_);
 
@@ -103,10 +103,12 @@ FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_bu
                 selected_output,
                 std::wstring(FxController::getInstance().getOutputName().toWideCharPointer()));
 
-            if (selected_output_matches)
+            if (selected_output_matches && preset.isNotEmpty())
             {
                 FxController::getInstance().setPreset(preset);
             }
+
+            syncSelectedPreset();
         }
     };
 
@@ -137,6 +139,7 @@ void FxOutputDeviceRow::refreshText()
     auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
     device_name_.setFont(theme.getNormalFont());
     preset_list_.setTextWhenNothingSelected(TRANS("Select preset"));
+    refreshPresetItemsIfNeeded();
 }
 
 void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
@@ -144,23 +147,28 @@ void FxOutputDeviceRow::refreshPresetItemsIfNeeded()
     auto& model = FxModel::getModel();
     StringArray next_items;
     next_items.ensureStorageAllocated(model.getPresetCount());
+    auto next_no_preset_label = TRANS("No preset");
 
     for (auto i = 0; i < model.getPresetCount(); ++i)
     {
         next_items.add(model.getPreset(i).name);
     }
 
-    if (next_items == preset_items_)
+    if (next_items == preset_items_ && next_no_preset_label == no_preset_label_)
     {
         return;
     }
 
     preset_items_ = next_items;
+    no_preset_label_ = next_no_preset_label;
     preset_list_.clear(NotificationType::dontSendNotification);
+    preset_list_.addItem(no_preset_label_, NO_PRESET_ID);
     for (auto i = 0; i < preset_items_.size(); ++i)
     {
-        preset_list_.addItem(preset_items_[i], i + 1);
+        preset_list_.addItem(preset_items_[i], i + NO_PRESET_ID + 1);
     }
+
+    syncSelectedPreset();
 }
 
 void FxOutputDeviceRow::updateSelectionVisuals()
@@ -224,19 +232,7 @@ void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConf
     }
 
     refreshPresetItemsIfNeeded();
-    int selected_id = 0;
-    for (auto i = 0; i < preset_items_.size(); ++i)
-    {
-        if (preset_items_[i] == device_config.preset)
-        {
-            selected_id = i + 1;
-            break;
-        }
-    }
-    if (preset_list_.getSelectedId() != selected_id)
-    {
-        preset_list_.setSelectedId(selected_id, NotificationType::dontSendNotification);
-    }
+    syncSelectedPreset();
 }
 
 void FxOutputDeviceRow::paint(Graphics& g)
@@ -338,6 +334,27 @@ void FxOutputPreferenceListModel::updateDeviceConfig(const DeviceConfig& device_
 void FxOutputPreferenceListModel::persist()
 {
     FxController::getInstance().saveDeviceConfigs(device_configs_);
+}
+
+void FxOutputDeviceRow::syncSelectedPreset()
+{
+    int selected_id = 0;
+    if (device_config_.preset.isNotEmpty())
+    {
+        for (auto i = 0; i < preset_items_.size(); ++i)
+        {
+            if (preset_items_[i] == device_config_.preset)
+            {
+                selected_id = i + NO_PRESET_ID + 1;
+                break;
+            }
+        }
+    }
+
+    if (preset_list_.getSelectedId() != selected_id)
+    {
+        preset_list_.setSelectedId(selected_id, NotificationType::dontSendNotification);
+    }
 }
 
 FxOutputPreference::FxOutputPreference()
