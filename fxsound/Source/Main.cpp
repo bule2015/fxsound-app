@@ -144,6 +144,8 @@ public:
 
     void shutdown() override
     {
+        restoreDefaultPlaybackDeviceIfNeeded();
+
         if (main_window_.get() != nullptr)
         {
             // Add your application's shutdown code here..
@@ -172,7 +174,8 @@ public:
     {
         // This is called when the app is being asked to quit: you can ignore this
         // request and let the app carry on running, or call quit() to allow the app to close.
-        
+
+        restoreDefaultPlaybackDeviceIfNeeded();
         quit();
     }
 
@@ -186,6 +189,7 @@ private:
     static constexpr int MAX_FRAMES = 64;
     HANDLE session_instance_mutex_ = nullptr;
     bool com_initialized_ = false;
+    bool default_playback_restore_attempted_ = false;
 
     bool acquireSessionInstanceLock()
     {
@@ -215,6 +219,23 @@ private:
             ::CloseHandle(session_instance_mutex_);
             session_instance_mutex_ = nullptr;
         }
+    }
+
+    void restoreDefaultPlaybackDeviceIfNeeded()
+    {
+        if (default_playback_restore_attempted_)
+        {
+            return;
+        }
+
+        default_playback_restore_attempted_ = true;
+
+        if (audio_passthru_ == nullptr || !FxModel::getModel().getPowerState())
+        {
+            return;
+        }
+
+        audio_passthru_->restoreDefaultPlaybackDevice();
     }
 
     static LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exception_info)
