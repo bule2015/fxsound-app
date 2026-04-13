@@ -1916,7 +1916,7 @@ LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, cons
 
 		case WMAPP_AUDIO_SIGNAL_DETECTED:
 		{
-			controller->resumeAudioProcessingImmediately();
+			controller->handleImmediateAudioSignalDetected();
 		}
 		break;
 	}
@@ -2031,7 +2031,7 @@ void FxController::syncAudioProcessingState(const AudioPipelineSnapshot& snapsho
 {
 	if (FxSound::AudioSignalPolicy::shouldEnableDsp(audio_signal_counters_.present, audio_process_on_))
 	{
-		resumeAudioProcessingImmediately();
+		tryResumeAudioProcessing(snapshot, "Audio DSP processing resumed after signal detection");
 	}
 	if (FxSound::AudioSignalPolicy::shouldDisableDsp(audio_signal_counters_.absent, audio_process_on_))
 	{
@@ -2039,14 +2039,21 @@ void FxController::syncAudioProcessingState(const AudioPipelineSnapshot& snapsho
 	}
 }
 
-void FxController::resumeAudioProcessingImmediately()
+bool FxController::canResumeAudioProcessing(const AudioPipelineSnapshot& snapshot) const
 {
-	if (audio_process_on_ || audio_passthru_ == nullptr || main_window_ == nullptr || system_tray_view_ == nullptr)
-	{
-		return;
-	}
+	return !audio_process_on_
+		&& audio_passthru_ != nullptr
+		&& main_window_ != nullptr
+		&& system_tray_view_ != nullptr
+		&& FxModel::getModel().getPowerState()
+		&& !isAudioProcessingGracePeriodActive()
+		&& playback_device_available_
+		&& snapshot.selected_output_active;
+}
 
-	if (!FxModel::getModel().getPowerState())
+void FxController::tryResumeAudioProcessing(const AudioPipelineSnapshot& snapshot, const String& reason)
+{
+	if (!canResumeAudioProcessing(snapshot))
 	{
 		return;
 	}
@@ -2055,7 +2062,7 @@ void FxController::resumeAudioProcessingImmediately()
 	audio_signal_counters_.absent = 0;
 	audio_process_on_ = true;
 	audio_passthru_->setDspProcessingEnabled(true);
-	logAudioPipelineMessage("Audio DSP processing resumed after signal detection");
+	logAudioPipelineMessage(reason);
 	system_tray_view_->setStatus(true, true);
 	main_window_->setIcon(true, true);
 	main_window_->startLogoAnimation();
@@ -2064,6 +2071,13 @@ void FxController::resumeAudioProcessingImmediately()
 		main_window_->showProView();
 		main_window_->startVisualizer();
 	}
+}
+
+void FxController::handleImmediateAudioSignalDetected()
+{
+	tryResumeAudioProcessing(
+		createAudioPipelineSnapshot(0),
+		"Audio DSP processing resumed after signal detection");
 }
 
 void FxController::pauseAudioProcessing(const AudioPipelineSnapshot& snapshot)

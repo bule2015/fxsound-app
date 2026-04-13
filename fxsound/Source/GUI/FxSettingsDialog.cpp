@@ -129,21 +129,21 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 	help_button_->setImage(Drawable::createFromImageData(BinaryData::question_svg, BinaryData::question_svgSize).get());
 	help_button_->addListener(this);    
 
-	for (auto* button : getPaneButtons())
+	pane_entries_ = {
+		PaneEntry { audio_button_.get(), &audio_settings_pane_ },
+		PaneEntry { equalizer_button_.get(), &equalizer_settings_pane_ },
+		PaneEntry { general_button_.get(), &general_settings_pane_ },
+		PaneEntry { help_button_.get(), &help_settings_pane_ }
+	};
+
+	for (const auto& entry : pane_entries_)
 	{
-		addAndMakeVisible(button);
+		addAndMakeVisible(entry.button);
 	}
 
-	for (auto [button, pane] : getPaneEntries())
+	for (const auto& entry : pane_entries_)
 	{
-		if (button == audio_button_.get())
-		{
-			addAndMakeVisible(pane);
-		}
-		else
-		{
-			addChildComponent(pane);
-		}
+		addChildComponent(entry.pane);
 	}
 
 	showPane(PaneId::Audio);
@@ -156,55 +156,43 @@ int FxSettingsDialog::SettingsComponent::getPreferredWidth() const
 		MIN_WIDTH,
 		getMaximumWidth(),
 		SEPARATOR_X - 1,
-		static_cast<int>(active_pane_),
-		{
-			audio_settings_pane_.getPreferredWidth(),
-			equalizer_settings_pane_.getPreferredWidth(),
-			general_settings_pane_.getPreferredWidth(),
-			help_settings_pane_.getPreferredWidth()
-		});
+		getActivePane().getPreferredWidth());
 }
 
 int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 {
 	return FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
 		MIN_HEIGHT,
-		static_cast<int>(active_pane_),
-		{
-			audio_settings_pane_.getPreferredHeight(),
-			equalizer_settings_pane_.getPreferredHeight(),
-			general_settings_pane_.getPreferredHeight(),
-			help_settings_pane_.getPreferredHeight()
-		});
+		getActivePane().getPreferredHeight());
 }
 
 void FxSettingsDialog::SettingsComponent::resized()
 {
 	auto y = BUTTON_Y;
-	for (auto* button : getPaneButtons())
+	for (const auto& entry : pane_entries_)
 	{
-		button->setBounds(BUTTON_X, y, BUTTON_WIDTH, BUTTON_HEIGHT);
+		entry.button->setBounds(BUTTON_X, y, BUTTON_WIDTH, BUTTON_HEIGHT);
 		y += BUTTON_HEIGHT + 20;
 	}
 
 	juce::Rectangle<int> pane_rect(SEPARATOR_X + 1, 1, getWidth() - SEPARATOR_X + 1, getHeight() - 1);
 
-	for (auto* pane : getPanes())
+	for (const auto& entry : pane_entries_)
 	{
-		pane->setBounds(pane_rect);
+		entry.pane->setBounds(pane_rect);
 	}
 }
 
 void FxSettingsDialog::SettingsComponent::lookAndFeelChanged()
 {
-	for (auto* pane : getPanes())
+	for (const auto& entry : pane_entries_)
 	{
-		pane->refreshPaneContent();
+		entry.pane->refreshPaneContent();
 	}
 
-	for (auto* button : getPaneButtons())
+	for (const auto& entry : pane_entries_)
 	{
-		button->repaint();
+		entry.button->repaint();
 	}
 
 	Component::SafePointer<SettingsComponent> safe_this(this);
@@ -223,34 +211,19 @@ void FxSettingsDialog::SettingsComponent::refreshWindowSize()
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
 {
-	for (int index = 0; index < (int)PaneId::Count; ++index)
+	for (int index = 0; index < static_cast<int>(pane_entries_.size()); ++index)
 	{
-		if (getPaneButtons()[(size_t)index] == button)
+		if (pane_entries_[static_cast<size_t>(index)].button == button)
 		{
-			showPane((PaneId)index);
+			showPane(static_cast<PaneId>(index));
 			break;
 		}
 	}
 }
 
-std::array<FxSettingsDialog::SettingsButton*, 4> FxSettingsDialog::SettingsComponent::getPaneButtons()
+FxSettingsDialog::SettingsPane& FxSettingsDialog::SettingsComponent::getActivePane() const
 {
-	return { audio_button_.get(), equalizer_button_.get(), general_button_.get(), help_button_.get() };
-}
-
-std::array<FxSettingsDialog::SettingsPane*, 4> FxSettingsDialog::SettingsComponent::getPanes()
-{
-	return { &audio_settings_pane_, &equalizer_settings_pane_, &general_settings_pane_, &help_settings_pane_ };
-}
-
-std::array<std::pair<FxSettingsDialog::SettingsButton*, FxSettingsDialog::SettingsPane*>, 4> FxSettingsDialog::SettingsComponent::getPaneEntries()
-{
-	return {
-		std::make_pair(audio_button_.get(), &audio_settings_pane_),
-		std::make_pair(equalizer_button_.get(), &equalizer_settings_pane_),
-		std::make_pair(general_button_.get(), &general_settings_pane_),
-		std::make_pair(help_button_.get(), &help_settings_pane_)
-	};
+	return *pane_entries_[static_cast<size_t>(active_pane_)].pane;
 }
 
 int FxSettingsDialog::SettingsComponent::getMaximumWidth() const
@@ -274,13 +247,12 @@ void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 {
 	active_pane_ = active_pane;
 
-	auto entries = getPaneEntries();
-	for (int index = 0; index < (int)entries.size(); ++index)
+	for (int index = 0; index < static_cast<int>(pane_entries_.size()); ++index)
 	{
-		auto [button, pane] = entries[(size_t)index];
+		auto& entry = pane_entries_[static_cast<size_t>(index)];
 		auto is_active = index == (int)active_pane;
-		button->setToggleState(is_active, NotificationType::dontSendNotification);
-		pane->setVisible(is_active);
+		entry.button->setToggleState(is_active, NotificationType::dontSendNotification);
+		entry.pane->setVisible(is_active);
 	}
 
 	updateWindowSize();
@@ -312,6 +284,11 @@ FxSettingsDialog::SettingsPane::SettingsPane(String name)
 }
 
 int FxSettingsDialog::SettingsPane::getPreferredWidth() const
+{
+	return 0;
+}
+
+int FxSettingsDialog::SettingsPane::getPreferredHeight() const
 {
 	return 0;
 }

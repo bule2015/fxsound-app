@@ -82,6 +82,7 @@ private:
 		SettingsPane(String name);
 		~SettingsPane() = default;
 		virtual int getPreferredWidth() const;
+		virtual int getPreferredHeight() const;
 		void refreshPaneContent();
 
 	protected:
@@ -106,7 +107,7 @@ private:
 		~AudioSettingsPane();
 
 		int getPreferredWidth() const override;
-		int getPreferredHeight() const;
+		int getPreferredHeight() const override;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -145,7 +146,7 @@ private:
 		~EqualizerSettingsPane();
 
 		int getPreferredWidth() const override;
-		int getPreferredHeight() const;
+		int getPreferredHeight() const override;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -196,7 +197,7 @@ private:
 		~GeneralSettingsPane();
 
 		int getPreferredWidth() const override;
-		int getPreferredHeight() const;
+		int getPreferredHeight() const override;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -227,7 +228,7 @@ private:
 		~HelpSettingsPane() = default;
 
 		int getPreferredWidth() const override;
-		int getPreferredHeight() const;
+		int getPreferredHeight() const override;
 		void resized() override;
 		void paint(Graphics& g) override;
 
@@ -281,9 +282,13 @@ private:
 		static constexpr int SEPARATOR_X = 152;
 		static constexpr int WINDOW_WIDTH_MARGIN = 32;
 
-		std::array<SettingsButton*, 4> getPaneButtons();
-		std::array<SettingsPane*, 4> getPanes();
-		std::array<std::pair<SettingsButton*, SettingsPane*>, 4> getPaneEntries();
+		struct PaneEntry
+		{
+			SettingsButton* button = nullptr;
+			SettingsPane* pane = nullptr;
+		};
+
+		SettingsPane& getActivePane() const;
 		int getMaximumWidth() const;
 		void showPane(PaneId active_pane);
 		void updateWindowSize();
@@ -297,6 +302,7 @@ private:
 		EqualizerSettingsPane equalizer_settings_pane_;
 		GeneralSettingsPane general_settings_pane_;
 		HelpSettingsPane help_settings_pane_;
+		std::array<PaneEntry, 4> pane_entries_{};
 		PaneId active_pane_ = PaneId::Audio;
 	};
 

@@ -53,18 +53,37 @@ namespace FxSound::SettingsDialogLayoutPolicy
 		return preferred_width >= min_width ? preferred_width : min_width;
 	}
 
+	inline int getPreferredWindowWidth(int min_width, int pane_chrome_width, int active_pane_width)
+	{
+		auto preferred_width = active_pane_width + pane_chrome_width;
+		return preferred_width >= min_width ? preferred_width : min_width;
+	}
+
 	inline int getPreferredWindowWidth(int min_width, int pane_chrome_width, int active_pane_index, const std::array<int, 4>& pane_widths)
 	{
-		auto preferred_width = getPreferredWidth(0, active_pane_index, pane_widths) + pane_chrome_width;
-		return preferred_width >= min_width ? preferred_width : min_width;
+		return getPreferredWindowWidth(min_width, pane_chrome_width, getPreferredWidth(0, active_pane_index, pane_widths));
+	}
+
+	inline int getClampedPreferredWindowWidth(int min_width, int max_width, int pane_chrome_width, int active_pane_width)
+	{
+		return clampWidth(
+			getPreferredWindowWidth(min_width, pane_chrome_width, active_pane_width),
+			min_width,
+			max_width);
 	}
 
 	inline int getClampedPreferredWindowWidth(int min_width, int max_width, int pane_chrome_width, int active_pane_index, const std::array<int, 4>& pane_widths)
 	{
-		return clampWidth(
-			getPreferredWindowWidth(min_width, pane_chrome_width, active_pane_index, pane_widths),
+		return getClampedPreferredWindowWidth(
 			min_width,
-			max_width);
+			max_width,
+			pane_chrome_width,
+			getPreferredWidth(0, active_pane_index, pane_widths));
+	}
+
+	inline int getPreferredHeight(int min_height, int active_pane_height)
+	{
+		return active_pane_height >= min_height ? active_pane_height : min_height;
 	}
 
 	inline int getPreferredHeight(int min_height, int active_pane_index, const std::array<int, 4>& pane_heights)
@@ -74,8 +93,7 @@ namespace FxSound::SettingsDialogLayoutPolicy
 			return min_height;
 		}
 
-		auto preferred_height = pane_heights[static_cast<size_t>(active_pane_index)];
-		return preferred_height >= min_height ? preferred_height : min_height;
+		return getPreferredHeight(min_height, pane_heights[static_cast<size_t>(active_pane_index)]);
 	}
 
 	inline bool shouldResizeWindow(int current_width, int current_height, int target_width, int target_height)

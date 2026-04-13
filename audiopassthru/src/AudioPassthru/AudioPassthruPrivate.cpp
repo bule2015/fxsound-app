@@ -467,10 +467,9 @@ int AudioPassthruPrivate::processTimer()
 
 		last_capture_with_samples_tick_ms_ = 0;
 		last_successful_playback_tick_ms_ = 0;
-		last_capture_signal_tick_ms_ = 0;
+		capture_signal_latch_deadline_ms_ = 0;
 		last_capture_input_rms_db_ = -160.0f;
 		last_submitted_playback_rms_db_ = -160.0f;
-		capture_signal_latched_ = false;
 
 		/* Initialize flag which can be set by the outside telling thread to end */
 		i_kill_processing_thread_ = IS_FALSE;
@@ -598,15 +597,6 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 	*/
 	while (1)
 	{
-		const auto now_tick_ms = GetTickCount64();
-		if (capture_signal_latched_ &&
-			last_capture_signal_tick_ms_ > 0 &&
-			now_tick_ms >= last_capture_signal_tick_ms_ &&
-			(now_tick_ms - last_capture_signal_tick_ms_) > kImmediateSignalResetWindowMs)
-		{
-			capture_signal_latched_ = false;
-		}
-
 		/* Check if thread has been signaled to end */
 		if (i_kill_processing_thread_)
 		{
@@ -649,8 +639,10 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 			last_capture_input_rms_db_ = calculateBufferRmsDb(fp_buffer, numSampleSets * pwfx->nChannels);
 			if (isImmediateSignalPresent(last_capture_input_rms_db_))
 			{
-				last_capture_signal_tick_ms_ = last_capture_with_samples_tick_ms_.load();
-				if (!capture_signal_latched_.exchange(true) && s_callback_ != nullptr)
+				const auto capture_tick_ms = last_capture_with_samples_tick_ms_.load();
+				const auto signal_latched = capture_signal_latch_deadline_ms_.load() > capture_tick_ms;
+				capture_signal_latch_deadline_ms_ = capture_tick_ms + kImmediateSignalResetWindowMs;
+				if (!signal_latched && s_callback_ != nullptr)
 				{
 					s_callback_->onAudioSignalDetected();
 				}
@@ -746,7 +738,7 @@ KillProcessingThread:
 		return(NOT_OKAY);
 	}
 	notifyDiagnosticMessage(L"sndDevicesStartStopCapture(STOP) completed");
-	capture_signal_latched_ = false;
+	capture_signal_latch_deadline_ms_ = 0;
 
 	{
 		wchar_t diagnostic[256];

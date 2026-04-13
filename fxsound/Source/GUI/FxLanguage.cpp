@@ -44,6 +44,7 @@ FxLanguage::FxLanguage() : next_button_("next", DrawableButton::ButtonStyle::Ima
         this->onNextLanguage();
     };
 
+    refreshButtonImages();
     updatePreferredWidth();
     refreshSelector();
     resized();
@@ -62,6 +63,7 @@ void FxLanguage::paint(Graphics& g)
 
 void FxLanguage::lookAndFeelChanged()
 {
+    refreshButtonImages();
     refreshSelector();
 }
 
@@ -113,8 +115,6 @@ void FxLanguage::updatePreferredWidth()
 
 void FxLanguage::refreshSelector()
 {
-    refreshButtonImages();
-
     auto& controller = FxController::getInstance();
     auto language_code = controller.getLanguage();
 

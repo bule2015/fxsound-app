@@ -274,7 +274,9 @@ private:
 	AudioPipelineSnapshot createAudioPipelineSnapshot(int process_timer_result) const;
 	void updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot);
 	void syncAudioProcessingState(const AudioPipelineSnapshot& snapshot);
-	void resumeAudioProcessingImmediately();
+	bool canResumeAudioProcessing(const AudioPipelineSnapshot& snapshot) const;
+	void tryResumeAudioProcessing(const AudioPipelineSnapshot& snapshot, const String& reason);
+	void handleImmediateAudioSignalDetected();
 	void pauseAudioProcessing(const AudioPipelineSnapshot& snapshot);
 	void maybeRecoverAudioPassthru(const AudioPipelineSnapshot& snapshot);
 	void logAudioPipelineSnapshot(const String& reason, const AudioPipelineSnapshot& snapshot);
