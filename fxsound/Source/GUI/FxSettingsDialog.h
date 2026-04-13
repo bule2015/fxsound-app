@@ -206,7 +206,8 @@ private:
 		static constexpr int TOGGLE_BUTTON_HEIGHT = 30;
 		static constexpr int HOTKEY_LABEL_X = X_MARGIN + 12;
 		static constexpr int HOTKEY_LABEL_HEIGHT = 20;
-		static constexpr int HOTKEY_COLUMN_GAP = 8;
+		static constexpr int HOTKEY_COLUMN_GAP = 6;
+		static constexpr int CONTENT_RIGHT_MARGIN = X_MARGIN;
 		static constexpr int LANGUAGE_LABEL_HEIGHT = 24;
 		static constexpr int LANGUAGE_LIST_WIDTH = 120;
 		static constexpr int LANGUAGE_LIST_HEIGHT = 30;

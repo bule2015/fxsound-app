@@ -8,6 +8,8 @@
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
 #include "../../fxsound/Source/GUI/DevicePresetAssignmentPolicy.h"
+#include "../../fxsound/Source/GUI/GeneralSettingsLayoutPolicy.h"
+#include "../../fxsound/Source/GUI/LanguageLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/LanguageSelectorPolicy.h"
 #include "../../fxsound/Source/GUI/OutputPresetSelectionPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
@@ -1008,6 +1010,68 @@ void testSettingsDialogLayoutSkipsRedundantResize()
 		"settings dialog layout should resize when the active pane width changes");
 	expect(FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 240),
 		"settings dialog layout should resize when the active pane height changes");
+}
+
+void testLanguageLayoutUsesLongestLocalizedLabelWidth()
+{
+	const std::vector<int> measured_label_widths { 68, 84, 112 };
+
+	const auto preferred_width = FxSound::LanguageLayoutPolicy::getPreferredWidth(
+		120,
+		48,
+		static_cast<int>(measured_label_widths.size()),
+		[&measured_label_widths](int index)
+		{
+			return measured_label_widths[static_cast<size_t>(index)];
+		});
+
+	expect(preferred_width == 160,
+		"language layout should reserve width for the longest localized label");
+}
+
+void testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths()
+{
+	const auto language_width = 160;
+	const auto widest_toggle_width = 232;
+	const auto widest_hotkey_label_width = 188;
+	const auto widest_hotkey_editor_width = 104;
+
+	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
+		20,
+		language_width,
+		widest_toggle_width,
+		32,
+		widest_hotkey_label_width,
+		8,
+		widest_hotkey_editor_width,
+		20);
+
+	const auto expected_hotkey_width = 352;
+	const auto expected_toggle_width = 272;
+	const auto expected_language_width = 200;
+
+	expect(preferred_width == 352,
+		"general settings layout should size itself to the widest currently visible localized content");
+	expect(preferred_width == expected_hotkey_width,
+		"general settings layout should widen to fit the longest localized hotkey description when it dominates");
+	expect(preferred_width > expected_toggle_width && preferred_width > expected_language_width,
+		"general settings layout should follow the currently visible hotkey content when it is wider than other controls");
+}
+
+void testGeneralSettingsLayoutUsesTrailingMarginForToggleDominatedWidth()
+{
+	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
+		20,
+		160,
+		300,
+		32,
+		120,
+		8,
+		100,
+		20);
+
+	expect(preferred_width == 340,
+		"general settings layout should reserve only the configured trailing margin when a toggle is the widest control");
 }
 
 void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
@@ -2095,6 +2159,9 @@ int main()
 		runTest("settings dialog layout uses active pane height", testSettingsDialogLayoutUsesActivePaneHeight);
 		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
 		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);
+		runTest("language layout uses longest localized label width", testLanguageLayoutUsesLongestLocalizedLabelWidth);
+		runTest("general settings layout tracks localized visible content widths", testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths);
+		runTest("general settings layout uses trailing margin for toggle-dominated width", testGeneralSettingsLayoutUsesTrailingMarginForToggleDominatedWidth);
 		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
 		runTest("configured preset restore applies existing preset", testConfiguredPresetRestoreDecisionAppliesExistingPreset);

@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <JuceHeader.h>
 #include "FxSettingsDialog.h"
+#include "GeneralSettingsLayoutPolicy.h"
 #include "SettingsDialogLayoutPolicy.h"
 #include "../Utils/SysInfo/SysInfo.h"
 
@@ -28,9 +29,12 @@ int measureTextWidth(const Font& font, const String& text, int padding = 0)
 	return font.getStringWidth(text) + padding;
 }
 
-int getTogglePreferredWidth(const ToggleButton& toggle, const Font& font)
+int getTogglePreferredWidth(const ToggleButton& toggle)
 {
-	return font.getStringWidth(toggle.getButtonText()) + 34;
+	const auto font_size = juce::jmin(15.0f, static_cast<float>(toggle.getHeight()) * 0.75f);
+	const auto tick_width = font_size * 1.1f;
+	Font font(font_size);
+	return font.getStringWidth(toggle.getButtonText()) + juce::roundToInt(tick_width) + 14;
 }
 }
 
@@ -938,13 +942,11 @@ FxSettingsDialog::GeneralSettingsPane::~GeneralSettingsPane()
 
 int FxSettingsDialog::GeneralSettingsPane::getPreferredWidth() const
 {
-	auto& theme = dynamic_cast<FxTheme&>(LookAndFeel::getDefaultLookAndFeel());
-	auto preferred_width = X_MARGIN * 2 + language_switch_.getPreferredWidth();
 	auto toggle_width = 0;
 
 	for (auto* toggle : { &launch_toggle_, &hide_help_tips_toggle_, &hide_notifications_toggle_, &hotkeys_toggle_ })
 	{
-		toggle_width = juce::jmax(toggle_width, getTogglePreferredWidth(*toggle, theme.getNormalFont()));
+		toggle_width = juce::jmax(toggle_width, getTogglePreferredWidth(*toggle));
 	}
 
 	auto hotkey_label_width = 0;
@@ -954,12 +956,16 @@ int FxSettingsDialog::GeneralSettingsPane::getPreferredWidth() const
 		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
 		hotkey_editor_width = juce::jmax(hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
 	}
-	auto hotkey_width = hotkey_label_width + HOTKEY_COLUMN_GAP + hotkey_editor_width;
 
-	preferred_width = juce::jmax(preferred_width, X_MARGIN * 2 + toggle_width);
-	preferred_width = juce::jmax(preferred_width, HOTKEY_LABEL_X + hotkey_width + X_MARGIN);
-
-	return preferred_width;
+	return FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
+		X_MARGIN,
+		language_switch_.getPreferredWidth(),
+		toggle_width,
+		HOTKEY_LABEL_X,
+		hotkey_label_width,
+		HOTKEY_COLUMN_GAP,
+		hotkey_editor_width,
+		CONTENT_RIGHT_MARGIN);
 }
 
 int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
@@ -992,23 +998,37 @@ void FxSettingsDialog::GeneralSettingsPane::resized()
 	auto bounds = getLocalBounds().withLeft(X_MARGIN).withTop(Y_MARGIN).withHeight(TITLE_HEIGHT);
 	title_.setBounds(bounds);
 
-    auto language_switch_width = juce::jmin(language_switch_.getPreferredWidth(), getWidth() - X_MARGIN * 2);
-    language_switch_.setBounds(X_MARGIN, LANGUAGE_SWITCH_Y, language_switch_width, FxLanguage::HEIGHT);
+	auto language_switch_width = juce::jmin(
+		language_switch_.getPreferredWidth(),
+		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+	language_switch_.setBounds(X_MARGIN, LANGUAGE_SWITCH_Y, language_switch_width, FxLanguage::HEIGHT);
 
-    int y = language_switch_.getBottom() + 20;
+	int y = language_switch_.getBottom() + 20;
 	if (launch_toggle_.isVisible())
 	{
-		launch_toggle_.setBounds(X_MARGIN, y, getWidth() - X_MARGIN, TOGGLE_BUTTON_HEIGHT);
+		auto launch_toggle_width = juce::jmin(
+			getTogglePreferredWidth(launch_toggle_),
+			getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+		launch_toggle_.setBounds(X_MARGIN, y, launch_toggle_width, TOGGLE_BUTTON_HEIGHT);
 		y = launch_toggle_.getBottom() + 20;
 	}
 
-    hide_help_tips_toggle_.setBounds(X_MARGIN, y, getWidth() - X_MARGIN, TOGGLE_BUTTON_HEIGHT);
+	auto hide_help_tips_toggle_width = juce::jmin(
+		getTogglePreferredWidth(hide_help_tips_toggle_),
+		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+	hide_help_tips_toggle_.setBounds(X_MARGIN, y, hide_help_tips_toggle_width, TOGGLE_BUTTON_HEIGHT);
 
 	y = hide_help_tips_toggle_.getBottom() + 10;
-	hide_notifications_toggle_.setBounds(X_MARGIN, y, getWidth() - X_MARGIN, TOGGLE_BUTTON_HEIGHT);
+	auto hide_notifications_toggle_width = juce::jmin(
+		getTogglePreferredWidth(hide_notifications_toggle_),
+		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+	hide_notifications_toggle_.setBounds(X_MARGIN, y, hide_notifications_toggle_width, TOGGLE_BUTTON_HEIGHT);
 
-    y = hide_notifications_toggle_.getBottom() + 10;
-	hotkeys_toggle_.setBounds(X_MARGIN, y, getWidth()-X_MARGIN, TOGGLE_BUTTON_HEIGHT);
+	y = hide_notifications_toggle_.getBottom() + 10;
+	auto hotkeys_toggle_width = juce::jmin(
+		getTogglePreferredWidth(hotkeys_toggle_),
+		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+	hotkeys_toggle_.setBounds(X_MARGIN, y, hotkeys_toggle_width, TOGGLE_BUTTON_HEIGHT);
 
 	y = hotkeys_toggle_.getBottom() + 5;
 	auto hotkey_label_width = 0;

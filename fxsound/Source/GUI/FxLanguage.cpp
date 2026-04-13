@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "FxLanguage.h"
 #include "FxController.h"
+#include "LanguageLayoutPolicy.h"
 #include "LanguageSelectorPolicy.h"
 #include "FxTheme.h"
 
@@ -101,16 +102,16 @@ void FxLanguage::onPrevLanguage()
 void FxLanguage::updatePreferredWidth()
 {
     auto& controller = FxController::getInstance();
-    auto label_width = 0;
-
-    for (const auto& language_code : languages_)
-    {
-        auto label_font = FxTheme::getNormalFontForLanguage(language_code);
-        label_width = juce::jmax(label_width, label_font.getStringWidth(controller.getLanguageName(language_code)));
-    }
-
-    const auto preferred_width = label_width + 48;
-    preferred_width_ = juce::jmax(WIDTH, preferred_width);
+    preferred_width_ = FxSound::LanguageLayoutPolicy::getPreferredWidth(
+        WIDTH,
+        48,
+        languages_.size(),
+        [&controller, this](int language_index)
+        {
+            const auto& language_code = languages_[language_index];
+            auto label_font = FxTheme::getNormalFontForLanguage(language_code);
+            return label_font.getStringWidth(controller.getLanguageName(language_code));
+        });
 }
 
 void FxLanguage::refreshSelector()

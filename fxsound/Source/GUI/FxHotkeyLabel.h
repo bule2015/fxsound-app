@@ -26,9 +26,9 @@ public:
 	int getPreferredEditorWidth() const;
 
 private:
-	static constexpr int HOTKEY_EDITOR_MIN_WIDTH = 88;
+	static constexpr int HOTKEY_EDITOR_MIN_WIDTH = 80;
 	static constexpr int HOTKEY_EDITOR_HEIGHT = 20;
-	static constexpr int HOTKEY_EDITOR_PADDING = 16;
+	static constexpr int HOTKEY_EDITOR_PADDING = 12;
 
 	bool keyPressed(const KeyPress& key) override;
 	void focusGained(FocusChangeType cause) override;
@@ -57,8 +57,8 @@ public:
 
 private:
 	static constexpr int HOTKEY_LABEL_MIN_WIDTH = 0;
-	static constexpr int HOTKEY_LABEL_PADDING = 12;
-	static constexpr int HOTKEY_DEFAULT_GAP = 8;
+	static constexpr int HOTKEY_LABEL_PADDING = 6;
+	static constexpr int HOTKEY_DEFAULT_GAP = 6;
 
 	void lookAndFeelChanged() override;
 	void resized() override;
