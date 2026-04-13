@@ -884,8 +884,44 @@ void FxController::setPowerState(bool power_state)
 	powerOn(power_state);
 	settings_.setBool("power", power_state);
 
-	system_tray_view_->setStatus(power_state, audio_process_on_);
-	main_window_->setIcon(power_state, audio_process_on_);
+	if (!power_state)
+	{
+		audio_signal_counters_ = {};
+		audio_process_on_ = false;
+		if (audio_passthru_ != nullptr)
+		{
+			audio_passthru_->setDspProcessingEnabled(false);
+		}
+		if (system_tray_view_ != nullptr)
+		{
+			system_tray_view_->setStatus(false, false);
+		}
+		if (main_window_ != nullptr)
+		{
+			main_window_->setIcon(false, false);
+			main_window_->stopLogoAnimation();
+			if (view_ == ViewType::Pro)
+			{
+				main_window_->pauseVisualizer();
+			}
+		}
+		return;
+	}
+
+	if (system_tray_view_ != nullptr)
+	{
+		system_tray_view_->setStatus(true, audio_process_on_);
+	}
+	if (main_window_ != nullptr)
+	{
+		main_window_->setIcon(true, audio_process_on_);
+	}
+	if (audio_passthru_ != nullptr)
+	{
+		const auto snapshot = createAudioPipelineSnapshot(0);
+		updateAudioSignalCounters(snapshot);
+		syncAudioProcessingState(snapshot);
+	}
 }
 
 bool FxController::setPreset(const String& preset_name, bool notify)
