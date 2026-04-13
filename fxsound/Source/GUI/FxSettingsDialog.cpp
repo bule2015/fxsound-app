@@ -772,9 +772,9 @@ void FxSettingsDialog::EqualizerSettingsPane::refreshText()
 	balance_title_.setFont(theme.getNormalFont());
 	balance_title_.setText(TRANS("Balance:"), NotificationType::dontSendNotification);
 
-	left_label_.setFont(theme.getNormalFont().withHeight(12.0f));
+	left_label_.setFont(theme.getSmallFont());
 	left_label_.setText(TRANS("Left"), NotificationType::dontSendNotification);
-	right_label_.setFont(theme.getNormalFont().withHeight(12.0f));
+	right_label_.setFont(theme.getSmallFont());
 	right_label_.setText(TRANS("Right"), NotificationType::dontSendNotification);
 
 	restore_defaults_button_.setButtonText(TRANS("Restore Defaults"));
