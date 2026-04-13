@@ -655,10 +655,6 @@ DWORD AudioPassthruPrivate::threadWorker(void)
 					s_callback_->onAudioSignalDetected();
 				}
 			}
-			else
-			{
-				capture_signal_latched_ = false;
-			}
 
 			/* Set additional processing settings */
 			i_valid_bits = pwfx->wBitsPerSample;
