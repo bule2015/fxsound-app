@@ -29,9 +29,9 @@ int measureTextWidth(const Font& font, const String& text, int padding = 0)
 	return font.getStringWidth(text) + padding;
 }
 
-int getTogglePreferredWidth(const ToggleButton& toggle)
+int getTogglePreferredWidth(const ToggleButton& toggle, int button_height)
 {
-	const auto font_size = juce::jmin(15.0f, static_cast<float>(toggle.getHeight()) * 0.75f);
+	const auto font_size = juce::jmin(15.0f, static_cast<float>(button_height) * 0.75f);
 	const auto tick_width = font_size * 1.1f;
 	Font font(font_size);
 	return font.getStringWidth(toggle.getButtonText()) + juce::roundToInt(tick_width) + 14;
@@ -1029,7 +1029,7 @@ FxSettingsDialog::GeneralSettingsPane::LayoutMetrics FxSettingsDialog::GeneralSe
 			continue;
 		}
 
-		metrics.widest_toggle_width = juce::jmax(metrics.widest_toggle_width, getTogglePreferredWidth(*entry.toggle));
+		metrics.widest_toggle_width = juce::jmax(metrics.widest_toggle_width, getTogglePreferredWidth(*entry.toggle, TOGGLE_BUTTON_HEIGHT));
 	}
 
 	for (auto* hotkey_label : hotkey_labels_)
@@ -1070,7 +1070,7 @@ int FxSettingsDialog::GeneralSettingsPane::layoutVisibleToggles(int y, int avail
 			continue;
 		}
 
-		const auto toggle_width = juce::jmin(getTogglePreferredWidth(*entry.toggle), available_width);
+		const auto toggle_width = juce::jmin(getTogglePreferredWidth(*entry.toggle, TOGGLE_BUTTON_HEIGHT), available_width);
 		entry.toggle->setBounds(X_MARGIN, y, toggle_width, TOGGLE_BUTTON_HEIGHT);
 		y = entry.toggle->getBottom() + entry.gap_after;
 	}
