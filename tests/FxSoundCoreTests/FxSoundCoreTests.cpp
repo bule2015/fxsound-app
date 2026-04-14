@@ -7,6 +7,7 @@
 
 #include "../../fxsound/Source/GUI/OutputDeviceSelection.h"
 #include "../../fxsound/Source/GUI/AudioSignalPolicy.h"
+#include "../../fxsound/Source/GUI/DefaultPlaybackRestorePolicy.h"
 #include "../../fxsound/Source/GUI/DevicePresetAssignmentPolicy.h"
 #include "../../fxsound/Source/GUI/GeneralSettingsLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/LanguageLayoutPolicy.h"
@@ -48,10 +49,12 @@ struct FakeAudioPassthru : IAudioPassthru
 	int mute_false_call_count = 0;
 	int set_playback_call_count = 0;
 	int restart_call_count = 0;
+	int restore_default_call_count = 0;
 	int set_dsp_processing_call_count = 0;
 	std::wstring last_playback_device_id;
 	AudioPassthruCallback* callback = nullptr;
 	bool processing_thread_running = true;
+	RestoreDefaultPlaybackDeviceResult restore_default_result { true, true, 0 };
 	uint64_t last_capture_with_samples_tick_ms = 0;
 	uint64_t last_successful_playback_tick_ms = 0;
 	float last_capture_input_rms_db = -160.0f;
@@ -142,8 +145,10 @@ struct FakeAudioPassthru : IAudioPassthru
 		return playback_device_available;
 	}
 
-	void restoreDefaultPlaybackDevice() override
+	RestoreDefaultPlaybackDeviceResult restoreDefaultPlaybackDevice() override
 	{
+		++restore_default_call_count;
+		return restore_default_result;
 	}
 
 	bool restartProcessingForDeviceChange() override
@@ -1260,6 +1265,33 @@ void testAudioPassthruCleanupStopsAfterThreadShutdownTimeout()
 		"timed out thread shutdown should still abort the remaining teardown");
 }
 
+void testDefaultPlaybackRestorePolicyHonorsPowerRequirement()
+{
+	expect(
+		!FxSound::DefaultPlaybackRestorePolicy::shouldAttemptRestore(true, false),
+		"power-gated restore should skip attempts while master power is off");
+	expect(
+		FxSound::DefaultPlaybackRestorePolicy::shouldAttemptRestore(false, false),
+		"quit-time restore should still attempt even when master power is off");
+}
+
+void testDefaultPlaybackRestorePolicyRetriesAfterFailure()
+{
+	const RestoreDefaultPlaybackDeviceResult failed_result { true, false, 204 };
+	const RestoreDefaultPlaybackDeviceResult successful_result { true, true, 0 };
+	const RestoreDefaultPlaybackDeviceResult skipped_result {};
+
+	expect(
+		!FxSound::DefaultPlaybackRestorePolicy::shouldMarkRestoreAttempted(failed_result),
+		"failed restore attempts should allow a later shutdown retry");
+	expect(
+		FxSound::DefaultPlaybackRestorePolicy::shouldMarkRestoreAttempted(successful_result),
+		"successful restore attempts should suppress redundant retries");
+	expect(
+		!FxSound::DefaultPlaybackRestorePolicy::shouldMarkRestoreAttempted(skipped_result),
+		"skipped restore attempts should not be treated as completed");
+}
+
 void testBufferPolicyMigratesLegacyMachineDefaultToLowLatencyDefault()
 {
 	expect(FxSound::SndDevicesBufferPolicy::resolveEffectiveDefaultBufferSize(true, 40)
@@ -2298,6 +2330,8 @@ int main()
 		runTest("configured preset restore falls back when preset is unset", testConfiguredPresetRestoreDecisionFallsBackWhenPresetIsUnset);
 		runTest("audio passthru cleanup continues after restore failure", testAudioPassthruCleanupContinuesAfterRestoreFailure);
 		runTest("audio passthru cleanup stops after thread shutdown timeout", testAudioPassthruCleanupStopsAfterThreadShutdownTimeout);
+		runTest("default playback restore policy honors power requirement", testDefaultPlaybackRestorePolicyHonorsPowerRequirement);
+		runTest("default playback restore policy retries after failure", testDefaultPlaybackRestorePolicyRetriesAfterFailure);
 		runTest("buffer policy migrates legacy machine default", testBufferPolicyMigratesLegacyMachineDefaultToLowLatencyDefault);
 		runTest("buffer policy preserves explicit modern machine default", testBufferPolicyPreservesExplicitModernMachineDefault);
 		runTest("buffer policy falls back when machine default missing", testBufferPolicyFallsBackWhenMachineDefaultMissing);

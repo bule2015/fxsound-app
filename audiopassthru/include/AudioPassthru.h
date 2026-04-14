@@ -71,6 +71,13 @@ public:
 	virtual void onAudioSignalDetected() {}
 };
 
+struct RestoreDefaultPlaybackDeviceResult
+{
+	bool attempted = false;
+	bool succeeded = false;
+	int result_flag = 0;
+};
+
 class IAudioPassthru
 {
 public:
@@ -85,7 +92,7 @@ public:
 	virtual void setAsPlaybackDevice(const SoundDevice sound_device) = 0;
 	virtual void registerCallback(AudioPassthruCallback* callback) = 0;
 	virtual bool isPlaybackDeviceAvailable() = 0;
-	virtual void restoreDefaultPlaybackDevice() = 0;
+	virtual RestoreDefaultPlaybackDeviceResult restoreDefaultPlaybackDevice() = 0;
 	virtual bool restartProcessingForDeviceChange() = 0;
 	virtual bool isProcessingThreadRunning() = 0;
 	virtual bool isMuted() = 0;
@@ -111,7 +118,7 @@ public:
 	void setAsPlaybackDevice(const SoundDevice sound_device) override;
 	void registerCallback(AudioPassthruCallback *callback) override;
     bool isPlaybackDeviceAvailable() override;
-	void restoreDefaultPlaybackDevice() override;
+	RestoreDefaultPlaybackDeviceResult restoreDefaultPlaybackDevice() override;
 	bool restartProcessingForDeviceChange() override;
 	bool isProcessingThreadRunning() override;
 	bool isMuted() override;

@@ -108,9 +108,9 @@ bool AudioPassthru::isPlaybackDeviceAvailable()
     return data_->isPlaybackDeviceAvailable();
 }
 
-void AudioPassthru::restoreDefaultPlaybackDevice()
+RestoreDefaultPlaybackDeviceResult AudioPassthru::restoreDefaultPlaybackDevice()
 {
-    data_->restoreDefaultPlaybackDevice();
+    return data_->restoreDefaultPlaybackDevice();
 }
 
 bool AudioPassthru::restartProcessingForDeviceChange()

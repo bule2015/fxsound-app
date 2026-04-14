@@ -53,7 +53,7 @@ public:
 	void registerCallback(AudioPassthruCallback *callback);
 	static void notifyDiagnostic(const std::wstring& message);
     bool isPlaybackDeviceAvailable();
-	void restoreDefaultPlaybackDevice();
+	RestoreDefaultPlaybackDeviceResult restoreDefaultPlaybackDevice();
 	bool restartProcessingForDeviceChange();
 	bool isProcessingThreadRunning();
 	bool isMuted();

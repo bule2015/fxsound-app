@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxSystemTrayView.h"
 #include "FxMessage.h"
 #include "AudioSignalPolicy.h"
+#include "DefaultPlaybackRestorePolicy.h"
 #include "DevicePresetAssignmentPolicy.h"
 #include "OutputDeviceSelection.h"
 #include "PresetAutoSavePolicy.h"
@@ -868,26 +869,30 @@ void FxController::autoSaveModifiedPreset()
 
 bool FxController::exit()
 {
-	bestEffortRestoreDefaultPlaybackDevice(true);
+	bestEffortRestoreDefaultPlaybackDevice();
 	
 	JUCEApplication::getInstance()->systemRequestedQuit();
 
 	return true;
 }
 
-void FxController::bestEffortRestoreDefaultPlaybackDevice(bool require_power_state)
+RestoreDefaultPlaybackDeviceResult FxController::bestEffortRestoreDefaultPlaybackDevice(bool require_power_state)
 {
+	RestoreDefaultPlaybackDeviceResult result;
+
 	if (audio_passthru_ == nullptr)
 	{
-		return;
+		return result;
 	}
 
-	if (require_power_state && !FxModel::getModel().getPowerState())
+	if (!FxSound::DefaultPlaybackRestorePolicy::shouldAttemptRestore(
+		require_power_state,
+		FxModel::getModel().getPowerState()))
 	{
-		return;
+		return result;
 	}
 
-	audio_passthru_->restoreDefaultPlaybackDevice();
+	return audio_passthru_->restoreDefaultPlaybackDevice();
 }
 
 void FxController::setPowerState(bool power_state)

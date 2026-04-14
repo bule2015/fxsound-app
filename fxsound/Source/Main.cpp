@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GUI/FxController.h"
 #include "GUI/FxTheme.h"
 #include "GUI/FxMainWindow.h"
+#include "GUI/DefaultPlaybackRestorePolicy.h"
 #include "AudioPassthru.h"
 #include <dbghelp.h>
 
@@ -228,8 +229,8 @@ private:
             return;
         }
 
-        default_playback_restore_attempted_ = true;
-        FxController::getInstance().bestEffortRestoreDefaultPlaybackDevice(true);
+        auto restore_result = FxController::getInstance().bestEffortRestoreDefaultPlaybackDevice(false);
+        default_playback_restore_attempted_ = FxSound::DefaultPlaybackRestorePolicy::shouldMarkRestoreAttempted(restore_result);
     }
 
     static LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exception_info)

@@ -89,7 +89,7 @@ public:
 	Point<int> getSystemTrayWindowPosition(int width, int height);
 	bool exit();
 	void autoSaveModifiedPreset();
-	void bestEffortRestoreDefaultPlaybackDevice(bool require_power_state = false);
+	RestoreDefaultPlaybackDeviceResult bestEffortRestoreDefaultPlaybackDevice(bool require_power_state = false);
 
 	void setPowerState(bool power_state);
 	bool setPreset(const String& preset_name, bool notify=true);

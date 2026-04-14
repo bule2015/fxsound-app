@@ -799,19 +799,26 @@ bool AudioPassthruPrivate::isPlaybackDeviceAvailable()
         return false;
 }
 
-void AudioPassthruPrivate::restoreDefaultPlaybackDevice()
+RestoreDefaultPlaybackDeviceResult AudioPassthruPrivate::restoreDefaultPlaybackDevice()
 {
-	int i_resultFlag;
+	RestoreDefaultPlaybackDeviceResult result;
+	result.attempted = true;
+
+	int i_resultFlag = 0;
 	/* Change the default soundcard to not be the DFX virtual one but instead the proper real one */
 	if (sndDevicesRestoreDefaultDevice(hp_sndDevices_, &i_resultFlag) != OKAY)
 	{
+		result.result_flag = i_resultFlag;
 		wchar_t diagnostic[256];
 		swprintf(diagnostic, 256, L"sndDevicesRestoreDefaultDevice failed resultFlag=%d", i_resultFlag);
 		notifyDiagnosticMessage(diagnostic);
-		return;
+		return result;
 	}
 
+	result.succeeded = true;
+	result.result_flag = i_resultFlag;
 	notifyDiagnosticMessage(L"sndDevicesRestoreDefaultDevice completed");
+	return result;
 }
 
 bool AudioPassthruPrivate::restartProcessingForDeviceChange()
