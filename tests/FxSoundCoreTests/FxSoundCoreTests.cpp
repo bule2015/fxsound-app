@@ -943,6 +943,17 @@ void testSettingsDialogLayoutUsesActivePaneWidth()
 		"settings dialog layout should use the active pane width");
 }
 
+void testSettingsDialogLayoutFallsBackForInvalidPaneWidthIndex()
+{
+	const auto preferred_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWidth(
+		600,
+		9,
+		{ 620, 760, 680, 610 });
+
+	expect(preferred_width == 600,
+		"settings dialog layout should fall back to the minimum width for invalid pane indexes");
+}
+
 void testSettingsDialogLayoutAddsPaneChromeToWindowWidth()
 {
 	const auto preferred_window_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWindowWidth(
@@ -953,6 +964,17 @@ void testSettingsDialogLayoutAddsPaneChromeToWindowWidth()
 
 	expect(preferred_window_width == 911,
 		"settings dialog layout should add the settings sidebar width to the active pane width");
+}
+
+void testSettingsDialogLayoutClampWidthHandlesInvertedRange()
+{
+	const auto clamped_width = FxSound::SettingsDialogLayoutPolicy::clampWidth(
+		900,
+		600,
+		500);
+
+	expect(clamped_width == 600,
+		"settings dialog layout should return the minimum width when the clamp range is inverted");
 }
 
 void testSettingsDialogLayoutAppliesMinimumWidthFloor()
@@ -1002,6 +1024,17 @@ void testSettingsDialogLayoutAppliesMinimumHeightFloor()
 		"settings dialog layout should respect the minimum height floor");
 }
 
+void testSettingsDialogLayoutFallsBackForInvalidPaneHeightIndex()
+{
+	const auto preferred_height = FxSound::SettingsDialogLayoutPolicy::getPreferredHeight(
+		100,
+		-1,
+		{ 240, 420, 180, 80 });
+
+	expect(preferred_height == 100,
+		"settings dialog layout should fall back to the minimum height for invalid pane indexes");
+}
+
 void testSettingsDialogLayoutSkipsRedundantResize()
 {
 	expect(!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(600, 180, 600, 180),
@@ -1027,6 +1060,23 @@ void testLanguageLayoutUsesLongestLocalizedLabelWidth()
 
 	expect(preferred_width == 160,
 		"language layout should reserve width for the longest localized label");
+}
+
+void testLanguageLayoutAppliesMinimumWidthFloor()
+{
+	const std::vector<int> measured_label_widths { 42, 56 };
+
+	const auto preferred_width = FxSound::LanguageLayoutPolicy::getPreferredWidth(
+		120,
+		48,
+		static_cast<int>(measured_label_widths.size()),
+		[&measured_label_widths](int index)
+		{
+			return measured_label_widths[static_cast<size_t>(index)];
+		});
+
+	expect(preferred_width == 120,
+		"language layout should preserve the minimum width when localized labels are shorter");
 }
 
 void testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths()
@@ -1075,6 +1125,41 @@ void testGeneralSettingsLayoutUsesTrailingMarginForToggleDominatedWidth()
 
 	expect(preferred_width == 340,
 		"general settings layout should reserve only the configured trailing margin when a toggle is the widest control");
+}
+
+void testGeneralSettingsLayoutUsesLanguageWidthWhenItDominates()
+{
+	const FxSound::GeneralSettingsLayoutPolicy::Metrics metrics {
+		280,
+		180,
+		120,
+		90
+	};
+
+	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
+		20,
+		32,
+		8,
+		20,
+		metrics);
+
+	expect(preferred_width == 320,
+		"general settings layout should widen to the language selector when it is the dominant control");
+}
+
+void testGeneralSettingsLayoutComputesHotkeyRowWidth()
+{
+	const FxSound::GeneralSettingsLayoutPolicy::Metrics metrics {
+		0,
+		0,
+		170,
+		120
+	};
+
+	const auto hotkey_row_width = FxSound::GeneralSettingsLayoutPolicy::getHotkeyRowWidth(metrics, 8);
+
+	expect(hotkey_row_width == 298,
+		"general settings layout should include both columns and their gap in the hotkey row width");
 }
 
 void testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback()
@@ -2087,6 +2172,13 @@ void testAudioSignalPolicyEnablesDspOnFirstSignalTick()
 		"first signal tick should enable dsp");
 }
 
+void testAudioSignalPolicyDoesNotEnableDspWhenAlreadyActive()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldEnableDsp(1, true),
+		"signal detection should not re-enable dsp when it is already active");
+}
+
 void testAudioSignalPolicyDisablesDspAfterFiveSilentTicks()
 {
 	auto counters = FxSound::AudioSignalPolicy::CounterState {};
@@ -2100,11 +2192,39 @@ void testAudioSignalPolicyDisablesDspAfterFiveSilentTicks()
 		"five silent ticks should disable dsp");
 }
 
+void testAudioSignalPolicyDoesNotDisableDspWhenAlreadyInactive()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldDisableDsp(5, false),
+		"silent ticks should not disable dsp again when it is already inactive");
+}
+
 void testAudioSignalPolicyDetectsPlaybackStallWithLiveCapture()
 {
 	expect(
 		FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(0, true, 5000, 4200, 3000, true),
 		"audible live capture with stale playback should trigger stall detection");
+}
+
+void testAudioSignalPolicySkipsRestartWhenPlaybackUnavailable()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(0, false, 5000, 4200, 3000, true),
+		"missing playback availability should suppress stall recovery");
+}
+
+void testAudioSignalPolicySkipsRestartWhenProcessTimerFails()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(204, true, 5000, 4200, 3000, true),
+		"non-zero process timer results should suppress stall recovery");
+}
+
+void testAudioSignalPolicySkipsRestartWhenCaptureIsStale()
+{
+	expect(
+		!FxSound::AudioSignalPolicy::shouldDetectPlaybackStall(0, true, 5000, 3500, 3000, true),
+		"stale capture should not trigger stall recovery");
 }
 
 void testAudioSignalPolicySkipsRestartWithoutAudibleCapture()
@@ -2155,16 +2275,22 @@ int main()
 		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
 		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
 		runTest("settings dialog layout uses active pane width", testSettingsDialogLayoutUsesActivePaneWidth);
+		runTest("settings dialog layout falls back for invalid pane width index", testSettingsDialogLayoutFallsBackForInvalidPaneWidthIndex);
 		runTest("settings dialog layout adds pane chrome to window width", testSettingsDialogLayoutAddsPaneChromeToWindowWidth);
+		runTest("settings dialog layout handles inverted clamp range", testSettingsDialogLayoutClampWidthHandlesInvertedRange);
 		runTest("settings dialog layout applies minimum width floor", testSettingsDialogLayoutAppliesMinimumWidthFloor);
 		runTest("settings dialog layout applies minimum window width floor", testSettingsDialogLayoutAppliesMinimumWindowWidthFloor);
 		runTest("settings dialog layout clamps window width to maximum", testSettingsDialogLayoutClampsWindowWidthToMaximum);
 		runTest("settings dialog layout uses active pane height", testSettingsDialogLayoutUsesActivePaneHeight);
 		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
+		runTest("settings dialog layout falls back for invalid pane height index", testSettingsDialogLayoutFallsBackForInvalidPaneHeightIndex);
 		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);
 		runTest("language layout uses longest localized label width", testLanguageLayoutUsesLongestLocalizedLabelWidth);
+		runTest("language layout applies minimum width floor", testLanguageLayoutAppliesMinimumWidthFloor);
 		runTest("general settings layout tracks localized visible content widths", testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths);
 		runTest("general settings layout uses trailing margin for toggle-dominated width", testGeneralSettingsLayoutUsesTrailingMarginForToggleDominatedWidth);
+		runTest("general settings layout uses language width when it dominates", testGeneralSettingsLayoutUsesLanguageWidthWhenItDominates);
+		runTest("general settings layout computes hotkey row width", testGeneralSettingsLayoutComputesHotkeyRowWidth);
 		runTest("preset apply requires ids to be missing before using name fallback", testPresetApplyRequiresIdsToBeMissingBeforeUsingNameFallback);
 		runTest("preset apply uses name fallback only for legacy entries", testPresetApplyUsesNameFallbackOnlyForLegacyEntries);
 		runTest("configured preset restore applies existing preset", testConfiguredPresetRestoreDecisionAppliesExistingPreset);
@@ -2223,8 +2349,13 @@ int main()
 		runTest("audio signal policy uses capture only for signal presence", testAudioSignalPolicyUsesCaptureOnlyForSignalPresence);
 		runTest("audio signal policy grace resets signal counters", testAudioSignalPolicyGraceResetsSignalCounters);
 		runTest("audio signal policy enables dsp on first signal tick", testAudioSignalPolicyEnablesDspOnFirstSignalTick);
+		runTest("audio signal policy does not enable dsp when already active", testAudioSignalPolicyDoesNotEnableDspWhenAlreadyActive);
 		runTest("audio signal policy disables dsp after five silent ticks", testAudioSignalPolicyDisablesDspAfterFiveSilentTicks);
+		runTest("audio signal policy does not disable dsp when already inactive", testAudioSignalPolicyDoesNotDisableDspWhenAlreadyInactive);
 		runTest("audio signal policy detects playback stall with live capture", testAudioSignalPolicyDetectsPlaybackStallWithLiveCapture);
+		runTest("audio signal policy skips restart when playback unavailable", testAudioSignalPolicySkipsRestartWhenPlaybackUnavailable);
+		runTest("audio signal policy skips restart when process timer fails", testAudioSignalPolicySkipsRestartWhenProcessTimerFails);
+		runTest("audio signal policy skips restart when capture is stale", testAudioSignalPolicySkipsRestartWhenCaptureIsStale);
 		runTest("audio signal policy skips restart without audible capture", testAudioSignalPolicySkipsRestartWithoutAudibleCapture);
 	}
 	catch (const std::exception& exception)
