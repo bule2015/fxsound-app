@@ -295,11 +295,23 @@ private:
 	// Rebuilds the visible output list while optionally keeping the inactive selection visible.
 	void rebuildOutputDeviceList(const std::vector<SoundDevice>& sound_devices, bool include_selected_inactive = true);
 	// Processing-on sync path used after device callbacks or backend refreshes.
-	void updateOutputs(const std::vector<SoundDevice>& sound_devices);
+	void updateOutputs(const std::vector<SoundDevice>& sound_devices,
+		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
+		const std::wstring& device_id = {},
+		bool prioritize_new_output = false,
+		bool changed_output_became_available = false);
 	// Chooses the live processing output after the backend restarts.
-	void selectProcessingOutput(const std::vector<SoundDevice>& sound_devices);
+	void selectProcessingOutput(const std::vector<SoundDevice>& sound_devices,
+		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
+		const std::wstring& device_id = {},
+		bool prioritize_new_output = false,
+		bool changed_output_became_available = false);
 	// Keeps the selected output in sync with the system while processing is idle.
-	void syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices);
+	void syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices,
+		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
+		const std::wstring& device_id = {},
+		bool prioritize_new_output = false,
+		bool changed_output_became_available = false);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);

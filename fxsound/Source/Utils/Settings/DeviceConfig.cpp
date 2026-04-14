@@ -72,7 +72,6 @@ namespace FxSound
     void DeviceConfig::updateDeviceConfigs(Settings& settings, const std::vector<SoundDevice>& sound_devices)
     {
         juce::Array<DeviceConfig> device_configs = loadDeviceConfigs(settings, "device_configs");
-        auto prioritize_new_output = settings.getBool("prioritize_new_output");
         std::vector<OutputDeviceSelection::PriorityEntry> existing_priorities;
         existing_priorities.reserve(static_cast<size_t>(device_configs.size()));
         for (const auto& device_config : device_configs)
@@ -84,7 +83,7 @@ namespace FxSound
                 });
         }
 
-        auto merge_result = OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices, prioritize_new_output);
+        auto merge_result = OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
         if (merge_result.changed)
         {
             juce::Array<DeviceConfig> merged_device_configs;

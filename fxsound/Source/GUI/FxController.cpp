@@ -1375,7 +1375,11 @@ void FxController::rebuildOutputDeviceList(const std::vector<SoundDevice>& sound
 		include_selected_inactive);
 }
 
-void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
+void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices,
+	AudioDeviceChangeKind change_kind,
+	const std::wstring& device_id,
+	bool prioritize_new_output,
+	bool changed_output_became_available)
 {
 	DeviceConfig::updateDeviceConfigs(settings_, sound_devices);
 	auto processing_snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
@@ -1390,7 +1394,8 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
 	auto sync_decision = FxSound::OutputDeviceSelection::buildSyncDecision(
 		active_output_devices_,
 		output_resolution,
-		isTimerRunning());
+		isTimerRunning(),
+		{ change_kind, device_id, prioritize_new_output, changed_output_became_available });
 
 	if (sync_decision.has_resolved_output)
 	{
@@ -1416,7 +1421,11 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices)
 }
 
 // Handled when FxSound processing is on
-void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_devices)
+void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_devices,
+	AudioDeviceChangeKind change_kind,
+	const std::wstring& device_id,
+	bool prioritize_new_output,
+	bool changed_output_became_available)
 {
 	auto available = audio_passthru_->isPlaybackDeviceAvailable();
 	if (available != playback_device_available_)
@@ -1425,7 +1434,7 @@ void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_
 		FxModel::getModel().notifyOutputError();
 	}
 
-	updateOutputs(sound_devices);
+	updateOutputs(sound_devices, change_kind, device_id, prioritize_new_output, changed_output_became_available);
 	device_count_ = (uint32_t)sound_devices.size();
 
 	if (!dfx_enabled_)
@@ -1440,7 +1449,11 @@ void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_
 }
 
 // Handled when FxSound processing is off
-void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices)
+void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices,
+	AudioDeviceChangeKind change_kind,
+	const std::wstring& device_id,
+	bool prioritize_new_output,
+	bool changed_output_became_available)
 {
 	rebuildOutputDeviceList(sound_devices);
 
@@ -1461,7 +1474,8 @@ void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& s
 		getOutputName());
 	auto idle_sync_decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		active_output_devices_,
-		output_resolution);
+		output_resolution,
+		{ change_kind, device_id, prioritize_new_output, changed_output_became_available });
 
 	if (idle_sync_decision.has_resolved_output)
 	{
@@ -2325,13 +2339,20 @@ void FxController::handleSoundDeviceChange()
 	auto pending_change_id = pending_device_change_id_;
 	pending_device_change_kind_ = AudioDeviceChangeKind::Unknown;
 	pending_device_change_id_.clear();
+	auto prioritize_new_output = isNewOutputPrioritized();
 
 	auto current_sound_devices = audio_passthru_->getSoundDevices(false);
+	auto changed_output_became_available = FxSound::OutputDeviceSelection::didOutputBecomeAvailable(
+		active_output_devices_,
+		current_sound_devices,
+		pending_change_id.toWideCharPointer());
 	if (FxSound::OutputDeviceSelection::shouldIgnoreDeviceChange(
 		pending_change_kind,
 		pending_change_id.toWideCharPointer(),
 		FxModel::getModel().getSelectedOutput(),
-		current_sound_devices))
+		current_sound_devices,
+		prioritize_new_output,
+		changed_output_became_available))
 	{
 		updateOutputs(current_sound_devices);
 		return;
@@ -2343,11 +2364,19 @@ void FxController::handleSoundDeviceChange()
 	auto sound_devices = audio_passthru_->getSoundDevices(false);
 	if (isTimerRunning())
 	{
-        selectProcessingOutput(sound_devices);
+		selectProcessingOutput(sound_devices,
+			pending_change_kind,
+			pending_change_id.toWideCharPointer(),
+			prioritize_new_output,
+			changed_output_became_available);
 	}
 	else
 	{
-        syncOutputWithSystemDefault(sound_devices);
+		syncOutputWithSystemDefault(sound_devices,
+			pending_change_kind,
+			pending_change_id.toWideCharPointer(),
+			prioritize_new_output,
+			changed_output_became_available);
 	}
 
 	if (FxModel::getModel().getPowerState())

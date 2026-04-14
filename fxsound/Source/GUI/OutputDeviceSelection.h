@@ -133,6 +133,16 @@ namespace FxSound::OutputDeviceSelection
 		std::vector<PriorityEntry> priorities;
 	};
 
+	// Describes the device callback that triggered a refresh so runtime code can
+	// opt into more aggressive switching behavior without rewriting saved priorities.
+	struct DeviceChangeSelectionContext
+	{
+		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown;
+		std::wstring device_id;
+		bool prioritize_new_output = false;
+		bool changed_output_became_available = false;
+	};
+
 	// Matches a persisted priority entry to a live device using the strongest
 	// identifiers first and falling back to the legacy name-only form.
 	inline bool matchesPriorityEntryExactly(const PriorityEntry& entry, const SoundDevice& sound_device)
@@ -352,12 +362,10 @@ namespace FxSound::OutputDeviceSelection
 	// Merges newly discovered devices into the saved priority list while keeping the
 	// original ordering stable across reconnects and endpoint id changes.
 	inline PriorityMergeResult mergeOutputPriorities(const std::vector<PriorityEntry>& existing_priorities,
-		const std::vector<SoundDevice>& sound_devices,
-		bool prioritize_new_outputs = false)
+		const std::vector<SoundDevice>& sound_devices)
 	{
 		PriorityMergeResult result;
 		result.priorities.reserve(existing_priorities.size());
-		std::vector<PriorityEntry> new_priorities;
 
 		auto findMatchingEntry = [&result](const SoundDevice& sound_device)
 		{
@@ -409,14 +417,7 @@ namespace FxSound::OutputDeviceSelection
 			if (existing_entry == result.priorities.end())
 			{
 				PriorityEntry entry { sound_device.pwszID, sound_device.deviceFriendlyName, sound_device.containerId };
-				if (prioritize_new_outputs)
-				{
-					new_priorities.push_back(entry);
-				}
-				else
-				{
-					result.priorities.push_back(entry);
-				}
+				result.priorities.push_back(entry);
 				result.changed = true;
 				continue;
 			}
@@ -430,11 +431,6 @@ namespace FxSound::OutputDeviceSelection
 				existing_entry->container_id = sound_device.containerId;
 				result.changed = true;
 			}
-		}
-
-		if (!new_priorities.empty())
-		{
-			result.priorities.insert(result.priorities.begin(), new_priorities.begin(), new_priorities.end());
 		}
 
 		return result;
@@ -669,12 +665,50 @@ namespace FxSound::OutputDeviceSelection
 
 	// Returns true when a device callback can be ignored because it does not affect
 	// the currently selected active playback device.
+	inline bool didOutputBecomeAvailable(const std::vector<SoundDevice>& previous_output_devices,
+		const std::vector<SoundDevice>& current_sound_devices,
+		const std::wstring& device_id)
+	{
+		if (device_id.empty())
+		{
+			return false;
+		}
+
+		auto current_output_it = std::find_if(current_sound_devices.begin(), current_sound_devices.end(),
+			[&device_id](const SoundDevice& sound_device)
+			{
+				return sound_device.isRealDevice &&
+					sound_device.isActive &&
+					sound_device.deviceNumChannel >= 2 &&
+					sound_device.pwszID == device_id;
+			});
+		if (current_output_it == current_sound_devices.end())
+		{
+			return false;
+		}
+
+		auto previous_output_it = std::find_if(previous_output_devices.begin(), previous_output_devices.end(),
+			[&device_id](const SoundDevice& sound_device)
+			{
+				return sound_device.pwszID == device_id;
+			});
+
+		return previous_output_it == previous_output_devices.end() || !previous_output_it->isActive;
+	}
+
 	inline bool shouldIgnoreDeviceChange(AudioDeviceChangeKind change_kind,
 		const std::wstring& device_id,
 		const SoundDevice& selected_output,
-		const std::vector<SoundDevice>& sound_devices)
+		const std::vector<SoundDevice>& sound_devices,
+		bool prioritize_new_output = false,
+		bool changed_output_became_available = false)
 	{
 		if (change_kind == AudioDeviceChangeKind::Unknown || device_id.empty())
+		{
+			return false;
+		}
+
+		if (prioritize_new_output && changed_output_became_available)
 		{
 			return false;
 		}
@@ -705,14 +739,68 @@ namespace FxSound::OutputDeviceSelection
 		return true;
 	}
 
+	inline SoundDevice resolveOutputForDeviceChange(const std::vector<SoundDevice>& output_devices,
+		const OutputResolutionContext& context,
+		const DeviceChangeSelectionContext& device_change)
+	{
+		if (device_change.prioritize_new_output &&
+			device_change.changed_output_became_available &&
+			!device_change.device_id.empty())
+		{
+			auto added_output = std::find_if(output_devices.begin(), output_devices.end(),
+				[&device_change](const SoundDevice& sound_device)
+				{
+					return sound_device.isActive &&
+						sound_device.deviceNumChannel >= 2 &&
+						sound_device.pwszID == device_change.device_id;
+				});
+			if (added_output != output_devices.end())
+			{
+				return *added_output;
+			}
+		}
+
+		if (device_change.prioritize_new_output &&
+			(device_change.change_kind == AudioDeviceChangeKind::DeviceRemoved ||
+			 device_change.change_kind == AudioDeviceChangeKind::DeviceStateChanged))
+		{
+			auto selected_output_it = std::find_if(output_devices.begin(), output_devices.end(),
+				[&context](const SoundDevice& sound_device)
+				{
+					return areSameOutputDevice(context.selected_output, sound_device);
+				});
+			auto selected_output_active = selected_output_it != output_devices.end() && selected_output_it->isActive;
+			if (!selected_output_active)
+			{
+				std::vector<SoundDevice> active_outputs;
+				active_outputs.reserve(output_devices.size());
+				for (const auto& output_device : output_devices)
+				{
+					if (output_device.isActive)
+					{
+						active_outputs.push_back(output_device);
+					}
+				}
+
+				if (!active_outputs.empty())
+				{
+					return getPreferredOutput(active_outputs, context.priorities);
+				}
+			}
+		}
+
+		return resolveSelectedOutput(output_devices, context);
+	}
+
 	// Re-evaluates the selected output while processing is idle. This keeps the UI
 	// state correct without forcing backend routing changes.
 	inline IdleSyncDecision buildIdleSyncDecision(const std::vector<SoundDevice>& output_devices,
-		const OutputResolutionContext& context)
+		const OutputResolutionContext& context,
+		const DeviceChangeSelectionContext& device_change = {})
 	{
 		IdleSyncDecision decision;
 		auto resolved_state = buildResolvedOutputState(
-			resolveSelectedOutput(output_devices, context),
+			resolveOutputForDeviceChange(output_devices, context, device_change),
 			context);
 		decision.resolved_output = resolved_state.resolved_output;
 		decision.has_resolved_output = resolved_state.has_resolved_output;
@@ -782,11 +870,12 @@ namespace FxSound::OutputDeviceSelection
 	// whether routing must be re-applied.
 	inline SyncDecision buildSyncDecision(const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context,
-		bool timer_running)
+		bool timer_running,
+		const DeviceChangeSelectionContext& device_change = {})
 	{
 		SyncDecision decision;
 		auto resolved_state = buildResolvedOutputState(
-			resolveSelectedOutput(output_devices, context),
+			resolveOutputForDeviceChange(output_devices, context, device_change),
 			context);
 		decision.resolved_output = resolved_state.resolved_output;
 		decision.has_resolved_output = resolved_state.has_resolved_output;
