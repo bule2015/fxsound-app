@@ -869,8 +869,8 @@ void FxController::autoSaveModifiedPreset()
 
 bool FxController::exit()
 {
-	bestEffortRestoreDefaultPlaybackDevice();
-	
+	// Route quit-time default-device restore through the JUCEApplication shutdown path
+	// so success stays single-shot and failures can still retry during shutdown.
 	JUCEApplication::getInstance()->systemRequestedQuit();
 
 	return true;
