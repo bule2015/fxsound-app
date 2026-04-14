@@ -229,13 +229,7 @@ private:
         }
 
         default_playback_restore_attempted_ = true;
-
-        if (audio_passthru_ == nullptr || !FxModel::getModel().getPowerState())
-        {
-            return;
-        }
-
-        audio_passthru_->restoreDefaultPlaybackDevice();
+        FxController::getInstance().bestEffortRestoreDefaultPlaybackDevice(true);
     }
 
     static LONG WINAPI unhandledExceptionFilter(EXCEPTION_POINTERS* exception_info)

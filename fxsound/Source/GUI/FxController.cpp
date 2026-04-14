@@ -868,14 +868,26 @@ void FxController::autoSaveModifiedPreset()
 
 bool FxController::exit()
 {
-	if (FxModel::getModel().getPowerState())
-	{
-		audio_passthru_->restoreDefaultPlaybackDevice();
-	}
+	bestEffortRestoreDefaultPlaybackDevice(true);
 	
 	JUCEApplication::getInstance()->systemRequestedQuit();
 
 	return true;
+}
+
+void FxController::bestEffortRestoreDefaultPlaybackDevice(bool require_power_state)
+{
+	if (audio_passthru_ == nullptr)
+	{
+		return;
+	}
+
+	if (require_power_state && !FxModel::getModel().getPowerState())
+	{
+		return;
+	}
+
+	audio_passthru_->restoreDefaultPlaybackDevice();
 }
 
 void FxController::setPowerState(bool power_state)
@@ -892,30 +904,11 @@ void FxController::setPowerState(bool power_state)
 		{
 			audio_passthru_->setDspProcessingEnabled(false);
 		}
-		if (system_tray_view_ != nullptr)
-		{
-			system_tray_view_->setStatus(false, false);
-		}
-		if (main_window_ != nullptr)
-		{
-			main_window_->setIcon(false, false);
-			main_window_->stopLogoAnimation();
-			if (view_ == ViewType::Pro)
-			{
-				main_window_->pauseVisualizer();
-			}
-		}
+		applyMasterPowerUiState(false, false);
 		return;
 	}
 
-	if (system_tray_view_ != nullptr)
-	{
-		system_tray_view_->setStatus(true, audio_process_on_);
-	}
-	if (main_window_ != nullptr)
-	{
-		main_window_->setIcon(true, audio_process_on_);
-	}
+	applyMasterPowerUiState(true, audio_process_on_);
 	if (audio_passthru_ != nullptr)
 	{
 		const auto snapshot = createAudioPipelineSnapshot(0);
@@ -1605,7 +1598,7 @@ void FxController::powerOn(bool on)
 			stopTimer();
 		}
 
-		audio_passthru_->restoreDefaultPlaybackDevice();
+		bestEffortRestoreDefaultPlaybackDevice();
 	}
 }
 
@@ -2087,6 +2080,39 @@ bool FxController::canResumeAudioProcessing(const AudioPipelineSnapshot& snapsho
 		&& snapshot.selected_output_active;
 }
 
+void FxController::applyMasterPowerUiState(bool power_state, bool processing_active)
+{
+	if (system_tray_view_ != nullptr)
+	{
+		system_tray_view_->setStatus(power_state, processing_active);
+	}
+
+	if (main_window_ == nullptr)
+	{
+		return;
+	}
+
+	main_window_->setIcon(power_state, processing_active);
+
+	if (!processing_active)
+	{
+		main_window_->stopLogoAnimation();
+		if (view_ == ViewType::Pro)
+		{
+			main_window_->showProView();
+			main_window_->pauseVisualizer();
+		}
+		return;
+	}
+
+	main_window_->startLogoAnimation();
+	if (view_ == ViewType::Pro)
+	{
+		main_window_->showProView();
+		main_window_->startVisualizer();
+	}
+}
+
 void FxController::tryResumeAudioProcessing(const AudioPipelineSnapshot& snapshot, const String& reason)
 {
 	if (!canResumeAudioProcessing(snapshot))
@@ -2099,14 +2125,7 @@ void FxController::tryResumeAudioProcessing(const AudioPipelineSnapshot& snapsho
 	audio_process_on_ = true;
 	audio_passthru_->setDspProcessingEnabled(true);
 	logAudioPipelineMessage(reason);
-	system_tray_view_->setStatus(true, true);
-	main_window_->setIcon(true, true);
-	main_window_->startLogoAnimation();
-	if (view_ == ViewType::Pro)
-	{
-		main_window_->showProView();
-		main_window_->startVisualizer();
-	}
+	applyMasterPowerUiState(true, true);
 }
 
 void FxController::handleImmediateAudioSignalDetected()
@@ -2128,14 +2147,7 @@ void FxController::pauseAudioProcessing(const AudioPipelineSnapshot& snapshot)
 	audio_process_on_ = false;
 	audio_passthru_->setDspProcessingEnabled(false);
 	logAudioPipelineMessage("Audio DSP processing paused while signal is absent");
-	system_tray_view_->setStatus(power, false);
-	main_window_->setIcon(power, false);
-	main_window_->stopLogoAnimation();
-	if (view_ == ViewType::Pro)
-	{
-		main_window_->showProView();
-		main_window_->pauseVisualizer();
-	}
+	applyMasterPowerUiState(power, false);
 }
 
 void FxController::logAudioPipelineSnapshot(const String& reason, const AudioPipelineSnapshot& snapshot)

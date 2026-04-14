@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxAudioSlider.h"
 #include "FxBalanceSlider.h"
 #include "FxOutputPreference.h"
+#include "GeneralSettingsLayoutPolicy.h"
 
 //==============================================================================
 /*
@@ -202,6 +203,8 @@ private:
 		void paint(Graphics& g) override;
 
 	private:
+		using LayoutMetrics = FxSound::GeneralSettingsLayoutPolicy::Metrics;
+
 		static constexpr int LANGUAGE_SWITCH_Y = 50;
 		static constexpr int TOGGLE_BUTTON_HEIGHT = 30;
 		static constexpr int HOTKEY_LABEL_X = X_MARGIN + 12;
@@ -212,7 +215,23 @@ private:
 		static constexpr int LANGUAGE_LIST_WIDTH = 120;
 		static constexpr int LANGUAGE_LIST_HEIGHT = 30;
 
+		struct ToggleLayoutEntry
+		{
+			ToggleButton* toggle = nullptr;
+			int gap_after = 0;
+		};
+
+		struct ConstToggleLayoutEntry
+		{
+			const ToggleButton* toggle = nullptr;
+			int gap_after = 0;
+		};
+
         void refreshText() override;
+		LayoutMetrics collectLayoutMetrics() const;
+		std::array<ConstToggleLayoutEntry, 4> getToggleLayoutEntries() const;
+		std::array<ToggleLayoutEntry, 4> getToggleLayoutEntries();
+		int layoutVisibleToggles(int y, int available_width);
 
         ToggleButton launch_toggle_;
         ToggleButton hide_help_tips_toggle_;

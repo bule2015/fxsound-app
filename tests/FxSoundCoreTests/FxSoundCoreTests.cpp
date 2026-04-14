@@ -1031,20 +1031,19 @@ void testLanguageLayoutUsesLongestLocalizedLabelWidth()
 
 void testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths()
 {
-	const auto language_width = 160;
-	const auto widest_toggle_width = 232;
-	const auto widest_hotkey_label_width = 188;
-	const auto widest_hotkey_editor_width = 104;
+	const FxSound::GeneralSettingsLayoutPolicy::Metrics metrics {
+		160,
+		232,
+		188,
+		104
+	};
 
 	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
 		20,
-		language_width,
-		widest_toggle_width,
 		32,
-		widest_hotkey_label_width,
 		8,
-		widest_hotkey_editor_width,
-		20);
+		20,
+		metrics);
 
 	const auto expected_hotkey_width = 352;
 	const auto expected_toggle_width = 272;
@@ -1060,15 +1059,19 @@ void testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths()
 
 void testGeneralSettingsLayoutUsesTrailingMarginForToggleDominatedWidth()
 {
-	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
-		20,
+	const FxSound::GeneralSettingsLayoutPolicy::Metrics metrics {
 		160,
 		300,
-		32,
 		120,
+		100
+	};
+
+	const auto preferred_width = FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
+		20,
+		32,
 		8,
-		100,
-		20);
+		20,
+		metrics);
 
 	expect(preferred_width == 340,
 		"general settings layout should reserve only the configured trailing margin when a toggle is the widest control");

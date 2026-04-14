@@ -942,52 +942,32 @@ FxSettingsDialog::GeneralSettingsPane::~GeneralSettingsPane()
 
 int FxSettingsDialog::GeneralSettingsPane::getPreferredWidth() const
 {
-	auto toggle_width = 0;
-
-	for (auto* toggle : { &launch_toggle_, &hide_help_tips_toggle_, &hide_notifications_toggle_, &hotkeys_toggle_ })
-	{
-		toggle_width = juce::jmax(toggle_width, getTogglePreferredWidth(*toggle));
-	}
-
-	auto hotkey_label_width = 0;
-	auto hotkey_editor_width = 0;
-	for (auto* hotkey_label : hotkey_labels_)
-	{
-		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
-		hotkey_editor_width = juce::jmax(hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
-	}
+	const auto metrics = collectLayoutMetrics();
 
 	return FxSound::GeneralSettingsLayoutPolicy::getPreferredWidth(
 		X_MARGIN,
-		language_switch_.getPreferredWidth(),
-		toggle_width,
 		HOTKEY_LABEL_X,
-		hotkey_label_width,
 		HOTKEY_COLUMN_GAP,
-		hotkey_editor_width,
-		CONTENT_RIGHT_MARGIN);
+		CONTENT_RIGHT_MARGIN,
+		metrics);
 }
 
 int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
 {
+	const auto metrics = collectLayoutMetrics();
 	int y = LANGUAGE_SWITCH_Y + FxLanguage::HEIGHT + 20;
-	auto hotkey_label_width = 0;
+	for (const auto& entry : getToggleLayoutEntries())
+	{
+		if (!entry.toggle->isVisible())
+		{
+			continue;
+		}
+
+		y += TOGGLE_BUTTON_HEIGHT + entry.gap_after;
+	}
 	for (auto* hotkey_label : hotkey_labels_)
 	{
-		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
-	}
-
-	if (launch_toggle_.isVisible())
-	{
-		y += TOGGLE_BUTTON_HEIGHT + 20;
-	}
-
-	y += TOGGLE_BUTTON_HEIGHT + 10;
-	y += TOGGLE_BUTTON_HEIGHT + 10;
-	y += TOGGLE_BUTTON_HEIGHT + 5;
-	for (auto* hotkey_label : hotkey_labels_)
-	{
-		y += hotkey_label->getPreferredHeight(hotkey_label_width) + 10;
+		y += hotkey_label->getPreferredHeight(metrics.widest_hotkey_label_width) + 10;
 	}
 
 	return y + Y_MARGIN + 20;
@@ -995,54 +975,22 @@ int FxSettingsDialog::GeneralSettingsPane::getPreferredHeight() const
 
 void FxSettingsDialog::GeneralSettingsPane::resized()
 {
+	const auto metrics = collectLayoutMetrics();
 	auto bounds = getLocalBounds().withLeft(X_MARGIN).withTop(Y_MARGIN).withHeight(TITLE_HEIGHT);
 	title_.setBounds(bounds);
 
+	const auto available_content_width = getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN;
 	auto language_switch_width = juce::jmin(
-		language_switch_.getPreferredWidth(),
-		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
+		metrics.language_switch_width,
+		available_content_width);
 	language_switch_.setBounds(X_MARGIN, LANGUAGE_SWITCH_Y, language_switch_width, FxLanguage::HEIGHT);
 
-	int y = language_switch_.getBottom() + 20;
-	if (launch_toggle_.isVisible())
-	{
-		auto launch_toggle_width = juce::jmin(
-			getTogglePreferredWidth(launch_toggle_),
-			getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
-		launch_toggle_.setBounds(X_MARGIN, y, launch_toggle_width, TOGGLE_BUTTON_HEIGHT);
-		y = launch_toggle_.getBottom() + 20;
-	}
-
-	auto hide_help_tips_toggle_width = juce::jmin(
-		getTogglePreferredWidth(hide_help_tips_toggle_),
-		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
-	hide_help_tips_toggle_.setBounds(X_MARGIN, y, hide_help_tips_toggle_width, TOGGLE_BUTTON_HEIGHT);
-
-	y = hide_help_tips_toggle_.getBottom() + 10;
-	auto hide_notifications_toggle_width = juce::jmin(
-		getTogglePreferredWidth(hide_notifications_toggle_),
-		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
-	hide_notifications_toggle_.setBounds(X_MARGIN, y, hide_notifications_toggle_width, TOGGLE_BUTTON_HEIGHT);
-
-	y = hide_notifications_toggle_.getBottom() + 10;
-	auto hotkeys_toggle_width = juce::jmin(
-		getTogglePreferredWidth(hotkeys_toggle_),
-		getWidth() - X_MARGIN - CONTENT_RIGHT_MARGIN);
-	hotkeys_toggle_.setBounds(X_MARGIN, y, hotkeys_toggle_width, TOGGLE_BUTTON_HEIGHT);
-
-	y = hotkeys_toggle_.getBottom() + 5;
-	auto hotkey_label_width = 0;
-	auto hotkey_editor_width = 0;
-	for (auto* hotkey_label : hotkey_labels_)
-	{
-		hotkey_label_width = juce::jmax(hotkey_label_width, hotkey_label->getPreferredLabelWidth());
-		hotkey_editor_width = juce::jmax(hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
-	}
-	auto hotkey_row_width = hotkey_label_width + HOTKEY_COLUMN_GAP + hotkey_editor_width;
+	int y = layoutVisibleToggles(language_switch_.getBottom() + 20, available_content_width);
+	const auto hotkey_row_width = FxSound::GeneralSettingsLayoutPolicy::getHotkeyRowWidth(metrics, HOTKEY_COLUMN_GAP);
 	for (auto hotkey_label : hotkey_labels_)
 	{
-		auto hotkey_height = hotkey_label->getPreferredHeight(hotkey_label_width);
-		hotkey_label->setLayoutMetrics(hotkey_label_width, hotkey_editor_width, HOTKEY_COLUMN_GAP);
+		auto hotkey_height = hotkey_label->getPreferredHeight(metrics.widest_hotkey_label_width);
+		hotkey_label->setLayoutMetrics(metrics.widest_hotkey_label_width, metrics.widest_hotkey_editor_width, HOTKEY_COLUMN_GAP);
 		hotkey_label->setBounds(HOTKEY_LABEL_X, y, hotkey_row_width, hotkey_height);
 		y += hotkey_height + 10;
 	}
@@ -1067,6 +1015,67 @@ void FxSettingsDialog::GeneralSettingsPane::refreshText()
 	{
 		hotkey_label->refreshText();
 	}
+}
+
+FxSettingsDialog::GeneralSettingsPane::LayoutMetrics FxSettingsDialog::GeneralSettingsPane::collectLayoutMetrics() const
+{
+	LayoutMetrics metrics;
+	metrics.language_switch_width = language_switch_.getPreferredWidth();
+
+	for (const auto& entry : getToggleLayoutEntries())
+	{
+		if (!entry.toggle->isVisible())
+		{
+			continue;
+		}
+
+		metrics.widest_toggle_width = juce::jmax(metrics.widest_toggle_width, getTogglePreferredWidth(*entry.toggle));
+	}
+
+	for (auto* hotkey_label : hotkey_labels_)
+	{
+		metrics.widest_hotkey_label_width = juce::jmax(metrics.widest_hotkey_label_width, hotkey_label->getPreferredLabelWidth());
+		metrics.widest_hotkey_editor_width = juce::jmax(metrics.widest_hotkey_editor_width, hotkey_label->getPreferredEditorWidth());
+	}
+
+	return metrics;
+}
+
+std::array<FxSettingsDialog::GeneralSettingsPane::ToggleLayoutEntry, 4> FxSettingsDialog::GeneralSettingsPane::getToggleLayoutEntries()
+{
+	return {{
+		{ &launch_toggle_, 20 },
+		{ &hide_help_tips_toggle_, 10 },
+		{ &hide_notifications_toggle_, 10 },
+		{ &hotkeys_toggle_, 5 }
+	}};
+}
+
+std::array<FxSettingsDialog::GeneralSettingsPane::ConstToggleLayoutEntry, 4> FxSettingsDialog::GeneralSettingsPane::getToggleLayoutEntries() const
+{
+	return {{
+		{ &launch_toggle_, 20 },
+		{ &hide_help_tips_toggle_, 10 },
+		{ &hide_notifications_toggle_, 10 },
+		{ &hotkeys_toggle_, 5 }
+	}};
+}
+
+int FxSettingsDialog::GeneralSettingsPane::layoutVisibleToggles(int y, int available_width)
+{
+	for (const auto& entry : getToggleLayoutEntries())
+	{
+		if (!entry.toggle->isVisible())
+		{
+			continue;
+		}
+
+		const auto toggle_width = juce::jmin(getTogglePreferredWidth(*entry.toggle), available_width);
+		entry.toggle->setBounds(X_MARGIN, y, toggle_width, TOGGLE_BUTTON_HEIGHT);
+		y = entry.toggle->getBottom() + entry.gap_after;
+	}
+
+	return y;
 }
 
 FxSettingsDialog::HelpSettingsPane::HelpSettingsPane() : SettingsPane("Help"), auto_updates_toggle_(TRANS("Automatic updates"))

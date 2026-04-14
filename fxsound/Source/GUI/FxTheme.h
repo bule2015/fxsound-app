@@ -95,6 +95,9 @@ public:
 	static const int getImageSize(FxImage image);
 
 private:
+	static constexpr float kNormalFontHeight = 20.0f;
+	static constexpr float kSmallFontHeight = 17.0f;
+
 	void init();
 
     TextLayout layoutTooltipText(const String& text, Colour colour) noexcept;

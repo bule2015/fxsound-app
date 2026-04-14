@@ -89,6 +89,7 @@ public:
 	Point<int> getSystemTrayWindowPosition(int width, int height);
 	bool exit();
 	void autoSaveModifiedPreset();
+	void bestEffortRestoreDefaultPlaybackDevice(bool require_power_state = false);
 
 	void setPowerState(bool power_state);
 	bool setPreset(const String& preset_name, bool notify=true);
@@ -275,6 +276,7 @@ private:
 	void updateAudioSignalCounters(const AudioPipelineSnapshot& snapshot);
 	void syncAudioProcessingState(const AudioPipelineSnapshot& snapshot);
 	bool canResumeAudioProcessing(const AudioPipelineSnapshot& snapshot) const;
+	void applyMasterPowerUiState(bool power_state, bool processing_active);
 	void tryResumeAudioProcessing(const AudioPipelineSnapshot& snapshot, const String& reason);
 	void handleImmediateAudioSignalDetected();
 	void pauseAudioProcessing(const AudioPipelineSnapshot& snapshot);
