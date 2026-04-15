@@ -40,6 +40,11 @@ int getTogglePreferredWidth(const ToggleButton& toggle, int button_height)
 
 FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(this)
 {
+	auto& theme = dynamic_cast<LookAndFeel_V4&>(getLookAndFeel());
+	tooltip_window_.setColour(TooltipWindow::ColourIds::textColourId,
+		theme.getCurrentColourScheme().getUIColour(LookAndFeel_V4::ColourScheme::defaultText));
+	tooltip_window_.setOpaque(false);
+
 	setContent(&settings_content_);
 	centreWithSize(getWidth(), getHeight());
 	addToDesktop(0);
@@ -333,7 +338,8 @@ void FxSettingsDialog::SettingsPane::requestWindowSizeUpdate()
 FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	SettingsPane("Audio"),
 	reset_presets_button_(TRANS("Reset presets to factory defaults")),
-	prioritize_new_output_toggle_(TRANS("Prioritize new output devices"))
+	prioritize_new_output_toggle_(TRANS("Prioritize new output devices")),
+	automatic_device_switching_toggle_(TRANS("Automatic device switching"))
 {
 	FxModel::getModel().addListener(this);
 
@@ -349,11 +355,19 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	prioritize_new_output_toggle_.setColour(ToggleButton::ColourIds::tickColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	prioritize_new_output_toggle_.setColour(ToggleButton::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	prioritize_new_output_toggle_.setWantsKeyboardFocus(true);
+	automatic_device_switching_toggle_.setMouseCursor(MouseCursor::PointingHandCursor);
+	automatic_device_switching_toggle_.setColour(ToggleButton::ColourIds::tickColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	automatic_device_switching_toggle_.setColour(ToggleButton::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
+	automatic_device_switching_toggle_.setWantsKeyboardFocus(true);
 
 	auto& controller = FxController::getInstance();
 	prioritize_new_output_toggle_.setToggleState(controller.isNewOutputPrioritized(), NotificationType::dontSendNotification);
 	prioritize_new_output_toggle_.onClick = [this]() {
 		FxController::getInstance().setNewOutputPrioritized(prioritize_new_output_toggle_.getToggleState());
+	};
+	automatic_device_switching_toggle_.setToggleState(controller.isAutomaticDeviceSwitchingEnabled(), NotificationType::dontSendNotification);
+	automatic_device_switching_toggle_.onClick = [this]() {
+		FxController::getInstance().setAutomaticDeviceSwitchingEnabled(automatic_device_switching_toggle_.getToggleState());
 	};
 
 	reset_presets_button_.setSize(RESET_PRESETS_BUTTON_WIDTH, BUTTON_HEIGHT);
@@ -372,6 +386,7 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	addAndMakeVisible(&output_preference_title_);
 	addAndMakeVisible(&output_preference_);
 	addAndMakeVisible(&prioritize_new_output_toggle_);
+	addAndMakeVisible(&automatic_device_switching_toggle_);
 	addAndMakeVisible(&reset_presets_button_);
 }
 
@@ -390,7 +405,10 @@ int FxSettingsDialog::AudioSettingsPane::getPreferredWidth() const
 	preferred_width = juce::jmax(preferred_width,
 		measureTextWidth(theme.getNormalFont(), output_preference_title_.getText(), X_MARGIN * 2 + 20));
 	preferred_width = juce::jmax(preferred_width,
-		measureTextWidth(theme.getNormalFont(), prioritize_new_output_toggle_.getButtonText(), X_MARGIN * 2 + 50));
+		X_MARGIN * 2 +
+		getTogglePreferredWidth(prioritize_new_output_toggle_, TOGGLE_BUTTON_HEIGHT) +
+		TOGGLE_BUTTON_GAP +
+		getTogglePreferredWidth(automatic_device_switching_toggle_, TOGGLE_BUTTON_HEIGHT));
 	preferred_width = juce::jmax(preferred_width,
 		reset_presets_button_.getWidth() + (X_MARGIN * 2));
 
@@ -419,7 +437,14 @@ void FxSettingsDialog::AudioSettingsPane::resized()
 	output_preference_.setBounds(X_MARGIN, y, width, OUTPUT_PREFERENCE_HEIGHT);
 
 	y = output_preference_.getBottom() + 10;
-	prioritize_new_output_toggle_.setBounds(X_MARGIN, y, width, TOGGLE_BUTTON_HEIGHT);
+	const auto prioritize_width = getTogglePreferredWidth(prioritize_new_output_toggle_, TOGGLE_BUTTON_HEIGHT);
+	const auto automatic_width = getTogglePreferredWidth(automatic_device_switching_toggle_, TOGGLE_BUTTON_HEIGHT);
+	prioritize_new_output_toggle_.setBounds(X_MARGIN, y, prioritize_width, TOGGLE_BUTTON_HEIGHT);
+	automatic_device_switching_toggle_.setBounds(
+		prioritize_new_output_toggle_.getRight() + TOGGLE_BUTTON_GAP,
+		y,
+		automatic_width,
+		TOGGLE_BUTTON_HEIGHT);
 
 	auto group_x = output_preference_title_.getX() - GROUP_MARGIN;
 	auto group_y = output_preference_title_.getY() - GROUP_MARGIN;
@@ -449,6 +474,8 @@ void FxSettingsDialog::AudioSettingsPane::refreshText()
 	output_preference_title_.setFont(theme.getNormalFont());
 	output_preference_title_.setText(TRANS("Output Device Preference"), NotificationType::dontSendNotification);	
 	prioritize_new_output_toggle_.setButtonText(TRANS("Prioritize new output devices"));
+	automatic_device_switching_toggle_.setButtonText(TRANS("Automatic device switching"));
+	automatic_device_switching_toggle_.setTooltip(TRANS("Automatic device switching upon disconnection"));
 
 	reset_presets_button_.setButtonText(TRANS("Reset presets to factory defaults"));
 	resizeResetButton(reset_presets_button_.getX(), reset_presets_button_.getY());

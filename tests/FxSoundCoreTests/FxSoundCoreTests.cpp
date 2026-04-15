@@ -34,6 +34,7 @@ struct ScenarioState
 	bool timer_running = true;
 	bool power_state = true;
 	bool prioritize_new_output = false;
+	bool automatic_device_switching = false;
 	bool playback_device_available = true;
 	bool muted = false;
 	bool restarted_processing = false;
@@ -332,7 +333,8 @@ void applyDeviceChange(ScenarioState& state,
 		{ change_kind,
 		  device_id,
 		  state.prioritize_new_output,
-		  FxSound::OutputDeviceSelection::didOutputBecomeAvailable(state.visible_outputs, sound_devices, device_id) });
+		  FxSound::OutputDeviceSelection::didOutputBecomeAvailable(state.visible_outputs, sound_devices, device_id),
+		  state.automatic_device_switching });
 }
 
 void applyManualSelection(ScenarioState& state,
@@ -506,7 +508,8 @@ void applyRuntimeDeviceChange(RuntimeHarness& harness,
 		{ change_kind,
 		  device_id,
 		  harness.state.prioritize_new_output,
-		  FxSound::OutputDeviceSelection::didOutputBecomeAvailable(harness.state.visible_outputs, sound_devices, device_id) });
+		  FxSound::OutputDeviceSelection::didOutputBecomeAvailable(harness.state.visible_outputs, sound_devices, device_id),
+		  harness.state.automatic_device_switching });
 
 	if (harness.state.power_state)
 	{
@@ -1811,7 +1814,7 @@ void testBuildSyncDecisionSwitchesToAddedOutputWhenPrioritized()
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"Speakers", priorities),
 		true,
-		{ AudioDeviceChangeKind::DeviceAdded, L"hdmi", true, true });
+		{ AudioDeviceChangeKind::DeviceAdded, L"hdmi", true, true, false });
 
 	expect(decision.has_resolved_output, "sync decision should resolve the newly added output");
 	expect(decision.resolved_output.pwszID == L"hdmi", "sync decision should switch to the newly added output");
@@ -1835,14 +1838,14 @@ void testBuildSyncDecisionSwitchesToReconnectedOutputWhenPrioritized()
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"Speakers", priorities),
 		true,
-		{ AudioDeviceChangeKind::DeviceStateChanged, L"dac-new", true, true });
+		{ AudioDeviceChangeKind::DeviceStateChanged, L"dac-new", true, true, false });
 
 	expect(decision.has_resolved_output, "sync decision should resolve the reconnected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "sync decision should switch to the reconnected output");
 	expect(decision.routing_actions.should_retarget_playback, "reconnected prioritized output should retarget playback");
 }
 
-void testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrioritized()
+void testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled()
 {
 	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
 	std::vector<SoundDevice> output_devices {
@@ -1860,13 +1863,32 @@ void testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrioritiz
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"USB DAC", priorities),
 		true,
-		{ AudioDeviceChangeKind::DeviceRemoved, L"dac-old", true, false });
+		{ AudioDeviceChangeKind::DeviceRemoved, L"dac-old", false, false, true });
 
 	expect(decision.has_resolved_output, "sync decision should resolve a fallback output after disconnect");
 	expect(decision.resolved_output.pwszID == L"spk", "disconnect fallback should use the highest-priority connected output");
 	expect(decision.output_changed, "disconnect fallback should change the selected output");
 	expect(decision.routing_actions.should_retarget_playback, "disconnect fallback should retarget playback");
 	expect(!decision.should_mute, "connected fallback output should remain unmuted");
+}
+
+void testBuildSyncDecisionKeepsInactiveSelectionAfterDisconnectWithoutAutomaticSwitching()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> output_devices {
+		selected_output,
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"spk", L"Speakers"}, {L"dac-old", L"USB DAC"}}),
+		true,
+		{ AudioDeviceChangeKind::DeviceRemoved, L"dac-old", true, false, false });
+
+	expect(decision.has_resolved_output, "sync decision should still resolve the disconnected selection");
+	expect(decision.resolved_output.pwszID == L"dac-old", "without automatic switching the disconnected output should stay selected");
+	expect(decision.should_mute, "without automatic switching the disconnected output should remain muted");
 }
 
 void testBuildInitDecisionKeepsSelectedInactiveOutput()
@@ -1982,7 +2004,7 @@ void testBuildIdleSyncDecisionSwitchesToAddedOutputWhenPrioritized()
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"Speakers", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}}),
-		{ AudioDeviceChangeKind::DeviceAdded, L"hdmi", true, true });
+		{ AudioDeviceChangeKind::DeviceAdded, L"hdmi", true, true, false });
 
 	expect(decision.has_resolved_output, "idle sync should resolve the newly added output");
 	expect(decision.resolved_output.pwszID == L"hdmi", "idle sync should switch to the newly added output");
@@ -2000,14 +2022,14 @@ void testBuildIdleSyncDecisionSwitchesToReconnectedOutputWhenPrioritized()
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"Speakers", {{L"spk", L"Speakers"}, {L"dac-old", L"USB DAC", L"c-dac"}}),
-		{ AudioDeviceChangeKind::DeviceStateChanged, L"dac-new", true, true });
+		{ AudioDeviceChangeKind::DeviceStateChanged, L"dac-new", true, true, false });
 
 	expect(decision.has_resolved_output, "idle sync should resolve the reconnected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "idle sync should switch to the reconnected output");
 	expect(!decision.should_notify_error, "idle sync should not report an error for the active reconnected output");
 }
 
-void testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrioritized()
+void testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled()
 {
 	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
 	std::vector<SoundDevice> output_devices {
@@ -2019,7 +2041,7 @@ void testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrior
 	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		output_devices,
 		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}, {L"dac-old", L"USB DAC"}}),
-		{ AudioDeviceChangeKind::DeviceRemoved, L"dac-old", true, false });
+		{ AudioDeviceChangeKind::DeviceRemoved, L"dac-old", false, false, true });
 
 	expect(decision.has_resolved_output, "idle sync should resolve a connected fallback after disconnect");
 	expect(decision.resolved_output.pwszID == L"spk", "idle sync fallback should use the highest-priority connected output");
@@ -2276,14 +2298,14 @@ void testRuntimeDeviceChangeRestoresReconnectedSelectedOutput()
 	expect(harness.state.selected_output.pwszID == L"dac-new", "selected output should resolve to the reconnected endpoint");
 }
 
-void testRuntimeDeviceChangeFallsBackToPriorityAfterDisconnectWhenPrioritized()
+void testRuntimeDeviceChangeFallsBackToPriorityAfterDisconnectWhenAutomaticSwitchingEnabled()
 {
 	RuntimeHarness harness;
 	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
 	harness.state.output_name = L"USB DAC";
 	harness.state.playback_device_available = false;
 	harness.state.muted = true;
-	harness.state.prioritize_new_output = true;
+	harness.state.automatic_device_switching = true;
 	harness.audio.sound_devices = {
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
 		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, true, L"c-hdmi"),
@@ -2615,7 +2637,8 @@ int main()
 		runTest("sync decision falls back to preferred output", testBuildSyncDecisionFallsBackToPreferredOutput);
 		runTest("sync decision switches to added output when prioritized", testBuildSyncDecisionSwitchesToAddedOutputWhenPrioritized);
 		runTest("sync decision switches to reconnected output when prioritized", testBuildSyncDecisionSwitchesToReconnectedOutputWhenPrioritized);
-		runTest("sync decision falls back after disconnect when prioritized", testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrioritized);
+		runTest("sync decision falls back after disconnect when automatic switching enabled", testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled);
+		runTest("sync decision keeps inactive selection without automatic switching", testBuildSyncDecisionKeepsInactiveSelectionAfterDisconnectWithoutAutomaticSwitching);
 		runTest("init decision keeps selected inactive output", testBuildInitDecisionKeepsSelectedInactiveOutput);
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
@@ -2623,7 +2646,7 @@ int main()
 		runTest("idle sync decision resolves reconnected selected output", testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput);
 		runTest("idle sync decision switches to added output when prioritized", testBuildIdleSyncDecisionSwitchesToAddedOutputWhenPrioritized);
 		runTest("idle sync decision switches to reconnected output when prioritized", testBuildIdleSyncDecisionSwitchesToReconnectedOutputWhenPrioritized);
-		runTest("idle sync decision falls back after disconnect when prioritized", testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenPrioritized);
+		runTest("idle sync decision falls back after disconnect when automatic switching enabled", testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled);
 		runTest("manual selection restarts processing after inactive selection", testManualSelectionDecisionRestartsProcessingAfterInactiveSelection);
 		runTest("manual selection leaves default output untouched when processing is off", testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff);
 		runTest("manual selection powers off when output is missing", testManualSelectionDecisionPowersOffWhenOutputIsMissing);
@@ -2635,7 +2658,7 @@ int main()
 		runTest("runtime device change switches to new output when prioritized", testRuntimeDeviceChangeSwitchesToNewOutputWhenPrioritized);
 		runTest("runtime device change switches to reconnected output when prioritized", testRuntimeDeviceChangeSwitchesToReconnectedOutputWhenPrioritized);
 		runTest("runtime device change restores reconnected selected output", testRuntimeDeviceChangeRestoresReconnectedSelectedOutput);
-		runTest("runtime device change falls back after disconnect when prioritized", testRuntimeDeviceChangeFallsBackToPriorityAfterDisconnectWhenPrioritized);
+		runTest("runtime device change falls back after disconnect when automatic switching enabled", testRuntimeDeviceChangeFallsBackToPriorityAfterDisconnectWhenAutomaticSwitchingEnabled);
 		runTest("runtime manual selection recovers through audio passthru", testRuntimeManualSelectionRecoversThroughAudioPassthru);
 		runTest("runtime startup preserves selected inactive output", testRuntimeStartupPreservesSelectedInactiveOutput);
 		runTest("runtime startup recovers reconnected selected output", testRuntimeStartupRecoversReconnectedSelectedOutput);

@@ -116,6 +116,7 @@ private:
 		static constexpr int GROUP_MARGIN = 10;
 		static constexpr int ENDPOINT_Y = 42;
 		static constexpr int TOGGLE_BUTTON_HEIGHT = 30;
+		static constexpr int TOGGLE_BUTTON_GAP = 16;
 		static constexpr int LABEL_WIDTH = 220;
 		static constexpr int OUTPUT_PREFERENCE_HEIGHT = 160;
 		static constexpr int LABEL_HEIGHT = 14;
@@ -134,6 +135,7 @@ private:
 		Label output_preference_title_;
 
 		ToggleButton prioritize_new_output_toggle_;
+		ToggleButton automatic_device_switching_toggle_;
 		FxOutputPreference output_preference_;
 		TextButton reset_presets_button_;
 

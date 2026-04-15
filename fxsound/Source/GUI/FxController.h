@@ -152,6 +152,8 @@ public:
     void setOutputName(const String& output_device_name);
 	bool isNewOutputPrioritized();
 	void setNewOutputPrioritized(bool prioritize);
+	bool isAutomaticDeviceSwitchingEnabled();
+	void setAutomaticDeviceSwitchingEnabled(bool enabled);
 
 	FxThemeMode getThemeMode();
 	void setThemeMode(FxThemeMode mode);
@@ -299,19 +301,22 @@ private:
 		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
 		const std::wstring& device_id = {},
 		bool prioritize_new_output = false,
-		bool changed_output_became_available = false);
+		bool changed_output_became_available = false,
+		bool automatic_device_switching = false);
 	// Chooses the live processing output after the backend restarts.
 	void selectProcessingOutput(const std::vector<SoundDevice>& sound_devices,
 		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
 		const std::wstring& device_id = {},
 		bool prioritize_new_output = false,
-		bool changed_output_became_available = false);
+		bool changed_output_became_available = false,
+		bool automatic_device_switching = false);
 	// Keeps the selected output in sync with the system while processing is idle.
 	void syncOutputWithSystemDefault(const std::vector<SoundDevice>& sound_devices,
 		AudioDeviceChangeKind change_kind = AudioDeviceChangeKind::Unknown,
 		const std::wstring& device_id = {},
 		bool prioritize_new_output = false,
-		bool changed_output_became_available = false);
+		bool changed_output_became_available = false,
+		bool automatic_device_switching = false);
 	SoundDevice getPreferredOutput(const std::vector<SoundDevice>& output_devices);
 	SoundDevice loadSelectedOutputFromSettings();
 	void saveSelectedOutputToSettings(const SoundDevice& sound_device);

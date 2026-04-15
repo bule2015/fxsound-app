@@ -1379,7 +1379,8 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices,
 	AudioDeviceChangeKind change_kind,
 	const std::wstring& device_id,
 	bool prioritize_new_output,
-	bool changed_output_became_available)
+	bool changed_output_became_available,
+	bool automatic_device_switching)
 {
 	DeviceConfig::updateDeviceConfigs(settings_, sound_devices);
 	auto processing_snapshot = FxSound::OutputDeviceSelection::scanProcessingOutputs(sound_devices);
@@ -1395,7 +1396,7 @@ void FxController::updateOutputs(const std::vector<SoundDevice>& sound_devices,
 		active_output_devices_,
 		output_resolution,
 		isTimerRunning(),
-		{ change_kind, device_id, prioritize_new_output, changed_output_became_available });
+		{ change_kind, device_id, prioritize_new_output, changed_output_became_available, automatic_device_switching });
 
 	if (sync_decision.has_resolved_output)
 	{
@@ -1425,7 +1426,8 @@ void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_
 	AudioDeviceChangeKind change_kind,
 	const std::wstring& device_id,
 	bool prioritize_new_output,
-	bool changed_output_became_available)
+	bool changed_output_became_available,
+	bool automatic_device_switching)
 {
 	auto available = audio_passthru_->isPlaybackDeviceAvailable();
 	if (available != playback_device_available_)
@@ -1434,7 +1436,12 @@ void FxController::selectProcessingOutput(const std::vector<SoundDevice>& sound_
 		FxModel::getModel().notifyOutputError();
 	}
 
-	updateOutputs(sound_devices, change_kind, device_id, prioritize_new_output, changed_output_became_available);
+	updateOutputs(sound_devices,
+		change_kind,
+		device_id,
+		prioritize_new_output,
+		changed_output_became_available,
+		automatic_device_switching);
 	device_count_ = (uint32_t)sound_devices.size();
 
 	if (!dfx_enabled_)
@@ -1453,7 +1460,8 @@ void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& s
 	AudioDeviceChangeKind change_kind,
 	const std::wstring& device_id,
 	bool prioritize_new_output,
-	bool changed_output_became_available)
+	bool changed_output_became_available,
+	bool automatic_device_switching)
 {
 	rebuildOutputDeviceList(sound_devices);
 
@@ -1475,7 +1483,7 @@ void FxController::syncOutputWithSystemDefault(const std::vector<SoundDevice>& s
 	auto idle_sync_decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
 		active_output_devices_,
 		output_resolution,
-		{ change_kind, device_id, prioritize_new_output, changed_output_became_available });
+		{ change_kind, device_id, prioritize_new_output, changed_output_became_available, automatic_device_switching });
 
 	if (idle_sync_decision.has_resolved_output)
 	{
@@ -2340,6 +2348,7 @@ void FxController::handleSoundDeviceChange()
 	pending_device_change_kind_ = AudioDeviceChangeKind::Unknown;
 	pending_device_change_id_.clear();
 	auto prioritize_new_output = isNewOutputPrioritized();
+	auto automatic_device_switching = isAutomaticDeviceSwitchingEnabled();
 
 	auto current_sound_devices = audio_passthru_->getSoundDevices(false);
 	auto changed_output_became_available = FxSound::OutputDeviceSelection::didOutputBecomeAvailable(
@@ -2368,7 +2377,8 @@ void FxController::handleSoundDeviceChange()
 			pending_change_kind,
 			pending_change_id.toWideCharPointer(),
 			prioritize_new_output,
-			changed_output_became_available);
+			changed_output_became_available,
+			automatic_device_switching);
 	}
 	else
 	{
@@ -2376,7 +2386,8 @@ void FxController::handleSoundDeviceChange()
 			pending_change_kind,
 			pending_change_id.toWideCharPointer(),
 			prioritize_new_output,
-			changed_output_became_available);
+			changed_output_became_available,
+			automatic_device_switching);
 	}
 
 	if (FxModel::getModel().getPowerState())
@@ -2958,6 +2969,17 @@ bool FxController::isNewOutputPrioritized()
 void FxController::setNewOutputPrioritized(bool prioritize)
 {
 	settings_.setBool("prioritize_new_output", prioritize);
+}
+
+bool FxController::isAutomaticDeviceSwitchingEnabled()
+{
+	return settings_.getBool("automatic_device_switching",
+		settings_.getBool("prioritize_new_output", false));
+}
+
+void FxController::setAutomaticDeviceSwitchingEnabled(bool enabled)
+{
+	settings_.setBool("automatic_device_switching", enabled);
 }
 
 FxThemeMode FxController::getThemeMode()

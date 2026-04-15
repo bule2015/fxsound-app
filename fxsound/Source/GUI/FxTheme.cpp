@@ -577,10 +577,46 @@ const int FxTheme::getImageSize(FxImage image)
 
 Rectangle<int> FxTheme::getTooltipBounds(const String& tipText, Point<int> screenPos, Rectangle<int> parentArea)
 {
+    constexpr int automaticSwitchingTooltipTailHeight = 10;
     const TextLayout tl(layoutTooltipText(tipText, Colours::black));
 
     auto w = (int)(tl.getWidth() + 20.0f);
     auto h = (int)(tl.getHeight() + 12.0f);
+
+    if (tipText == TRANS("Automatic device switching upon disconnection"))
+    {
+        h += automaticSwitchingTooltipTailHeight;
+
+        if (auto* hovered_component = Desktop::getInstance().getMainMouseSource().getComponentUnderMouse())
+        {
+            auto* tooltip_target = hovered_component;
+            while (tooltip_target != nullptr)
+            {
+                if (auto* tooltip_client = dynamic_cast<TooltipClient*>(tooltip_target))
+                {
+                    if (tooltip_client->getTooltip() == tipText)
+                    {
+                        break;
+                    }
+                }
+
+                tooltip_target = tooltip_target->getParentComponent();
+            }
+
+            if (tooltip_target != nullptr)
+            {
+                if (auto* top_level = tooltip_target->getTopLevelComponent())
+                {
+                    auto target_bounds = top_level->getLocalArea(tooltip_target, tooltip_target->getLocalBounds());
+                    return Rectangle<int>(target_bounds.getCentreX() - (w / 2),
+                        target_bounds.getY() - h + 1,
+                        w,
+                        h)
+                        .constrainedWithin(parentArea);
+                }
+            }
+        }
+    }
 
     return Rectangle<int>(screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 18) : screenPos.x + 36,
         screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 12) : screenPos.y + 12,
@@ -590,8 +626,54 @@ Rectangle<int> FxTheme::getTooltipBounds(const String& tipText, Point<int> scree
 
 void FxTheme::drawTooltip(Graphics& g, const String& text, int width, int height)
 {
+    constexpr int automaticSwitchingTooltipTailHeight = 10;
+    constexpr int automaticSwitchingTooltipTailWidth = 18;
     Rectangle<int> bounds(width, height);
     auto cornerSize = 5.0f;
+
+    if (text == TRANS("Automatic device switching upon disconnection"))
+    {
+        const auto bubbleOutlineColour = Colours::white.withAlpha(0.95f);
+        auto bubbleBounds = bounds.withTrimmedBottom(automaticSwitchingTooltipTailHeight);
+        auto tailTipX = bubbleBounds.getCentreX();
+        auto tailBaseY = bubbleBounds.getBottom() - 1;
+        auto tailTipY = bounds.getBottom() - 1;
+
+        Path tail;
+        tail.startNewSubPath(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
+        tail.lineTo(static_cast<float>(tailTipX), static_cast<float>(tailTipY));
+        tail.lineTo(static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
+        tail.closeSubPath();
+
+        g.setColour(findColour(TooltipWindow::backgroundColourId));
+        g.fillRoundedRectangle(bubbleBounds.toFloat(), cornerSize);
+        g.fillPath(tail);
+
+        g.setColour(bubbleOutlineColour);
+        g.drawRoundedRectangle(bubbleBounds.toFloat().reduced(0.5f, 0.5f), cornerSize, 1.0f);
+        g.setColour(findColour(TooltipWindow::backgroundColourId));
+        g.drawLine(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2) + 1),
+            static_cast<float>(tailBaseY),
+            static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2) - 1),
+            static_cast<float>(tailBaseY),
+            2.0f);
+
+        g.setColour(bubbleOutlineColour);
+        g.drawLine(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2)),
+            static_cast<float>(tailBaseY),
+            static_cast<float>(tailTipX),
+            static_cast<float>(tailTipY),
+            1.0f);
+        g.drawLine(static_cast<float>(tailTipX),
+            static_cast<float>(tailTipY),
+            static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2)),
+            static_cast<float>(tailBaseY),
+            1.0f);
+
+        layoutTooltipText(text, findColour(TooltipWindow::textColourId))
+            .draw(g, bubbleBounds.toFloat().reduced(10, 0));
+        return;
+    }
 
     g.setColour(findColour(TooltipWindow::backgroundColourId));
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);

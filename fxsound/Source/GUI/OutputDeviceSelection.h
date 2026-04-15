@@ -141,6 +141,7 @@ namespace FxSound::OutputDeviceSelection
 		std::wstring device_id;
 		bool prioritize_new_output = false;
 		bool changed_output_became_available = false;
+		bool automatic_device_switching = false;
 	};
 
 	// Matches a persisted priority entry to a live device using the strongest
@@ -760,7 +761,7 @@ namespace FxSound::OutputDeviceSelection
 			}
 		}
 
-		if (device_change.prioritize_new_output &&
+		if (device_change.automatic_device_switching &&
 			(device_change.change_kind == AudioDeviceChangeKind::DeviceRemoved ||
 			 device_change.change_kind == AudioDeviceChangeKind::DeviceStateChanged))
 		{
