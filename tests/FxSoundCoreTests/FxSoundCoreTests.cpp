@@ -1622,6 +1622,22 @@ void testMergeOutputPrioritiesRefreshesReconnectedIds()
 	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the stored endpoint id for the known output");
 }
 
+void testMergeOutputPrioritiesRefreshesLegacyNameOnlyEntryWithoutContainer()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
+		{L"", L"USB DAC", L""}
+	};
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"")
+	};
+
+	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
+
+	expect(merge_result.changed, "merge should report changes when a legacy name-only output gains an endpoint id");
+	expect(merge_result.priorities.size() == 1, "merge should preserve the original priority entry count for a legacy name-only match");
+	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the endpoint id for a legacy name-only priority entry");
+}
+
 void testMergeOutputPrioritiesKeepsSameContainerSiblingSeparate()
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
@@ -1673,6 +1689,21 @@ void testGetOutputDevicePriorityRejectsSameContainerSibling()
 
 	expect(priority == static_cast<int>(priorities.size()),
 		"priority lookup should not collapse a same-container sibling endpoint onto an existing priority entry");
+}
+
+void testGetOutputDevicePriorityUsesLegacyNameFallbackWithoutContainer()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> priorities {
+		{L"", L"USB DAC", L""},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	auto legacy_output = makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"");
+
+	const auto priority = FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, legacy_output);
+
+	expect(priority == 0,
+		"priority lookup should keep the legacy name-only fallback when no container id is stored");
 }
 
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
@@ -1731,6 +1762,25 @@ void testResolveSelectedOutputReturnsReconnectedDevice()
 		makeTestOutputResolutionContext(selected_output, L"Speakers", priorities));
 
 	expect(resolved_output.pwszID == L"dac-new", "reconnected selected output should win over output name fallback");
+}
+
+void testResolveSelectedOutputUsesLegacyOutputNameFallback()
+{
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"spk", L"Speakers"},
+		{L"dac-new", L"USB DAC", L"c-dac"}
+	};
+
+	auto resolved_output = FxSound::OutputDeviceSelection::resolveSelectedOutput(
+		output_devices,
+		makeTestOutputResolutionContext(SoundDevice(), L"USB DAC", priorities));
+
+	expect(resolved_output.pwszID == L"dac-new",
+		"resolve selected output should keep the legacy output-name fallback when no selected output identity is available");
 }
 
 void testGetPreferredOutputUsesConfiguredPriority()
@@ -2147,6 +2197,29 @@ void testBuildInitDecisionResolvesReconnectedSelectedOutput()
 	expect(decision.has_resolved_output, "init should resolve a reconnected selected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "init should pick the reconnected endpoint for the selected output");
 	expect(decision.should_apply_output, "reconnected selected output should be applied on startup");
+}
+
+void testBuildInitDecisionRejectsSameContainerSiblingEndpoint()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+	};
+	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		{{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}},
+		true);
+
+	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}}));
+
+	expect(decision.has_resolved_output, "init should still resolve a startup output when a sibling endpoint is present");
+	expect(decision.resolved_output.pwszID == L"spk", "init should not collapse a same-container sibling endpoint onto the stored selection");
+	expect(decision.should_apply_output, "init should keep applying the active default output when the stored sibling endpoint does not match");
 }
 
 void testBuildIdleSyncDecisionKeepsInactiveSelectedOutput()
@@ -2834,14 +2907,17 @@ int main()
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
 		runTest("merge output priorities appends multiple new outputs", testMergeOutputPrioritiesAppendsMultipleNewOutputs);
 		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
+		runTest("merge output priorities refreshes legacy name-only entries", testMergeOutputPrioritiesRefreshesLegacyNameOnlyEntryWithoutContainer);
 		runTest("merge output priorities keeps same-container sibling separate", testMergeOutputPrioritiesKeepsSameContainerSiblingSeparate);
 		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);
 		runTest("output device priority rejects same-container sibling", testGetOutputDevicePriorityRejectsSameContainerSibling);
+		runTest("output device priority uses legacy name fallback without container", testGetOutputDevicePriorityUsesLegacyNameFallbackWithoutContainer);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("stored output identity matches reconnected endpoint", testMatchesStoredOutputIdentityMatchesReconnectedEndpoint);
 		runTest("stored output identity rejects same-container sibling endpoint", testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer);
 		runTest("stored output identity uses legacy name fallback without container", testMatchesStoredOutputIdentityUsesLegacyNameFallbackWithoutContainer);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
+		runTest("resolve selected output uses legacy output name fallback", testResolveSelectedOutputUsesLegacyOutputNameFallback);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
 		runTest("preferred output uses legacy name fallback without container", testGetPreferredOutputUsesLegacyNameFallbackWithoutContainer);
 		runTest("preferred output matches reconnected endpoint", testGetPreferredOutputMatchesReconnectedEndpoint);
@@ -2864,6 +2940,7 @@ int main()
 		runTest("init decision keeps selected inactive output", testBuildInitDecisionKeepsSelectedInactiveOutput);
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
+		runTest("init decision rejects same-container sibling endpoint", testBuildInitDecisionRejectsSameContainerSiblingEndpoint);
 		runTest("idle sync decision keeps inactive selected output", testBuildIdleSyncDecisionKeepsInactiveSelectedOutput);
 		runTest("idle sync decision resolves reconnected selected output", testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput);
 		runTest("idle sync decision switches to added output when prioritized", testBuildIdleSyncDecisionSwitchesToAddedOutputWhenPrioritized);
