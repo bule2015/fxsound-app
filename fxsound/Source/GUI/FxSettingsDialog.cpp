@@ -274,6 +274,11 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 
 	showPane(PaneId::Audio);
 	updateWindowSize();
+
+	if (gCachedNavigationWidth.load(std::memory_order_acquire) <= 0)
+	{
+		startTimerHz(20);
+	}
 }
 
 int FxSettingsDialog::SettingsComponent::getPreferredWidth() const
@@ -340,6 +345,13 @@ void FxSettingsDialog::SettingsComponent::lookAndFeelChanged()
 void FxSettingsDialog::SettingsComponent::refreshWindowSize()
 {
 	updateWindowSize();
+	resized();
+	repaint();
+
+	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
+	{
+		dialog->repaint();
+	}
 }
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
@@ -388,6 +400,17 @@ int FxSettingsDialog::SettingsComponent::getMaximumWidth() const
 	}
 
 	return juce::jmax(MIN_WIDTH, display->userArea.getWidth() - WINDOW_WIDTH_MARGIN);
+}
+
+void FxSettingsDialog::SettingsComponent::timerCallback()
+{
+	if (gCachedNavigationWidth.load(std::memory_order_acquire) <= 0)
+	{
+		return;
+	}
+
+	stopTimer();
+	refreshWindowSize();
 }
 
 void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)

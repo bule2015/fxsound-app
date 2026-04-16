@@ -278,7 +278,7 @@ private:
 		ToggleButton debug_log_toggle_;
 	};
 
-	class SettingsComponent : public Component, public Button::Listener
+	class SettingsComponent : public Component, public Button::Listener, private Timer
 	{
 	public:
         static constexpr int MIN_WIDTH = 100;
@@ -315,6 +315,7 @@ private:
 		int getNavigationPreferredWidth() const;
 		int getPaneChromeWidth() const;
 		int getMaximumWidth() const;
+		void timerCallback() override;
 		void showPane(PaneId active_pane);
 		void updateWindowSize();
 
