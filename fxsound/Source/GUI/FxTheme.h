@@ -38,6 +38,12 @@ enum FxImage : int { DefaultLogo, HighlightedLogo, IconLogo,
 class FxTheme : public LookAndFeel_V4
 {
 public:
+	enum class TooltipStyle
+	{
+		Default = 0,
+		SpeechBubble
+	};
+
     static constexpr int WINDOW_CORNER_RADIUS = 21;
 	static constexpr int TITLE_BAR_HEIGHT = 57;
 	static constexpr int SLIDER_THUMB_RADIUS = 8;
@@ -87,6 +93,8 @@ public:
     Typeface::Ptr getDefaultTypeface();
     static std::unique_ptr<Drawable> createSelectedArrowDrawable(bool is_up);
     static std::unique_ptr<Drawable> createEqualizerButtonIcon();
+	static void setTooltipStyle(Component& component, TooltipStyle style);
+	static TooltipStyle getTooltipStyle(const Component& component);
 
 	static FxThemeMode getThemeMode();
 	static void setThemeMode(FxThemeMode theme_mode);

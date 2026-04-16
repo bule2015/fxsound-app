@@ -27,9 +27,11 @@ namespace FxSound
         bool matchesDeviceConfig(const DeviceConfig& device_config, const SoundDevice& sound_device)
         {
             return OutputDeviceSelection::matchesStoredOutputIdentity(
-                std::wstring_view(device_config.device_id.toWideCharPointer()),
-                std::wstring_view(device_config.device_name.toWideCharPointer()),
-                std::wstring_view(device_config.container_id.toWideCharPointer()),
+                OutputDeviceSelection::StoredOutputIdentity {
+                    std::wstring(device_config.device_id.toWideCharPointer()),
+                    std::wstring(device_config.device_name.toWideCharPointer()),
+                    std::wstring(device_config.container_id.toWideCharPointer())
+                },
                 sound_device);
         }
 

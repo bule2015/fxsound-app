@@ -144,27 +144,44 @@ namespace FxSound::OutputDeviceSelection
 		bool automatic_device_switching = false;
 	};
 
+	// Shared persisted identity for outputs whose endpoint ids can churn across reconnects.
+	struct StoredOutputIdentity
+	{
+		std::wstring device_id;
+		std::wstring device_name;
+		std::wstring container_id;
+	};
+
 	// Matches a persisted priority entry to a live device using the strongest
 	// identifiers first and falling back to the legacy name-only form.
+	inline bool matchesStoredOutputIdentity(const StoredOutputIdentity& identity, const SoundDevice& sound_device)
+	{
+		if (!identity.device_id.empty() && identity.device_id == sound_device.pwszID)
+		{
+			return true;
+		}
+
+		if (!identity.container_id.empty() &&
+			!sound_device.containerId.empty() &&
+			identity.container_id == sound_device.containerId &&
+			!identity.device_name.empty() &&
+			!sound_device.deviceFriendlyName.empty() &&
+			identity.device_name == sound_device.deviceFriendlyName)
+		{
+			return true;
+		}
+
+		return identity.container_id.empty() &&
+			!identity.device_name.empty() &&
+			!sound_device.deviceFriendlyName.empty() &&
+			identity.device_name == sound_device.deviceFriendlyName;
+	}
+
 	inline bool matchesPriorityEntryExactly(const PriorityEntry& entry, const SoundDevice& sound_device)
 	{
-		if (!entry.device_id.empty() && entry.device_id == sound_device.pwszID)
-		{
-			return true;
-		}
-
-		if (!entry.container_id.empty() &&
-			!sound_device.containerId.empty() &&
-			entry.container_id == sound_device.containerId &&
-			!entry.device_name.empty() &&
-			entry.device_name == sound_device.deviceFriendlyName)
-		{
-			return true;
-		}
-
-		return entry.container_id.empty() &&
-			!entry.device_name.empty() &&
-			entry.device_name == sound_device.deviceFriendlyName;
+		return matchesStoredOutputIdentity(
+			StoredOutputIdentity { entry.device_id, entry.device_name, entry.container_id },
+			sound_device);
 	}
 
 	inline bool matchesPriorityEntryByContainer(const PriorityEntry& entry, const SoundDevice& sound_device)
@@ -198,42 +215,9 @@ namespace FxSound::OutputDeviceSelection
 			lhs.deviceDescription == rhs.deviceDescription;
 	}
 
-	// Matches a persisted output identity against a live output while avoiding
-	// collapsing distinct endpoints that share only a container id.
-	inline bool matchesStoredOutputIdentity(const std::wstring_view stored_device_id,
-		const std::wstring_view stored_device_name,
-		const std::wstring_view stored_container_id,
-		const SoundDevice& sound_device)
-	{
-		if (!stored_device_id.empty() && stored_device_id == sound_device.pwszID)
-		{
-			return true;
-		}
-
-		if (!stored_container_id.empty() &&
-			!sound_device.containerId.empty() &&
-			stored_container_id == sound_device.containerId &&
-			!stored_device_name.empty() &&
-			!sound_device.deviceFriendlyName.empty() &&
-			stored_device_name == sound_device.deviceFriendlyName)
-		{
-			return true;
-		}
-
-		return stored_container_id.empty() &&
-			!stored_device_name.empty() &&
-			!sound_device.deviceFriendlyName.empty() &&
-			stored_device_name == sound_device.deviceFriendlyName;
-	}
-
 	// Used by output preferences to decide whether a preset change belongs to the
 	// currently selected output and should therefore be applied immediately.
-	struct PresetApplyIdentity
-	{
-		std::wstring device_id;
-		std::wstring device_name;
-		std::wstring container_id;
-	};
+	using PresetApplyIdentity = StoredOutputIdentity;
 
 	struct ConfiguredPresetRestoreDecision
 	{
@@ -247,15 +231,8 @@ namespace FxSound::OutputDeviceSelection
 		const SoundDevice& selected_output,
 		const std::wstring& current_output_name)
 	{
-		if (!identity.device_id.empty() && identity.device_id == selected_output.pwszID)
-		{
-			return true;
-		}
-
-		if (!identity.container_id.empty() &&
-			!selected_output.containerId.empty() &&
-			identity.container_id == selected_output.containerId &&
-			identity.device_name == selected_output.deviceFriendlyName)
+		if ((!identity.device_id.empty() || !identity.container_id.empty()) &&
+			matchesStoredOutputIdentity(identity, selected_output))
 		{
 			return true;
 		}

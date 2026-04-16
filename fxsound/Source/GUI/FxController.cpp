@@ -154,9 +154,11 @@ void notifyPlaybackUnavailable(IAudioPassthru& audio_passthru,
 bool matchesConfiguredOutput(const DeviceConfig& device_config, const SoundDevice& sound_device)
 {
 	return FxSound::OutputDeviceSelection::matchesStoredOutputIdentity(
-		std::wstring_view(device_config.device_id.toWideCharPointer()),
-		std::wstring_view(device_config.device_name.toWideCharPointer()),
-		std::wstring_view(device_config.container_id.toWideCharPointer()),
+		FxSound::OutputDeviceSelection::StoredOutputIdentity {
+			std::wstring(device_config.device_id.toWideCharPointer()),
+			std::wstring(device_config.device_name.toWideCharPointer()),
+			std::wstring(device_config.container_id.toWideCharPointer())
+		},
 		sound_device);
 }
 }
@@ -897,18 +899,11 @@ void FxController::setPowerState(bool power_state)
 
 	if (power_state)
 	{
-		powerOn(true);
+		applyPoweredOnBackendState();
 	}
 	else
 	{
-		dfx_dsp_.powerOn(false);
-
-		if (isTimerRunning())
-		{
-			stopTimer();
-		}
-
-		bestEffortRestoreDefaultPlaybackDevice();
+		applyPoweredOffBackendState();
 	}
 
 	settings_.setBool("power", power_state);
@@ -1015,7 +1010,7 @@ void FxController::setOutput(const String output_device_id, bool notify)
 	if (!decision.found_output)
 	{
 		audio_passthru_->mute(true);
-		powerOn(false);
+		applyPoweredOffBackendState();
 
 		FxModel::getModel().pushMessage(TRANS("Output Disconnected"));
 	}
@@ -1042,7 +1037,7 @@ void FxController::setOutput(const String output_device_id, bool notify)
 		if (decision.should_sync_processing_state)
 		{
 			playback_device_available_ = audio_passthru_->isPlaybackDeviceAvailable();
-			powerOn(true);
+			applyPoweredOnBackendState();
 			audio_passthru_->mute(!playback_device_available_);
 			FxModel::getModel().notifyOutputError();
 		}
@@ -1614,28 +1609,26 @@ void FxController::finalizePresetMutation()
 	}
 }
 
-void FxController::powerOn(bool on)
+void FxController::applyPoweredOnBackendState()
 {
-	if (on)
+	dfx_dsp_.powerOn(true);
+
+	if (!isTimerRunning())
 	{
-		dfx_dsp_.powerOn(true);
-
-		if (!isTimerRunning())
-		{
-			startTimer(100);
-		}
+		startTimer(100);
 	}
-	else
+}
+
+void FxController::applyPoweredOffBackendState()
+{
+	dfx_dsp_.powerOn(false);
+
+	if (isTimerRunning())
 	{
-		dfx_dsp_.powerOn(false);
-
-		if (isTimerRunning())
-		{
-			stopTimer();
-		}
-
-		bestEffortRestoreDefaultPlaybackDevice();
+		stopTimer();
 	}
+
+	bestEffortRestoreDefaultPlaybackDevice();
 }
 
 float FxController::getEffectValue(FxEffects::EffectType effect)
@@ -1968,7 +1961,7 @@ LRESULT CALLBACK FxController::eventCallback(HWND hwnd, const UINT message, cons
 				}
 
 				controller->tray_icon_recovery_pending_ = true;
-				controller->powerOn(false);
+				controller->applyPoweredOffBackendState();
 			}
 		}
 		break;
@@ -2401,7 +2394,7 @@ void FxController::handleSoundDeviceChange()
 
 	if (FxModel::getModel().getPowerState())
 	{
-		powerOn(true);
+		applyPoweredOnBackendState();
 		audio_passthru_->mute(false);
 	}
 

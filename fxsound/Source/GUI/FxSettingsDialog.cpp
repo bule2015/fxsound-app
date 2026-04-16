@@ -359,6 +359,7 @@ FxSettingsDialog::AudioSettingsPane::AudioSettingsPane() :
 	automatic_device_switching_toggle_.setColour(ToggleButton::ColourIds::tickColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	automatic_device_switching_toggle_.setColour(ToggleButton::ColourIds::textColourId, getLookAndFeel().findColour(TextButton::textColourOnId));
 	automatic_device_switching_toggle_.setWantsKeyboardFocus(true);
+	FxTheme::setTooltipStyle(automatic_device_switching_toggle_, FxTheme::TooltipStyle::SpeechBubble);
 
 	auto& controller = FxController::getInstance();
 	prioritize_new_output_toggle_.setToggleState(controller.isNewOutputPrioritized(), NotificationType::dontSendNotification);

@@ -19,6 +19,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <JuceHeader.h>
 #include "FxTheme.h"
 
+namespace
+{
+constexpr auto kTooltipStyleProperty = "fxTooltipStyle";
+constexpr int kAutomaticSwitchingTooltipTailHeight = 10;
+constexpr int kAutomaticSwitchingTooltipTailWidth = 18;
+
+Component* findTooltipTargetUnderMouse(const String& tip_text)
+{
+	if (auto* hovered_component = Desktop::getInstance().getMainMouseSource().getComponentUnderMouse())
+	{
+		auto* tooltip_target = hovered_component;
+		while (tooltip_target != nullptr)
+		{
+			if (auto* tooltip_client = dynamic_cast<TooltipClient*>(tooltip_target))
+			{
+				if (tooltip_client->getTooltip() == tip_text)
+				{
+					return tooltip_target;
+				}
+			}
+
+			tooltip_target = tooltip_target->getParentComponent();
+		}
+	}
+
+	return nullptr;
+}
+}
+
 const uint32 FxTheme::theme_colors_[FxThemeMode::NumModes][FxColor::NumColors] =
 { { 0x181818, 0x181818, 0x383838, 0x2b2b2b, 0xb1b1b1, 0x000000, 0xffffff, 0x0c0c0c, 0xffffff,
 	0x000000, 0xd51535, 0xe63462, 0x7f7f7f, 0x009cdd, 0xd51535, 0x0f0f0f, 0xe33250, 0xf7546f,
@@ -546,6 +575,21 @@ std::unique_ptr<Drawable> FxTheme::createEqualizerButtonIcon()
 	return root;
 }
 
+void FxTheme::setTooltipStyle(Component& component, TooltipStyle style)
+{
+	component.getProperties().set(kTooltipStyleProperty, static_cast<int>(style));
+}
+
+FxTheme::TooltipStyle FxTheme::getTooltipStyle(const Component& component)
+{
+	if (component.getProperties().contains(kTooltipStyleProperty))
+	{
+		return static_cast<TooltipStyle>(static_cast<int>(component.getProperties()[kTooltipStyleProperty]));
+	}
+
+	return TooltipStyle::Default;
+}
+
 FxThemeMode FxTheme::getThemeMode()
 {
 	return theme_mode_;
@@ -577,44 +621,24 @@ const int FxTheme::getImageSize(FxImage image)
 
 Rectangle<int> FxTheme::getTooltipBounds(const String& tipText, Point<int> screenPos, Rectangle<int> parentArea)
 {
-    constexpr int automaticSwitchingTooltipTailHeight = 10;
     const TextLayout tl(layoutTooltipText(tipText, Colours::black));
 
     auto w = (int)(tl.getWidth() + 20.0f);
     auto h = (int)(tl.getHeight() + 12.0f);
 
-    if (tipText == TRANS("Automatic device switching upon disconnection"))
+    if (auto* tooltip_target = findTooltipTargetUnderMouse(tipText);
+        tooltip_target != nullptr && getTooltipStyle(*tooltip_target) == TooltipStyle::SpeechBubble)
     {
-        h += automaticSwitchingTooltipTailHeight;
+        h += kAutomaticSwitchingTooltipTailHeight;
 
-        if (auto* hovered_component = Desktop::getInstance().getMainMouseSource().getComponentUnderMouse())
+        if (auto* top_level = tooltip_target->getTopLevelComponent())
         {
-            auto* tooltip_target = hovered_component;
-            while (tooltip_target != nullptr)
-            {
-                if (auto* tooltip_client = dynamic_cast<TooltipClient*>(tooltip_target))
-                {
-                    if (tooltip_client->getTooltip() == tipText)
-                    {
-                        break;
-                    }
-                }
-
-                tooltip_target = tooltip_target->getParentComponent();
-            }
-
-            if (tooltip_target != nullptr)
-            {
-                if (auto* top_level = tooltip_target->getTopLevelComponent())
-                {
-                    auto target_bounds = top_level->getLocalArea(tooltip_target, tooltip_target->getLocalBounds());
-                    return Rectangle<int>(target_bounds.getCentreX() - (w / 2),
-                        target_bounds.getY() - h + 1,
-                        w,
-                        h)
-                        .constrainedWithin(parentArea);
-                }
-            }
+            auto target_bounds = top_level->getLocalArea(tooltip_target, tooltip_target->getLocalBounds());
+            return Rectangle<int>(target_bounds.getCentreX() - (w / 2),
+                target_bounds.getY() - h + 1,
+                w,
+                h)
+                .constrainedWithin(parentArea);
         }
     }
 
@@ -626,23 +650,22 @@ Rectangle<int> FxTheme::getTooltipBounds(const String& tipText, Point<int> scree
 
 void FxTheme::drawTooltip(Graphics& g, const String& text, int width, int height)
 {
-    constexpr int automaticSwitchingTooltipTailHeight = 10;
-    constexpr int automaticSwitchingTooltipTailWidth = 18;
     Rectangle<int> bounds(width, height);
     auto cornerSize = 5.0f;
 
-    if (text == TRANS("Automatic device switching upon disconnection"))
+    if (auto* tooltip_target = findTooltipTargetUnderMouse(text);
+        tooltip_target != nullptr && getTooltipStyle(*tooltip_target) == TooltipStyle::SpeechBubble)
     {
         const auto bubbleOutlineColour = Colours::white.withAlpha(0.95f);
-        auto bubbleBounds = bounds.withTrimmedBottom(automaticSwitchingTooltipTailHeight);
+        auto bubbleBounds = bounds.withTrimmedBottom(kAutomaticSwitchingTooltipTailHeight);
         auto tailTipX = bubbleBounds.getCentreX();
         auto tailBaseY = bubbleBounds.getBottom() - 1;
         auto tailTipY = bounds.getBottom() - 1;
 
         Path tail;
-        tail.startNewSubPath(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
+        tail.startNewSubPath(static_cast<float>(tailTipX - (kAutomaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
         tail.lineTo(static_cast<float>(tailTipX), static_cast<float>(tailTipY));
-        tail.lineTo(static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
+        tail.lineTo(static_cast<float>(tailTipX + (kAutomaticSwitchingTooltipTailWidth / 2)), static_cast<float>(tailBaseY));
         tail.closeSubPath();
 
         g.setColour(findColour(TooltipWindow::backgroundColourId));
@@ -652,21 +675,21 @@ void FxTheme::drawTooltip(Graphics& g, const String& text, int width, int height
         g.setColour(bubbleOutlineColour);
         g.drawRoundedRectangle(bubbleBounds.toFloat().reduced(0.5f, 0.5f), cornerSize, 1.0f);
         g.setColour(findColour(TooltipWindow::backgroundColourId));
-        g.drawLine(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2) + 1),
+        g.drawLine(static_cast<float>(tailTipX - (kAutomaticSwitchingTooltipTailWidth / 2) + 1),
             static_cast<float>(tailBaseY),
-            static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2) - 1),
+            static_cast<float>(tailTipX + (kAutomaticSwitchingTooltipTailWidth / 2) - 1),
             static_cast<float>(tailBaseY),
             2.0f);
 
         g.setColour(bubbleOutlineColour);
-        g.drawLine(static_cast<float>(tailTipX - (automaticSwitchingTooltipTailWidth / 2)),
+        g.drawLine(static_cast<float>(tailTipX - (kAutomaticSwitchingTooltipTailWidth / 2)),
             static_cast<float>(tailBaseY),
             static_cast<float>(tailTipX),
             static_cast<float>(tailTipY),
             1.0f);
         g.drawLine(static_cast<float>(tailTipX),
             static_cast<float>(tailTipY),
-            static_cast<float>(tailTipX + (automaticSwitchingTooltipTailWidth / 2)),
+            static_cast<float>(tailTipX + (kAutomaticSwitchingTooltipTailWidth / 2)),
             static_cast<float>(tailBaseY),
             1.0f);
 

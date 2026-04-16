@@ -338,7 +338,8 @@ private:
 	void autoSavePreset(int preset_index);
 	void deleteAutoSavedPreset(const String& preset_name);
 
-	void powerOn(bool on);
+	void applyPoweredOnBackendState();
+	void applyPoweredOffBackendState();
 
 	void registerHotkeys();
 	void unregisterHotkeys();
