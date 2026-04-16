@@ -898,17 +898,35 @@ RestoreDefaultPlaybackDeviceResult FxController::bestEffortRestoreDefaultPlaybac
 void FxController::setPowerState(bool power_state)
 {
 	FxModel::getModel().setPowerState(power_state);
-	powerOn(power_state);
+
+	if (!power_state && audio_passthru_ != nullptr)
+	{
+		// Stop DSP first so newly captured audio is already bypassed while the default device reroutes.
+		audio_passthru_->setDspProcessingEnabled(false);
+	}
+
+	if (power_state)
+	{
+		powerOn(true);
+	}
+	else
+	{
+		dfx_dsp_.powerOn(false);
+
+		if (isTimerRunning())
+		{
+			stopTimer();
+		}
+
+		bestEffortRestoreDefaultPlaybackDevice();
+	}
+
 	settings_.setBool("power", power_state);
 
 	if (!power_state)
 	{
 		audio_signal_counters_ = {};
 		audio_process_on_ = false;
-		if (audio_passthru_ != nullptr)
-		{
-			audio_passthru_->setDspProcessingEnabled(false);
-		}
 		applyMasterPowerUiState(false, false);
 		return;
 	}
@@ -916,6 +934,7 @@ void FxController::setPowerState(bool power_state)
 	applyMasterPowerUiState(true, audio_process_on_);
 	if (audio_passthru_ != nullptr)
 	{
+		audio_passthru_->mute(!playback_device_available_);
 		const auto snapshot = createAudioPipelineSnapshot(0);
 		updateAudioSignalCounters(snapshot);
 		syncAudioProcessingState(snapshot);
