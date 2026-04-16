@@ -75,6 +75,32 @@ constexpr int kSettingsDialogNavigationButtonHeight = 30;
 std::atomic<bool> gNavigationWidthCacheStarted{ false };
 std::atomic<int> gCachedNavigationWidth{ 0 };
 
+struct NavigationWidthCacheState
+{
+	int width = kSettingsDialogNavigationMinWidth;
+	bool ready = false;
+};
+
+NavigationWidthCacheState getNavigationWidthCacheState()
+{
+	const auto cached_width = gCachedNavigationWidth.load(std::memory_order_acquire);
+	return {
+		cached_width > 0 ? cached_width : kSettingsDialogNavigationMinWidth,
+		cached_width > 0
+	};
+}
+
+bool beginNavigationWidthCacheWarmup()
+{
+	bool expected = false;
+	return gNavigationWidthCacheStarted.compare_exchange_strong(expected, true);
+}
+
+void cacheNavigationWidth(int width)
+{
+	gCachedNavigationWidth.store(width, std::memory_order_release);
+}
+
 int measureTextWidth(const Font& font, const String& text, int padding = 0)
 {
 	return font.getStringWidth(text) + padding;
@@ -136,6 +162,13 @@ int computeMaximumNavigationWidth(int min_width, int button_height)
 
 	return FxSound::SettingsDialogLayoutPolicy::getPreferredNavigationWidth(min_width, widest_button_widths);
 }
+
+void computeAndCacheMaximumNavigationWidth()
+{
+	cacheNavigationWidth(computeMaximumNavigationWidth(
+		kSettingsDialogNavigationMinWidth,
+		kSettingsDialogNavigationButtonHeight));
+}
 }
 
 FxSettingsDialog::FxSettingsDialog() : FxWindow("Settings"), tooltip_window_(this)
@@ -160,17 +193,13 @@ FxSettingsDialog::~FxSettingsDialog()
 
 void FxSettingsDialog::warmNavigationWidthCacheAsync()
 {
-	bool expected = false;
-	if (!gNavigationWidthCacheStarted.compare_exchange_strong(expected, true))
+	if (!beginNavigationWidthCacheWarmup())
 	{
 		return;
 	}
 
 	std::thread([]() {
-		auto cached_width = computeMaximumNavigationWidth(
-			kSettingsDialogNavigationMinWidth,
-			kSettingsDialogNavigationButtonHeight);
-		gCachedNavigationWidth.store(cached_width, std::memory_order_release);
+		computeAndCacheMaximumNavigationWidth();
 	}).detach();
 }
 
@@ -275,7 +304,7 @@ FxSettingsDialog::SettingsComponent::SettingsComponent()
 	showPane(PaneId::Audio);
 	updateWindowSize();
 
-	if (gCachedNavigationWidth.load(std::memory_order_acquire) <= 0)
+	if (!getNavigationWidthCacheState().ready)
 	{
 		startTimerHz(20);
 	}
@@ -344,14 +373,7 @@ void FxSettingsDialog::SettingsComponent::lookAndFeelChanged()
 
 void FxSettingsDialog::SettingsComponent::refreshWindowSize()
 {
-	updateWindowSize();
-	resized();
-	repaint();
-
-	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
-	{
-		dialog->repaint();
-	}
+	refreshLayout(true);
 }
 
 void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
@@ -373,8 +395,7 @@ FxSettingsDialog::SettingsPane& FxSettingsDialog::SettingsComponent::getActivePa
 
 int FxSettingsDialog::SettingsComponent::getNavigationPreferredWidth() const
 {
-	const auto cached_width = gCachedNavigationWidth.load(std::memory_order_acquire);
-	return cached_width > 0 ? cached_width : BUTTON_MIN_WIDTH;
+	return juce::jmax(BUTTON_MIN_WIDTH, getNavigationWidthCacheState().width);
 }
 
 int FxSettingsDialog::SettingsComponent::getPaneChromeWidth() const
@@ -404,13 +425,7 @@ int FxSettingsDialog::SettingsComponent::getMaximumWidth() const
 
 void FxSettingsDialog::SettingsComponent::timerCallback()
 {
-	if (gCachedNavigationWidth.load(std::memory_order_acquire) <= 0)
-	{
-		return;
-	}
-
-	stopTimer();
-	refreshWindowSize();
+	applyCachedNavigationWidthIfReady();
 }
 
 void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
@@ -430,18 +445,53 @@ void FxSettingsDialog::SettingsComponent::showPane(PaneId active_pane)
 
 void FxSettingsDialog::SettingsComponent::updateWindowSize()
 {
-	auto preferred_width = getPreferredWidth();
-	auto preferred_height = getPreferredHeight();
-	if (!FxSound::SettingsDialogLayoutPolicy::shouldResizeWindow(getWidth(), getHeight(), preferred_width, preferred_height))
+	refreshLayout(false);
+}
+
+bool FxSettingsDialog::SettingsComponent::applyCachedNavigationWidthIfReady()
+{
+	if (!getNavigationWidthCacheState().ready)
 	{
-		return;
+		return false;
 	}
 
-	setSize(preferred_width, preferred_height);
+	stopTimer();
+	refreshWindowSize();
+	return true;
+}
+
+void FxSettingsDialog::SettingsComponent::repaintDialogChrome()
+{
+	repaint();
 
 	if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
 	{
-		dialog->setContent(this);
+		dialog->repaint();
+	}
+}
+
+void FxSettingsDialog::SettingsComponent::refreshLayout(bool force_child_layout)
+{
+	const auto refresh_plan = FxSound::SettingsDialogLayoutPolicy::makeWindowRefreshPlan(
+		getWidth(),
+		getHeight(),
+		getPreferredWidth(),
+		getPreferredHeight());
+
+	if (refresh_plan.should_resize)
+	{
+		setSize(refresh_plan.target_width, refresh_plan.target_height);
+
+		if (auto* dialog = findParentComponentOfClass<FxSettingsDialog>())
+		{
+			dialog->setContent(this);
+		}
+	}
+
+	if (force_child_layout || refresh_plan.should_resize)
+	{
+		resized();
+		repaintDialogChrome();
 	}
 }
 

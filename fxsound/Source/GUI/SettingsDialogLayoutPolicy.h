@@ -22,6 +22,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace FxSound::SettingsDialogLayoutPolicy
 {
+	struct WindowRefreshPlan
+	{
+		int target_width = 0;
+		int target_height = 0;
+		bool should_resize = false;
+	};
+
 	inline int getPreferredNavigationWidth(int min_width, int widest_button_width)
 	{
 		return widest_button_width >= min_width ? widest_button_width : min_width;
@@ -121,5 +128,10 @@ namespace FxSound::SettingsDialogLayoutPolicy
 	inline bool shouldResizeWindow(int current_width, int current_height, int target_width, int target_height)
 	{
 		return current_width != target_width || current_height != target_height;
+	}
+
+	inline WindowRefreshPlan makeWindowRefreshPlan(int current_width, int current_height, int target_width, int target_height)
+	{
+		return { target_width, target_height, shouldResizeWindow(current_width, current_height, target_width, target_height) };
 	}
 }

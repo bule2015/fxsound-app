@@ -1107,6 +1107,21 @@ void testSettingsDialogLayoutSkipsRedundantResize()
 		"settings dialog layout should resize when the active pane height changes");
 }
 
+void testSettingsDialogLayoutBuildsWindowRefreshPlan()
+{
+	const auto unchanged_plan = FxSound::SettingsDialogLayoutPolicy::makeWindowRefreshPlan(600, 180, 600, 180);
+	expect(!unchanged_plan.should_resize,
+		"settings dialog layout refresh plan should skip unchanged window sizes");
+	expect(unchanged_plan.target_width == 600 && unchanged_plan.target_height == 180,
+		"settings dialog layout refresh plan should preserve unchanged target size");
+
+	const auto resized_plan = FxSound::SettingsDialogLayoutPolicy::makeWindowRefreshPlan(600, 180, 720, 240);
+	expect(resized_plan.should_resize,
+		"settings dialog layout refresh plan should request resizing when either dimension changes");
+	expect(resized_plan.target_width == 720 && resized_plan.target_height == 240,
+		"settings dialog layout refresh plan should report the requested target size");
+}
+
 void testLanguageLayoutUsesLongestLocalizedLabelWidth()
 {
 	const std::vector<int> measured_label_widths { 68, 84, 112 };
@@ -1607,7 +1622,7 @@ void testMergeOutputPrioritiesRefreshesReconnectedIds()
 	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the stored endpoint id for the known output");
 }
 
-void testMergeOutputPrioritiesMatchesRenamedDeviceByContainer()
+void testMergeOutputPrioritiesKeepsSameContainerSiblingSeparate()
 {
 	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> existing_priorities {
 		{L"dac-old", L"USB DAC", L"c-dac"}
@@ -1618,10 +1633,11 @@ void testMergeOutputPrioritiesMatchesRenamedDeviceByContainer()
 
 	auto merge_result = FxSound::OutputDeviceSelection::mergeOutputPriorities(existing_priorities, sound_devices);
 
-	expect(merge_result.changed, "merge should report changes when a device reconnects with a renamed endpoint");
-	expect(merge_result.priorities.size() == 1, "merge should keep the existing priority entry when only the endpoint name changes");
-	expect(merge_result.priorities[0].device_id == L"dac-new", "merge should refresh the endpoint id when matching by container id");
-	expect(merge_result.priorities[0].device_name == L"USB DAC 2", "merge should refresh the stored name for the renamed device");
+	expect(merge_result.changed, "merge should report changes when a same-container sibling endpoint appears");
+	expect(merge_result.priorities.size() == 2, "merge should keep the original priority entry and append the sibling endpoint separately");
+	expect(merge_result.priorities[0].device_id == L"dac-old", "merge should preserve the original priority entry when the friendly name no longer matches");
+	expect(merge_result.priorities[1].device_id == L"dac-new", "merge should append the same-container sibling endpoint as a separate entry");
+	expect(merge_result.priorities[1].device_name == L"USB DAC 2", "merge should keep the sibling endpoint name on the appended entry");
 }
 
 void testMergeOutputPrioritiesDropsKnownMonoOutputs()
@@ -1642,6 +1658,21 @@ void testMergeOutputPrioritiesDropsKnownMonoOutputs()
 	expect(merge_result.changed, "merge should report changes when a known mono output is removed from priorities");
 	expect(merge_result.priorities.size() == 1, "merge should drop known mono outputs from priorities");
 	expect(merge_result.priorities[0].device_id == L"spk", "merge should keep stereo priorities after dropping mono outputs");
+}
+
+void testGetOutputDevicePriorityRejectsSameContainerSibling()
+{
+	std::vector<FxSound::OutputDeviceSelection::PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	auto sibling_output = makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac");
+
+	const auto priority = FxSound::OutputDeviceSelection::getOutputDevicePriority(priorities, sibling_output);
+
+	expect(priority == static_cast<int>(priorities.size()),
+		"priority lookup should not collapse a same-container sibling endpoint onto an existing priority entry");
 }
 
 void testAreSameOutputDeviceMatchesReconnectedEndpoint()
@@ -2770,6 +2801,7 @@ int main()
 		runTest("settings dialog layout applies minimum height floor", testSettingsDialogLayoutAppliesMinimumHeightFloor);
 		runTest("settings dialog layout falls back for invalid pane height index", testSettingsDialogLayoutFallsBackForInvalidPaneHeightIndex);
 		runTest("settings dialog layout skips redundant resize", testSettingsDialogLayoutSkipsRedundantResize);
+		runTest("settings dialog layout builds window refresh plans", testSettingsDialogLayoutBuildsWindowRefreshPlan);
 		runTest("language layout uses longest localized label width", testLanguageLayoutUsesLongestLocalizedLabelWidth);
 		runTest("language layout applies minimum width floor", testLanguageLayoutAppliesMinimumWidthFloor);
 		runTest("general settings layout tracks localized visible content widths", testGeneralSettingsLayoutTracksLocalizedVisibleContentWidths);
@@ -2802,8 +2834,9 @@ int main()
 		runTest("merge output priorities appends new outputs", testMergeOutputPrioritiesAppendsNewOutputs);
 		runTest("merge output priorities appends multiple new outputs", testMergeOutputPrioritiesAppendsMultipleNewOutputs);
 		runTest("merge output priorities refreshes reconnected ids", testMergeOutputPrioritiesRefreshesReconnectedIds);
-		runTest("merge output priorities matches renamed device by container", testMergeOutputPrioritiesMatchesRenamedDeviceByContainer);
+		runTest("merge output priorities keeps same-container sibling separate", testMergeOutputPrioritiesKeepsSameContainerSiblingSeparate);
 		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);
+		runTest("output device priority rejects same-container sibling", testGetOutputDevicePriorityRejectsSameContainerSibling);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("stored output identity matches reconnected endpoint", testMatchesStoredOutputIdentityMatchesReconnectedEndpoint);
 		runTest("stored output identity rejects same-container sibling endpoint", testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer);

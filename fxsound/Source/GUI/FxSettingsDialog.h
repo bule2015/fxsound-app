@@ -315,6 +315,9 @@ private:
 		int getNavigationPreferredWidth() const;
 		int getPaneChromeWidth() const;
 		int getMaximumWidth() const;
+		bool applyCachedNavigationWidthIfReady();
+		void repaintDialogChrome();
+		void refreshLayout(bool force_child_layout);
 		void timerCallback() override;
 		void showPane(PaneId active_pane);
 		void updateWindowSize();

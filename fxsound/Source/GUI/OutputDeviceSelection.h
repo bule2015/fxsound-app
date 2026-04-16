@@ -184,13 +184,6 @@ namespace FxSound::OutputDeviceSelection
 			sound_device);
 	}
 
-	inline bool matchesPriorityEntryByContainer(const PriorityEntry& entry, const SoundDevice& sound_device)
-	{
-		return !entry.container_id.empty() &&
-			!sound_device.containerId.empty() &&
-			entry.container_id == sound_device.containerId;
-	}
-
 	// Compares two outputs across reconnects where endpoint ids may change.
 	inline bool areSameOutputDevice(const SoundDevice& lhs, const SoundDevice& rhs)
 	{
@@ -309,14 +302,6 @@ namespace FxSound::OutputDeviceSelection
 			}
 		}
 
-		for (int i = 0; i < static_cast<int>(priorities.size()); ++i)
-		{
-			if (matchesPriorityEntryByContainer(priorities[static_cast<size_t>(i)], sound_device))
-			{
-				return i;
-			}
-		}
-
 		return static_cast<int>(priorities.size());
 	}
 
@@ -375,20 +360,10 @@ namespace FxSound::OutputDeviceSelection
 
 		auto findMatchingEntry = [&result](const SoundDevice& sound_device)
 		{
-			auto exact_match = std::find_if(result.priorities.begin(), result.priorities.end(),
-				[&sound_device](const PriorityEntry& entry)
-				{
-					return matchesPriorityEntryExactly(entry, sound_device);
-				});
-			if (exact_match != result.priorities.end())
-			{
-				return exact_match;
-			}
-
 			return std::find_if(result.priorities.begin(), result.priorities.end(),
 				[&sound_device](const PriorityEntry& entry)
 				{
-					return matchesPriorityEntryByContainer(entry, sound_device);
+					return matchesPriorityEntryExactly(entry, sound_device);
 				});
 		};
 
@@ -398,8 +373,7 @@ namespace FxSound::OutputDeviceSelection
 				[&existing_entry](const SoundDevice& sound_device)
 				{
 					return sound_device.isRealDevice &&
-						(matchesPriorityEntryExactly(existing_entry, sound_device) ||
-						 matchesPriorityEntryByContainer(existing_entry, sound_device));
+						matchesPriorityEntryExactly(existing_entry, sound_device);
 				});
 
 			if (known_device != sound_devices.end() && known_device->deviceNumChannel < 2)
@@ -537,31 +511,49 @@ namespace FxSound::OutputDeviceSelection
 		return {};
 	}
 
+	inline const SoundDevice* findSelectedOutputMatch(const std::vector<SoundDevice>& output_devices, const SoundDevice& selected_output)
+	{
+		if (selected_output.pwszID.empty() && selected_output.deviceFriendlyName.empty())
+		{
+			return nullptr;
+		}
+
+		auto selected_match = std::find_if(output_devices.begin(), output_devices.end(),
+			[&selected_output](const SoundDevice& device)
+			{
+				return areSameOutputDevice(selected_output, device);
+			});
+		return selected_match != output_devices.end() ? &(*selected_match) : nullptr;
+	}
+
+	inline const SoundDevice* findLegacyOutputNameMatch(const std::vector<SoundDevice>& output_devices, const std::wstring& output_name)
+	{
+		if (output_name.empty())
+		{
+			return nullptr;
+		}
+
+		auto name_match = std::find_if(output_devices.begin(), output_devices.end(),
+			[&output_name](const SoundDevice& device)
+			{
+				return device.deviceFriendlyName == output_name;
+			});
+		return name_match != output_devices.end() ? &(*name_match) : nullptr;
+	}
+
 	// Resolves the best output candidate by checking the explicit selection first,
 	// then the last stored name, then the configured priority order.
 	inline SoundDevice resolveSelectedOutput(const std::vector<SoundDevice>& output_devices,
 		const OutputResolutionContext& context)
 	{
-		if (!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty())
+		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
 		{
-			for (const auto& device : output_devices)
-			{
-				if (areSameOutputDevice(context.selected_output, device))
-				{
-					return device;
-				}
-			}
+			return *selected_match;
 		}
 
-		if (!context.output_name.empty())
+		if (const auto* name_match = findLegacyOutputNameMatch(output_devices, context.output_name))
 		{
-			for (const auto& device : output_devices)
-			{
-				if (device.deviceFriendlyName == context.output_name)
-				{
-					return device;
-				}
-			}
+			return *name_match;
 		}
 
 		return getPreferredOutput(output_devices, context.priorities);
@@ -625,21 +617,15 @@ namespace FxSound::OutputDeviceSelection
 		InitDecision decision;
 		decision.resolved_output = findDefaultProcessingOutput(sound_devices);
 
-		if (!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty())
+		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
 		{
-			for (const auto& output_device : output_devices)
-			{
-				if (areSameOutputDevice(context.selected_output, output_device))
-				{
-					decision.resolved_output = output_device;
-					break;
-				}
-			}
-
-			if (decision.resolved_output.pwszID.empty() && context.selected_output.deviceNumChannel >= 2)
-			{
-				decision.resolved_output = context.selected_output;
-			}
+			decision.resolved_output = *selected_match;
+		}
+		else if (decision.resolved_output.pwszID.empty() &&
+			(!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty()) &&
+			context.selected_output.deviceNumChannel >= 2)
+		{
+			decision.resolved_output = context.selected_output;
 		}
 
 		if (decision.resolved_output.pwszID.empty() && !output_devices.empty())
