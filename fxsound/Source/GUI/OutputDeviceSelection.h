@@ -527,16 +527,6 @@ namespace FxSound::OutputDeviceSelection
 			{
 				return *exact_match;
 			}
-
-			auto container_match = std::find_if(output_devices.begin(), output_devices.end(),
-				[&priority](const SoundDevice& device)
-				{
-					return matchesPriorityEntryByContainer(priority, device);
-				});
-			if (container_match != output_devices.end())
-			{
-				return *container_match;
-			}
 		}
 
 		if (!output_devices.empty())

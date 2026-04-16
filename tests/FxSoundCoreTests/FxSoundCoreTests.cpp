@@ -1676,11 +1676,11 @@ void testGetPreferredOutputUsesConfiguredPriority()
 	expect(preferred_output.pwszID == L"hdmi", "preferred output should follow configured priority");
 }
 
-void testGetPreferredOutputFallsBackToContainerWhenNameChanges()
+void testGetPreferredOutputMatchesReconnectedEndpoint()
 {
 	std::vector<SoundDevice> output_devices {
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
-		makeOutput(L"dac-new", L"USB DAC 2", L"USB Audio", true, false, true, L"c-dac")
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac")
 	};
 	std::vector<PriorityEntry> priorities {
 		{L"dac-old", L"USB DAC", L"c-dac"},
@@ -1689,7 +1689,23 @@ void testGetPreferredOutputFallsBackToContainerWhenNameChanges()
 
 	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
 
-	expect(preferred_output.pwszID == L"dac-new", "preferred output should keep following the same container when the friendly name changes");
+	expect(preferred_output.pwszID == L"dac-new", "preferred output should follow the reconnected endpoint when the friendly name still matches");
+}
+
+void testGetPreferredOutputRejectsSiblingEndpointWithDifferentName()
+{
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, true, L"c-dac")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
+
+	expect(preferred_output.pwszID == L"spk", "preferred output should not collapse sibling endpoints that only share a container id");
 }
 
 void testShouldIgnoreDeviceChangeForUnselectedActiveDevice()
@@ -2649,7 +2665,8 @@ int main()
 		runTest("stored output identity rejects same-container sibling endpoint", testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
-		runTest("preferred output falls back to container when name changes", testGetPreferredOutputFallsBackToContainerWhenNameChanges);
+		runTest("preferred output matches reconnected endpoint", testGetPreferredOutputMatchesReconnectedEndpoint);
+		runTest("preferred output rejects same-container sibling endpoint", testGetPreferredOutputRejectsSiblingEndpointWithDifferentName);
 		runTest("ignore device change for unselected active device", testShouldIgnoreDeviceChangeForUnselectedActiveDevice);
 		runTest("do not ignore added output when prioritizing new outputs", testShouldNotIgnoreAddedOutputWhenPrioritizingNewOutputs);
 		runTest("do not ignore device change for selected output", testShouldNotIgnoreDeviceChangeForSelectedOutput);
