@@ -153,21 +153,11 @@ void notifyPlaybackUnavailable(IAudioPassthru& audio_passthru,
 // id churn across reconnects.
 bool matchesConfiguredOutput(const DeviceConfig& device_config, const SoundDevice& sound_device)
 {
-	if (!device_config.device_id.isEmpty() &&
-		device_config.device_id == sound_device.pwszID.c_str())
-	{
-		return true;
-	}
-
-	if (!device_config.container_id.isEmpty() &&
-		!sound_device.containerId.empty() &&
-		device_config.container_id == sound_device.containerId.c_str())
-	{
-		return true;
-	}
-
-	return device_config.container_id.isEmpty() &&
-		device_config.device_name == sound_device.deviceFriendlyName.c_str();
+	return FxSound::OutputDeviceSelection::matchesStoredOutputIdentity(
+		std::wstring_view(device_config.device_id.toWideCharPointer()),
+		std::wstring_view(device_config.device_name.toWideCharPointer()),
+		std::wstring_view(device_config.container_id.toWideCharPointer()),
+		sound_device);
 }
 }
 

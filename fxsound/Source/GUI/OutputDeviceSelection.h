@@ -198,6 +198,34 @@ namespace FxSound::OutputDeviceSelection
 			lhs.deviceDescription == rhs.deviceDescription;
 	}
 
+	// Matches a persisted output identity against a live output while avoiding
+	// collapsing distinct endpoints that share only a container id.
+	inline bool matchesStoredOutputIdentity(const std::wstring_view stored_device_id,
+		const std::wstring_view stored_device_name,
+		const std::wstring_view stored_container_id,
+		const SoundDevice& sound_device)
+	{
+		if (!stored_device_id.empty() && stored_device_id == sound_device.pwszID)
+		{
+			return true;
+		}
+
+		if (!stored_container_id.empty() &&
+			!sound_device.containerId.empty() &&
+			stored_container_id == sound_device.containerId &&
+			!stored_device_name.empty() &&
+			!sound_device.deviceFriendlyName.empty() &&
+			stored_device_name == sound_device.deviceFriendlyName)
+		{
+			return true;
+		}
+
+		return stored_container_id.empty() &&
+			!stored_device_name.empty() &&
+			!sound_device.deviceFriendlyName.empty() &&
+			stored_device_name == sound_device.deviceFriendlyName;
+	}
+
 	// Used by output preferences to decide whether a preset change belongs to the
 	// currently selected output and should therefore be applied immediately.
 	struct PresetApplyIdentity

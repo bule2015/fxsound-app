@@ -1622,6 +1622,30 @@ void testAreSameOutputDeviceMatchesReconnectedEndpoint()
 		"container id and friendly name should match reconnected output");
 }
 
+void testMatchesStoredOutputIdentityMatchesReconnectedEndpoint()
+{
+	auto reconnected_output = makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac");
+
+	expect(FxSound::OutputDeviceSelection::matchesStoredOutputIdentity(
+		L"dac-old",
+		L"USB DAC",
+		L"c-dac",
+		reconnected_output),
+		"stored output identity should match a reconnected endpoint by container id and friendly name");
+}
+
+void testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer()
+{
+	auto sibling_output = makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac");
+
+	expect(!FxSound::OutputDeviceSelection::matchesStoredOutputIdentity(
+		L"dac-old",
+		L"USB DAC",
+		L"c-dac",
+		sibling_output),
+		"stored output identity should not collapse different endpoint names that share a container id");
+}
+
 void testResolveSelectedOutputReturnsReconnectedDevice()
 {
 	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -2625,6 +2649,8 @@ int main()
 		runTest("merge output priorities matches renamed device by container", testMergeOutputPrioritiesMatchesRenamedDeviceByContainer);
 		runTest("merge output priorities drops known mono outputs", testMergeOutputPrioritiesDropsKnownMonoOutputs);
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
+		runTest("stored output identity matches reconnected endpoint", testMatchesStoredOutputIdentityMatchesReconnectedEndpoint);
+		runTest("stored output identity rejects same-container sibling endpoint", testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
 		runTest("preferred output falls back to container when name changes", testGetPreferredOutputFallsBackToContainerWhenNameChanges);
