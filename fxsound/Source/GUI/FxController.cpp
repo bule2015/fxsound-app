@@ -326,6 +326,7 @@ FxController::FxController() : message_window_(L"FxSoundHotkeys", (WNDPROC) even
 		registerHotkeys();
 	}
 	FxModel::getModel().setMenuClicked(settings_.getBool("menu_clicked"));
+	FxSettingsDialog::warmNavigationWidthCacheAsync();
 
 	always_on_top_ = settings_.getBool("always_on_top");
     hide_help_tooltips_ = settings_.getBool("hide_help_tooltips");

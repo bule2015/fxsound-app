@@ -22,6 +22,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace FxSound::SettingsDialogLayoutPolicy
 {
+	inline int getPreferredNavigationWidth(int min_width, int widest_button_width)
+	{
+		return widest_button_width >= min_width ? widest_button_width : min_width;
+	}
+
+	template <size_t NumWidths>
+	inline int getPreferredNavigationWidth(int min_width, const std::array<int, NumWidths>& button_widths)
+	{
+		auto widest_button_width = min_width;
+		for (auto button_width : button_widths)
+		{
+			widest_button_width = button_width >= widest_button_width ? button_width : widest_button_width;
+		}
+
+		return widest_button_width;
+	}
+
+	inline int getPaneChromeWidth(int navigation_left_margin, int navigation_width, int separator_gap)
+	{
+		return navigation_left_margin + navigation_width + separator_gap - 1;
+	}
+
 	inline int clampWidth(int preferred_width, int min_width, int max_width)
 	{
 		if (max_width < min_width)

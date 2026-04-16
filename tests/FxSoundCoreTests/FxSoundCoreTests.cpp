@@ -974,6 +974,26 @@ void testSettingsDialogLayoutUsesActivePaneWidth()
 		"settings dialog layout should use the active pane width");
 }
 
+void testSettingsDialogLayoutUsesMeasuredNavigationWidth()
+{
+	const auto preferred_navigation_width = FxSound::SettingsDialogLayoutPolicy::getPreferredNavigationWidth(
+		120,
+		std::array<int, 4>{ 168, 186, 172, 160 });
+
+	expect(preferred_navigation_width == 186,
+		"settings dialog layout should expand the navigation width to fit the widest localized button");
+}
+
+void testSettingsDialogLayoutKeepsMinimumNavigationWidth()
+{
+	const auto preferred_navigation_width = FxSound::SettingsDialogLayoutPolicy::getPreferredNavigationWidth(
+		120,
+		96);
+
+	expect(preferred_navigation_width == 120,
+		"settings dialog layout should preserve the minimum navigation width floor");
+}
+
 void testSettingsDialogLayoutFallsBackForInvalidPaneWidthIndex()
 {
 	const auto preferred_width = FxSound::SettingsDialogLayoutPolicy::getPreferredWidth(
@@ -995,6 +1015,17 @@ void testSettingsDialogLayoutAddsPaneChromeToWindowWidth()
 
 	expect(preferred_window_width == 911,
 		"settings dialog layout should add the settings sidebar width to the active pane width");
+}
+
+void testSettingsDialogLayoutComputesPaneChromeWidthFromNavigationWidth()
+{
+	const auto pane_chrome_width = FxSound::SettingsDialogLayoutPolicy::getPaneChromeWidth(
+		20,
+		120,
+		12);
+
+	expect(pane_chrome_width == 151,
+		"settings dialog layout should compute pane chrome width from the navigation bounds");
 }
 
 void testSettingsDialogLayoutClampWidthHandlesInvertedRange()
@@ -2726,8 +2757,11 @@ int main()
 		runTest("startup option policy finds exact output latency flag", testStartupOptionPolicyFindsExactOutputLatencyFlag);
 		runTest("startup option policy ignores similar output latency flags", testStartupOptionPolicyIgnoresSimilarOutputLatencyFlags);
 		runTest("settings dialog layout uses active pane width", testSettingsDialogLayoutUsesActivePaneWidth);
+		runTest("settings dialog layout uses measured navigation width", testSettingsDialogLayoutUsesMeasuredNavigationWidth);
+		runTest("settings dialog layout keeps minimum navigation width", testSettingsDialogLayoutKeepsMinimumNavigationWidth);
 		runTest("settings dialog layout falls back for invalid pane width index", testSettingsDialogLayoutFallsBackForInvalidPaneWidthIndex);
 		runTest("settings dialog layout adds pane chrome to window width", testSettingsDialogLayoutAddsPaneChromeToWindowWidth);
+		runTest("settings dialog layout computes pane chrome width", testSettingsDialogLayoutComputesPaneChromeWidthFromNavigationWidth);
 		runTest("settings dialog layout handles inverted clamp range", testSettingsDialogLayoutClampWidthHandlesInvertedRange);
 		runTest("settings dialog layout applies minimum width floor", testSettingsDialogLayoutAppliesMinimumWidthFloor);
 		runTest("settings dialog layout applies minimum window width floor", testSettingsDialogLayoutAppliesMinimumWindowWidthFloor);

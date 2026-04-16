@@ -43,6 +43,8 @@ public:
     FxSettingsDialog();
     ~FxSettingsDialog();
 
+	static void warmNavigationWidthCacheAsync();
+
 	void closeButtonPressed() override;
 
 	void paint(Graphics& g) override;
@@ -50,8 +52,6 @@ public:
 	bool keyPressed(const KeyPress& key) override;	
 
 private:
-	static constexpr int SEPARATOR_X = 152;
-
 	class SettingsButton : public Button
 	{
 	public:
@@ -290,6 +290,7 @@ private:
 
 		int getPreferredWidth() const;
 		int getPreferredHeight() const;
+		int getSeparatorX() const;
 		void resized() override;
 		void lookAndFeelChanged() override;
 		void refreshWindowSize();
@@ -299,9 +300,9 @@ private:
 	private:
 		static constexpr int BUTTON_X = 20;
 		static constexpr int BUTTON_Y = 50;
-		static constexpr int BUTTON_WIDTH = 150;
+		static constexpr int BUTTON_MIN_WIDTH = 120;
 		static constexpr int BUTTON_HEIGHT = 40;
-		static constexpr int SEPARATOR_X = 152;
+		static constexpr int NAVIGATION_RIGHT_GAP = 12;
 		static constexpr int WINDOW_WIDTH_MARGIN = 32;
 
 		struct PaneEntry
@@ -311,6 +312,8 @@ private:
 		};
 
 		SettingsPane& getActivePane() const;
+		int getNavigationPreferredWidth() const;
+		int getPaneChromeWidth() const;
 		int getMaximumWidth() const;
 		void showPane(PaneId active_pane);
 		void updateWindowSize();

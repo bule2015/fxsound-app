@@ -17,6 +17,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <JuceHeader.h>
+#include <atomic>
+#include <thread>
 #include "FxSettingsDialog.h"
 #include "GeneralSettingsLayoutPolicy.h"
 #include "SettingsDialogLayoutPolicy.h"
@@ -24,6 +26,55 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace
 {
+struct TranslationAsset
+{
+	const char* language_code;
+	const char* data;
+	int data_size;
+};
+
+constexpr std::array<const char*, 28> kSupportedSettingsDialogLanguages = {
+	"en", "ar", "ba", "hr", "de", "es", "fr", "hu", "id", "it",
+	"ja", "ko", "nl", "no", "fa", "pl", "pt", "pt-br", "ro", "ru",
+	"sl", "sv", "th", "tr", "ua", "vi", "zh-CN", "zh-TW"
+};
+
+const std::array<TranslationAsset, 27> kTranslationAssets = {{
+	{ "ar", BinaryData::FxSound_ar_txt, BinaryData::FxSound_ar_txtSize },
+	{ "ba", BinaryData::FxSound_ba_txt, BinaryData::FxSound_ba_txtSize },
+	{ "de", BinaryData::FxSound_de_txt, BinaryData::FxSound_de_txtSize },
+	{ "es", BinaryData::FxSound_es_txt, BinaryData::FxSound_es_txtSize },
+	{ "fr", BinaryData::FxSound_fr_txt, BinaryData::FxSound_fr_txtSize },
+	{ "hr", BinaryData::FxSound_hr_txt, BinaryData::FxSound_hr_txtSize },
+	{ "hu", BinaryData::fxsound_hu_txt, BinaryData::fxsound_hu_txtSize },
+	{ "id", BinaryData::FxSound_id_txt, BinaryData::FxSound_id_txtSize },
+	{ "it", BinaryData::FxSound_it_txt, BinaryData::FxSound_it_txtSize },
+	{ "ja", BinaryData::FxSound_ja_txt, BinaryData::FxSound_ja_txtSize },
+	{ "ko", BinaryData::FxSound_ko_txt, BinaryData::FxSound_ko_txtSize },
+	{ "nl", BinaryData::FxSound_nl_txt, BinaryData::FxSound_nl_txtSize },
+	{ "no", BinaryData::FxSound_no_txt, BinaryData::FxSound_no_txtSize },
+	{ "fa", BinaryData::FxSound_ir_txt, BinaryData::FxSound_ir_txtSize },
+	{ "pl", BinaryData::FxSound_pl_txt, BinaryData::FxSound_pl_txtSize },
+	{ "pt-br", BinaryData::FxSound_ptbr_txt, BinaryData::FxSound_ptbr_txtSize },
+	{ "pt", BinaryData::FxSound_pt_txt, BinaryData::FxSound_pt_txtSize },
+	{ "ro", BinaryData::FxSound_ro_txt, BinaryData::FxSound_ro_txtSize },
+	{ "ru", BinaryData::FxSound_ru_txt, BinaryData::FxSound_ru_txtSize },
+	{ "sl", BinaryData::FxSound_sl_txt, BinaryData::FxSound_sl_txtSize },
+	{ "sv", BinaryData::FxSound_sv_txt, BinaryData::FxSound_sv_txtSize },
+	{ "th", BinaryData::FxSound_th_txt, BinaryData::FxSound_th_txtSize },
+	{ "tr", BinaryData::FxSound_tr_txt, BinaryData::FxSound_tr_txtSize },
+	{ "ua", BinaryData::FxSound_ua_txt, BinaryData::FxSound_ua_txtSize },
+	{ "vi", BinaryData::FxSound_vi_txt, BinaryData::FxSound_vi_txtSize },
+	{ "zh-CN", BinaryData::FxSound_zhCN_txt, BinaryData::FxSound_zhCN_txtSize },
+	{ "zh-TW", BinaryData::FxSound_zhTW_txt, BinaryData::FxSound_zhTW_txtSize }
+}};
+
+constexpr int kSettingsDialogNavigationMinWidth = 120;
+constexpr int kSettingsDialogNavigationButtonHeight = 30;
+
+std::atomic<bool> gNavigationWidthCacheStarted{ false };
+std::atomic<int> gCachedNavigationWidth{ 0 };
+
 int measureTextWidth(const Font& font, const String& text, int padding = 0)
 {
 	return font.getStringWidth(text) + padding;
@@ -35,6 +86,55 @@ int getTogglePreferredWidth(const ToggleButton& toggle, int button_height)
 	const auto tick_width = font_size * 1.1f;
 	Font font(font_size);
 	return font.getStringWidth(toggle.getButtonText()) + juce::roundToInt(tick_width) + 14;
+}
+
+std::unique_ptr<LocalisedStrings> createTranslationMappings(String language_code)
+{
+	for (const auto& asset : kTranslationAssets)
+	{
+		if (language_code.startsWithIgnoreCase(asset.language_code))
+		{
+			return std::make_unique<LocalisedStrings>(
+				String::createStringFromData(asset.data, asset.data_size),
+				false);
+		}
+	}
+
+	return nullptr;
+}
+
+String getLocalizedSettingsButtonText(String language_code, String button_name)
+{
+	if (auto mappings = createTranslationMappings(language_code))
+	{
+		return mappings->translate(button_name, button_name);
+	}
+
+	return button_name;
+}
+
+int getSettingsButtonPreferredWidthForLanguage(const String& language_code, const String& button_name, int button_height)
+{
+	auto font = FxTheme::getNormalFontForLanguage(language_code);
+	return button_height + 5 + measureTextWidth(font, getLocalizedSettingsButtonText(language_code, button_name), 12);
+}
+
+int computeMaximumNavigationWidth(int min_width, int button_height)
+{
+	const std::array<String, 4> button_names = { "Audio", "Equalizer", "General", "Help" };
+	std::array<int, 4> widest_button_widths = {};
+
+	for (const auto* language_code : kSupportedSettingsDialogLanguages)
+	{
+		for (size_t index = 0; index < button_names.size(); ++index)
+		{
+			widest_button_widths[index] = juce::jmax(
+				widest_button_widths[index],
+				getSettingsButtonPreferredWidthForLanguage(language_code, button_names[index], button_height));
+		}
+	}
+
+	return FxSound::SettingsDialogLayoutPolicy::getPreferredNavigationWidth(min_width, widest_button_widths);
 }
 }
 
@@ -58,6 +158,22 @@ FxSettingsDialog::~FxSettingsDialog()
 	FxController::getInstance().unregisterSettingsDialog(this);
 }
 
+void FxSettingsDialog::warmNavigationWidthCacheAsync()
+{
+	bool expected = false;
+	if (!gNavigationWidthCacheStarted.compare_exchange_strong(expected, true))
+	{
+		return;
+	}
+
+	std::thread([]() {
+		auto cached_width = computeMaximumNavigationWidth(
+			kSettingsDialogNavigationMinWidth,
+			kSettingsDialogNavigationButtonHeight);
+		gCachedNavigationWidth.store(cached_width, std::memory_order_release);
+	}).detach();
+}
+
 void FxSettingsDialog::closeButtonPressed()
 {
 	exitModalState(0);
@@ -69,7 +185,8 @@ void FxSettingsDialog::paint(Graphics& g)
 	FxWindow::paint(g);
 
 	g.setColour(Colour(FXCOLOR(Outline)).withAlpha(1.0f));
-	g.drawLine((float)SEPARATOR_X, (float)title_bar_.getBottom(), (float)SEPARATOR_X, (float)getLocalBounds().getBottom());
+	auto separator_x = settings_content_.getSeparatorX();
+	g.drawLine((float)separator_x, (float)title_bar_.getBottom(), (float)separator_x, (float)getLocalBounds().getBottom());
 }
 
 void FxSettingsDialog::SettingsButton::paint(Graphics& g)
@@ -164,7 +281,7 @@ int FxSettingsDialog::SettingsComponent::getPreferredWidth() const
 	return FxSound::SettingsDialogLayoutPolicy::getClampedPreferredWindowWidth(
 		MIN_WIDTH,
 		getMaximumWidth(),
-		SEPARATOR_X - 1,
+		getPaneChromeWidth(),
 		getActivePane().getPreferredWidth());
 }
 
@@ -175,16 +292,23 @@ int FxSettingsDialog::SettingsComponent::getPreferredHeight() const
 		getActivePane().getPreferredHeight());
 }
 
+int FxSettingsDialog::SettingsComponent::getSeparatorX() const
+{
+	return BUTTON_X + getNavigationPreferredWidth() + NAVIGATION_RIGHT_GAP;
+}
+
 void FxSettingsDialog::SettingsComponent::resized()
 {
+	auto navigation_width = getNavigationPreferredWidth();
 	auto y = BUTTON_Y;
 	for (const auto& entry : pane_entries_)
 	{
-		entry.button->setBounds(BUTTON_X, y, BUTTON_WIDTH, BUTTON_HEIGHT);
+		entry.button->setBounds(BUTTON_X, y, navigation_width, BUTTON_HEIGHT);
 		y += BUTTON_HEIGHT + 20;
 	}
 
-	juce::Rectangle<int> pane_rect(SEPARATOR_X + 1, 1, getWidth() - SEPARATOR_X + 1, getHeight() - 1);
+	auto separator_x = getSeparatorX();
+	juce::Rectangle<int> pane_rect(separator_x + 1, 1, getWidth() - separator_x + 1, getHeight() - 1);
 
 	for (const auto& entry : pane_entries_)
 	{
@@ -233,6 +357,20 @@ void  FxSettingsDialog::SettingsComponent::buttonClicked(Button* button)
 FxSettingsDialog::SettingsPane& FxSettingsDialog::SettingsComponent::getActivePane() const
 {
 	return *pane_entries_[static_cast<size_t>(active_pane_)].pane;
+}
+
+int FxSettingsDialog::SettingsComponent::getNavigationPreferredWidth() const
+{
+	const auto cached_width = gCachedNavigationWidth.load(std::memory_order_acquire);
+	return cached_width > 0 ? cached_width : BUTTON_MIN_WIDTH;
+}
+
+int FxSettingsDialog::SettingsComponent::getPaneChromeWidth() const
+{
+	return FxSound::SettingsDialogLayoutPolicy::getPaneChromeWidth(
+		BUTTON_X,
+		getNavigationPreferredWidth(),
+		NAVIGATION_RIGHT_GAP);
 }
 
 int FxSettingsDialog::SettingsComponent::getMaximumWidth() const
