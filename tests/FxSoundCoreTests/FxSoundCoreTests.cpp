@@ -1642,6 +1642,16 @@ void testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer()
 		"stored output identity should not collapse different endpoint names that share a container id");
 }
 
+void testMatchesStoredOutputIdentityUsesLegacyNameFallbackWithoutContainer()
+{
+	auto legacy_output = makeOutput(L"usb-new", L"USB DAC", L"USB Audio", true, false, false, L"");
+
+	expect(FxSound::OutputDeviceSelection::matchesStoredOutputIdentity(
+		FxSound::OutputDeviceSelection::StoredOutputIdentity { L"", L"USB DAC", L"" },
+		legacy_output),
+		"stored output identity should keep the legacy name-only fallback when no container id is available");
+}
+
 void testResolveSelectedOutputReturnsReconnectedDevice()
 {
 	auto selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -1676,6 +1686,22 @@ void testGetPreferredOutputUsesConfiguredPriority()
 	expect(preferred_output.pwszID == L"hdmi", "preferred output should follow configured priority");
 }
 
+void testGetPreferredOutputUsesLegacyNameFallbackWithoutContainer()
+{
+	std::vector<SoundDevice> output_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"usb-new", L"USB DAC", L"USB Audio", true, false, true, L"")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"", L"USB DAC", L""},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
+
+	expect(preferred_output.pwszID == L"usb-new", "preferred output should keep the legacy name-only fallback when no container id is stored");
+}
+
 void testGetPreferredOutputMatchesReconnectedEndpoint()
 {
 	std::vector<SoundDevice> output_devices {
@@ -1706,6 +1732,53 @@ void testGetPreferredOutputRejectsSiblingEndpointWithDifferentName()
 	auto preferred_output = FxSound::OutputDeviceSelection::getPreferredOutput(output_devices, priorities);
 
 	expect(preferred_output.pwszID == L"spk", "preferred output should not collapse sibling endpoints that only share a container id");
+}
+
+void testDidOutputBecomeAvailableDetectsNewActiveOutput()
+{
+	std::vector<SoundDevice> previous_outputs {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+	std::vector<SoundDevice> current_outputs {
+		previous_outputs.front(),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
+	};
+
+	expect(
+		FxSound::OutputDeviceSelection::didOutputBecomeAvailable(previous_outputs, current_outputs, L"hdmi"),
+		"device availability should detect newly added active outputs");
+}
+
+void testDidOutputBecomeAvailableDetectsReconnectedOutput()
+{
+	std::vector<SoundDevice> previous_outputs {
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac")
+	};
+	std::vector<SoundDevice> current_outputs {
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+	};
+
+	expect(
+		FxSound::OutputDeviceSelection::didOutputBecomeAvailable(previous_outputs, current_outputs, L"dac-old"),
+		"device availability should detect outputs that return from an inactive state");
+}
+
+void testDidOutputBecomeAvailableIgnoresInactiveOrMissingOutputs()
+{
+	std::vector<SoundDevice> previous_outputs {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+	std::vector<SoundDevice> current_outputs {
+		previous_outputs.front(),
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", false, false, false, L"c-hdmi")
+	};
+
+	expect(
+		!FxSound::OutputDeviceSelection::didOutputBecomeAvailable(previous_outputs, current_outputs, L"hdmi"),
+		"device availability should ignore outputs that are still inactive");
+	expect(
+		!FxSound::OutputDeviceSelection::didOutputBecomeAvailable(previous_outputs, current_outputs, L"unknown"),
+		"device availability should ignore unknown device ids");
 }
 
 void testShouldIgnoreDeviceChangeForUnselectedActiveDevice()
@@ -1927,6 +2000,25 @@ void testBuildSyncDecisionKeepsInactiveSelectionAfterDisconnectWithoutAutomaticS
 	expect(decision.should_mute, "without automatic switching the disconnected output should remain muted");
 }
 
+void testBuildSyncDecisionKeepsActiveSelectionWhenAutomaticSwitchingSeesUnrelatedDisconnect()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> output_devices {
+		selected_output,
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", false, false, false, L"c-hdmi")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildSyncDecision(
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"Speakers", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}}),
+		true,
+		{ AudioDeviceChangeKind::DeviceRemoved, L"hdmi", false, false, true });
+
+	expect(decision.has_resolved_output, "sync decision should still resolve the active selected output");
+	expect(decision.resolved_output.pwszID == L"spk", "automatic switching should not move away from an output that is still active");
+	expect(!decision.output_changed, "keeping the selected active output should not count as a change");
+}
+
 void testBuildInitDecisionKeepsSelectedInactiveOutput()
 {
 	std::vector<SoundDevice> sound_devices {
@@ -2082,6 +2174,24 @@ void testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutom
 	expect(decision.has_resolved_output, "idle sync should resolve a connected fallback after disconnect");
 	expect(decision.resolved_output.pwszID == L"spk", "idle sync fallback should use the highest-priority connected output");
 	expect(!decision.should_notify_error, "idle sync fallback should not report an error for a connected output");
+}
+
+void testBuildIdleSyncDecisionKeepsActiveSelectionWhenAutomaticSwitchingSeesUnrelatedDisconnect()
+{
+	auto selected_output = makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk");
+	std::vector<SoundDevice> output_devices {
+		selected_output,
+		makeOutput(L"hdmi", L"Monitor", L"HDMI", false, false, false, L"c-hdmi")
+	};
+
+	auto decision = FxSound::OutputDeviceSelection::buildIdleSyncDecision(
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"Speakers", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}}),
+		{ AudioDeviceChangeKind::DeviceRemoved, L"hdmi", false, false, true });
+
+	expect(decision.has_resolved_output, "idle sync should still resolve the active selected output");
+	expect(decision.resolved_output.pwszID == L"spk", "automatic switching should not move idle sync away from an output that is still active");
+	expect(!decision.should_notify_error, "keeping the active selected output should not report an error");
 }
 
 void testManualSelectionDecisionRestartsProcessingAfterInactiveSelection()
@@ -2663,10 +2773,15 @@ int main()
 		runTest("same output matches reconnected endpoint", testAreSameOutputDeviceMatchesReconnectedEndpoint);
 		runTest("stored output identity matches reconnected endpoint", testMatchesStoredOutputIdentityMatchesReconnectedEndpoint);
 		runTest("stored output identity rejects same-container sibling endpoint", testMatchesStoredOutputIdentityRejectsDifferentNameWithSameContainer);
+		runTest("stored output identity uses legacy name fallback without container", testMatchesStoredOutputIdentityUsesLegacyNameFallbackWithoutContainer);
 		runTest("resolve selected output returns reconnected device", testResolveSelectedOutputReturnsReconnectedDevice);
 		runTest("preferred output uses configured priority", testGetPreferredOutputUsesConfiguredPriority);
+		runTest("preferred output uses legacy name fallback without container", testGetPreferredOutputUsesLegacyNameFallbackWithoutContainer);
 		runTest("preferred output matches reconnected endpoint", testGetPreferredOutputMatchesReconnectedEndpoint);
 		runTest("preferred output rejects same-container sibling endpoint", testGetPreferredOutputRejectsSiblingEndpointWithDifferentName);
+		runTest("device availability detects new active output", testDidOutputBecomeAvailableDetectsNewActiveOutput);
+		runTest("device availability detects reconnected output", testDidOutputBecomeAvailableDetectsReconnectedOutput);
+		runTest("device availability ignores inactive or missing outputs", testDidOutputBecomeAvailableIgnoresInactiveOrMissingOutputs);
 		runTest("ignore device change for unselected active device", testShouldIgnoreDeviceChangeForUnselectedActiveDevice);
 		runTest("do not ignore added output when prioritizing new outputs", testShouldNotIgnoreAddedOutputWhenPrioritizingNewOutputs);
 		runTest("do not ignore device change for selected output", testShouldNotIgnoreDeviceChangeForSelectedOutput);
@@ -2678,6 +2793,7 @@ int main()
 		runTest("sync decision switches to reconnected output when prioritized", testBuildSyncDecisionSwitchesToReconnectedOutputWhenPrioritized);
 		runTest("sync decision falls back after disconnect when automatic switching enabled", testBuildSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled);
 		runTest("sync decision keeps inactive selection without automatic switching", testBuildSyncDecisionKeepsInactiveSelectionAfterDisconnectWithoutAutomaticSwitching);
+		runTest("sync decision keeps active selection for unrelated disconnect", testBuildSyncDecisionKeepsActiveSelectionWhenAutomaticSwitchingSeesUnrelatedDisconnect);
 		runTest("init decision keeps selected inactive output", testBuildInitDecisionKeepsSelectedInactiveOutput);
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
@@ -2686,6 +2802,7 @@ int main()
 		runTest("idle sync decision switches to added output when prioritized", testBuildIdleSyncDecisionSwitchesToAddedOutputWhenPrioritized);
 		runTest("idle sync decision switches to reconnected output when prioritized", testBuildIdleSyncDecisionSwitchesToReconnectedOutputWhenPrioritized);
 		runTest("idle sync decision falls back after disconnect when automatic switching enabled", testBuildIdleSyncDecisionFallsBackToPreferredOutputAfterDisconnectWhenAutomaticSwitchingEnabled);
+		runTest("idle sync decision keeps active selection for unrelated disconnect", testBuildIdleSyncDecisionKeepsActiveSelectionWhenAutomaticSwitchingSeesUnrelatedDisconnect);
 		runTest("manual selection restarts processing after inactive selection", testManualSelectionDecisionRestartsProcessingAfterInactiveSelection);
 		runTest("manual selection leaves default output untouched when processing is off", testManualSelectionDecisionLeavesDefaultOutputUntouchedWhenProcessingIsOff);
 		runTest("manual selection powers off when output is missing", testManualSelectionDecisionPowersOffWhenOutputIsMissing);
