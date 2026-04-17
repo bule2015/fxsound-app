@@ -889,6 +889,26 @@ void testOutputPriorityReorderStartsDragAfterThreshold()
 		"dragging should start once the pointer reaches the threshold");
 }
 
+void testOutputPriorityReorderBeginsDragSessionAtSourceRow()
+{
+	auto session = FxSound::OutputPriorityReorderPolicy::beginDragSession(2);
+	expect(session.active, "begin drag session should activate dragging for a valid source row");
+	expect(session.source_row == 2, "begin drag session should remember the source row");
+	expect(session.target_row == 2, "begin drag session should seed the target row from the source row");
+}
+
+void testOutputPriorityReorderUpdatesDragSessionWithoutChangingSourceRow()
+{
+	auto session = FxSound::OutputPriorityReorderPolicy::beginDragSession(1);
+	FxSound::OutputPriorityReorderPolicy::updateDragSession(session, 3, 5);
+	expect(session.source_row == 1, "updating drag session should preserve the source row");
+	expect(session.target_row == 3, "updating drag session should move the target row to the hovered row");
+
+	FxSound::OutputPriorityReorderPolicy::updateDragSession(session, -1, 5);
+	expect(session.source_row == 1, "invalid hover rows should still preserve the drag source row");
+	expect(session.target_row == 1, "invalid hover rows should fall back to the source row");
+}
+
 void testOutputPriorityReorderResolvesDropRows()
 {
 	expect(
@@ -2933,6 +2953,8 @@ int main()
 		runTest("output preset selection returns empty for no preset", testOutputPresetSelectionReturnsEmptyForNoPreset);
 		runTest("output preset selection maps preset ids and names", testOutputPresetSelectionMapsPresetIdsAndNames);
 		runTest("output priority reorder starts drag after threshold", testOutputPriorityReorderStartsDragAfterThreshold);
+		runTest("output priority reorder begins drag session at source row", testOutputPriorityReorderBeginsDragSessionAtSourceRow);
+		runTest("output priority reorder updates drag session without changing source row", testOutputPriorityReorderUpdatesDragSessionWithoutChangingSourceRow);
 		runTest("output priority reorder resolves drop rows", testOutputPriorityReorderResolvesDropRows);
 		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
 		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);

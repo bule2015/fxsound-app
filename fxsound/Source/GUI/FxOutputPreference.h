@@ -23,6 +23,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <JuceHeader.h>
 
+#include "OutputPriorityReorderPolicy.h"
+
 class FxOutputPreferenceListModel;
 class FxOutputPreference;
 
@@ -47,7 +49,6 @@ private:
     void endRowDrag(FxOutputPreference& output_preference);
     void refreshPresetItemsIfNeeded();
     void refreshText();
-    void resetDragState();
     void syncSelectedPreset();
     void updateSelectionVisuals();
     ListBox* findParentListBox() const;
@@ -70,10 +71,6 @@ private:
     int row_index_;
     bool is_row_selected_;
     DeviceConfig device_config_;
-    bool is_dragging_row_ = false;
-    int drag_target_row_index_ = -1;
-    Point<int> drag_hotspot_;
-    Image drag_snapshot_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxOutputDeviceRow)
 };
@@ -130,13 +127,18 @@ private:
     void refreshListBox();
     void refreshListBox(int selected_row);
     void refreshText();
-    void showDragGhost(const Image& snapshot, Point<int> cursor_position, Point<int> hotspot);
-    void moveDragGhost(Point<int> cursor_position, Point<int> hotspot);
-    void hideDragGhost();
+    void beginRowDrag(int source_row, const Image& snapshot, Point<int> cursor_position, Point<int> hotspot);
+    int updateRowDrag(int hovered_row, Point<int> cursor_position, int row_count);
+    void endRowDrag();
+    void resetRowDrag();
+    void moveDragGhost(Point<int> cursor_position);
+    bool isRowDragActive() const;
 
     ListBox output_preference_list_;
     FxOutputPreferenceListModel output_preference_model_;
     ImageComponent drag_ghost_;
+    FxSound::OutputPriorityReorderPolicy::DragSession drag_session_;
+    Point<int> drag_hotspot_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxOutputPreference)
 };

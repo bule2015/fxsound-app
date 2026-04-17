@@ -568,7 +568,10 @@ namespace FxSound::OutputDeviceSelection
 	{
 		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
 		{
-			return *selected_match;
+			if (selected_match->isActive || selected_match->pwszID != context.selected_output.pwszID)
+			{
+				return *selected_match;
+			}
 		}
 
 		if (!shouldPreserveSelectedOutputOnStartup(sound_devices, context.selected_output))
