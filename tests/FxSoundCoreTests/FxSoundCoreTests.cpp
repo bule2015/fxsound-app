@@ -2246,6 +2246,30 @@ void testBuildInitDecisionRejectsSameContainerSiblingEndpoint()
 	expect(decision.should_apply_output, "init should keep applying the active default output when the stored sibling endpoint does not match");
 }
 
+void testBuildInitDecisionPrefersExactReconnectOverSameContainerSibling()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+	};
+	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		{{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}},
+		true);
+
+	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}}));
+
+	expect(decision.has_resolved_output, "init should still resolve the exact reconnected selected output when a sibling endpoint is also active");
+	expect(decision.resolved_output.pwszID == L"dac-new", "init should prefer the exact reconnected selected endpoint over a same-container sibling");
+	expect(decision.should_apply_output, "exactly reconnected selected output should still be applied on startup");
+}
+
 void testBuildIdleSyncDecisionKeepsInactiveSelectedOutput()
 {
 	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -2706,6 +2730,32 @@ void testRuntimeStartupRecoversReconnectedSelectedOutput()
 	expect(harness.state.selected_output.pwszID == L"dac-new", "startup should resolve the selected output to the reconnected endpoint");
 }
 
+void testRuntimeStartupPrefersExactReconnectOverSameContainerSibling()
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	harness.state.output_name = L"USB DAC";
+	harness.state.playback_device_available = false;
+	harness.state.muted = true;
+	harness.audio.sound_devices = {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+	};
+	harness.audio.playback_device_available = false;
+	harness.audio.muted = true;
+	harness.priorities = {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+
+	applyRuntimeStartup(harness);
+
+	expect(harness.audio.set_playback_call_count == 1, "startup should still retarget to the exact reconnected selected output when a sibling endpoint is present");
+	expect(harness.audio.last_playback_device_id == L"dac-new", "startup should choose the exact reconnected selected endpoint over a same-container sibling");
+	expect(harness.state.selected_output.pwszID == L"dac-new", "startup should persist the exact reconnected selected endpoint");
+}
+
 void testRuntimeIdleSyncPreservesInactiveSelectedOutputWithoutAudioCalls()
 {
 	RuntimeHarness harness;
@@ -2967,6 +3017,7 @@ int main()
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
 		runTest("init decision rejects same-container sibling endpoint", testBuildInitDecisionRejectsSameContainerSiblingEndpoint);
+		runTest("init decision prefers exact reconnect over same-container sibling", testBuildInitDecisionPrefersExactReconnectOverSameContainerSibling);
 		runTest("idle sync decision keeps inactive selected output", testBuildIdleSyncDecisionKeepsInactiveSelectedOutput);
 		runTest("idle sync decision resolves reconnected selected output", testBuildIdleSyncDecisionResolvesReconnectedSelectedOutput);
 		runTest("idle sync decision switches to added output when prioritized", testBuildIdleSyncDecisionSwitchesToAddedOutputWhenPrioritized);
@@ -2988,6 +3039,7 @@ int main()
 		runTest("runtime manual selection recovers through audio passthru", testRuntimeManualSelectionRecoversThroughAudioPassthru);
 		runTest("runtime startup preserves selected inactive output", testRuntimeStartupPreservesSelectedInactiveOutput);
 		runTest("runtime startup recovers reconnected selected output", testRuntimeStartupRecoversReconnectedSelectedOutput);
+		runTest("runtime startup prefers exact reconnect over same-container sibling", testRuntimeStartupPrefersExactReconnectOverSameContainerSibling);
 		runTest("runtime idle sync preserves inactive selected output without audio calls", testRuntimeIdleSyncPreservesInactiveSelectedOutputWithoutAudioCalls);
 		runTest("runtime idle sync recovers reconnected selected output without audio calls", testRuntimeIdleSyncRecoversReconnectedSelectedOutputWithoutAudioCalls);
 		runTest("audio signal policy uses capture only for signal presence", testAudioSignalPolicyUsesCaptureOnlyForSignalPresence);

@@ -642,10 +642,7 @@ namespace FxSound::OutputDeviceSelection
 
 		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
 		{
-			if (should_preserve_selected_output)
-			{
-				decision.resolved_output = *selected_match;
-			}
+			decision.resolved_output = *selected_match;
 		}
 		else if (decision.resolved_output.pwszID.empty() &&
 			(!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty()) &&
