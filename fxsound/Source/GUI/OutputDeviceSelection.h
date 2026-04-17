@@ -562,6 +562,42 @@ namespace FxSound::OutputDeviceSelection
 		return active_sibling == sound_devices.end();
 	}
 
+	inline SoundDevice resolveStartupSelectedOutput(const std::vector<SoundDevice>& sound_devices,
+		const std::vector<SoundDevice>& output_devices,
+		const OutputResolutionContext& context)
+	{
+		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
+		{
+			return *selected_match;
+		}
+
+		if (!shouldPreserveSelectedOutputOnStartup(sound_devices, context.selected_output))
+		{
+			return {};
+		}
+
+		if ((!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty()) &&
+			context.selected_output.deviceNumChannel >= 2)
+		{
+			return context.selected_output;
+		}
+
+		return {};
+	}
+
+	inline OutputResolutionContext makeStartupFallbackResolutionContext(const std::vector<SoundDevice>& sound_devices,
+		const OutputResolutionContext& context)
+	{
+		if (shouldPreserveSelectedOutputOnStartup(sound_devices, context.selected_output))
+		{
+			return context;
+		}
+
+		auto resolution_context = context;
+		resolution_context.selected_output = {};
+		return resolution_context;
+	}
+
 	// Resolves the best output candidate by checking the explicit selection first,
 	// then the last stored name, then the configured priority order.
 	inline SoundDevice resolveSelectedOutput(const std::vector<SoundDevice>& output_devices,
@@ -637,30 +673,19 @@ namespace FxSound::OutputDeviceSelection
 	{
 		InitDecision decision;
 		decision.resolved_output = findDefaultProcessingOutput(sound_devices);
-		const auto should_preserve_selected_output =
-			shouldPreserveSelectedOutputOnStartup(sound_devices, context.selected_output);
 
-		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
+		if (auto startup_selected_output =
+			resolveStartupSelectedOutput(sound_devices, output_devices, context);
+			!startup_selected_output.pwszID.empty())
 		{
-			decision.resolved_output = *selected_match;
-		}
-		else if (decision.resolved_output.pwszID.empty() &&
-			(!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty()) &&
-			context.selected_output.deviceNumChannel >= 2 &&
-			should_preserve_selected_output)
-		{
-			decision.resolved_output = context.selected_output;
+			decision.resolved_output = startup_selected_output;
 		}
 
 		if (decision.resolved_output.pwszID.empty() && !output_devices.empty())
 		{
-			auto resolution_context = context;
-			if (!should_preserve_selected_output)
-			{
-				resolution_context.selected_output = {};
-			}
-
-			decision.resolved_output = resolveSelectedOutput(output_devices, resolution_context);
+			decision.resolved_output = resolveSelectedOutput(
+				output_devices,
+				makeStartupFallbackResolutionContext(sound_devices, context));
 		}
 
 		auto resolved_state = buildResolvedOutputState(decision.resolved_output, context);

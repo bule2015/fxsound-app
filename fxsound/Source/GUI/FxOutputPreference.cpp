@@ -183,10 +183,8 @@ void FxOutputDeviceRow::lookAndFeelChanged()
 
 void FxOutputDeviceRow::mouseDown(const MouseEvent&)
 {
-    is_dragging_row_ = false;
-    drag_target_row_index_ = row_index_;
+    resetDragState();
     drag_hotspot_ = getMouseXYRelative();
-    drag_snapshot_ = {};
 
     if (auto* list_box = findParentListBox())
     {
@@ -208,51 +206,60 @@ void FxOutputDeviceRow::mouseDrag(const MouseEvent& e)
         return;
     }
 
-    if (!is_dragging_row_)
+    auto* output_preference = findParentOutputPreference();
+    auto* list_box = findParentListBox();
+    if (output_preference == nullptr || list_box == nullptr)
     {
-        is_dragging_row_ = true;
-        drag_snapshot_ = createComponentSnapshot(getLocalBounds());
-
-        if (auto* output_preference = findParentOutputPreference())
-        {
-            auto cursor_position = e.getEventRelativeTo(output_preference).position.toInt();
-            output_preference->showDragGhost(drag_snapshot_, cursor_position, drag_hotspot_);
-        }
+        return;
     }
 
+    if (!is_dragging_row_)
+    {
+        beginRowDrag(*output_preference, e);
+    }
+
+    updateRowDrag(*output_preference, *list_box, e);
+}
+
+void FxOutputDeviceRow::mouseUp(const MouseEvent&)
+{
+    if (auto* output_preference = findParentOutputPreference())
+    {
+        endRowDrag(*output_preference);
+    }
+    else
+    {
+        resetDragState();
+    }
+}
+
+void FxOutputDeviceRow::beginRowDrag(FxOutputPreference& output_preference, const MouseEvent& e)
+{
     is_dragging_row_ = true;
+    drag_snapshot_ = createComponentSnapshot(getLocalBounds());
+    output_preference.showDragGhost(drag_snapshot_, getCursorPositionInOutputPreference(output_preference, e), drag_hotspot_);
+}
+
+void FxOutputDeviceRow::updateRowDrag(FxOutputPreference& output_preference, ListBox& list_box, const MouseEvent& e)
+{
     drag_target_row_index_ = FxSound::OutputPriorityReorderPolicy::resolveDropRow(
         getDropRowIndex(e),
         row_index_,
         output_preference_list_model_.getNumRows());
 
-    if (auto* list_box = findParentListBox())
-    {
-        list_box->selectRow(drag_target_row_index_);
-    }
-
-    if (auto* output_preference = findParentOutputPreference())
-    {
-        auto cursor_position = e.getEventRelativeTo(output_preference).position.toInt();
-        output_preference->moveDragGhost(cursor_position, drag_hotspot_);
-    }
+    list_box.selectRow(drag_target_row_index_);
+    output_preference.moveDragGhost(getCursorPositionInOutputPreference(output_preference, e), drag_hotspot_);
 }
 
-void FxOutputDeviceRow::mouseUp(const MouseEvent&)
+void FxOutputDeviceRow::endRowDrag(FxOutputPreference& output_preference)
 {
     if (is_dragging_row_)
     {
         output_preference_list_model_.moveRow(row_index_, drag_target_row_index_);
     }
 
-    if (auto* output_preference = findParentOutputPreference())
-    {
-        output_preference->hideDragGhost();
-    }
-
-    is_dragging_row_ = false;
-    drag_target_row_index_ = -1;
-    drag_snapshot_ = {};
+    output_preference.hideDragGhost();
+    resetDragState();
 }
 
 void FxOutputDeviceRow::refreshText()
@@ -345,9 +352,7 @@ void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConf
 
     refreshPresetItemsIfNeeded();
     syncSelectedPreset();
-    is_dragging_row_ = false;
-    drag_target_row_index_ = row_index_;
-    drag_snapshot_ = {};
+    resetDragState();
 }
 
 ListBox* FxOutputDeviceRow::findParentListBox() const
@@ -370,6 +375,19 @@ int FxOutputDeviceRow::getDropRowIndex(const MouseEvent& e) const
 
     auto position = e.getEventRelativeTo(list_box).position;
     return list_box->getRowContainingPosition(roundToInt(position.x), roundToInt(position.y));
+}
+
+Point<int> FxOutputDeviceRow::getCursorPositionInOutputPreference(FxOutputPreference& output_preference, const MouseEvent& e) const
+{
+    return e.getEventRelativeTo(&output_preference).position.toInt();
+}
+
+void FxOutputDeviceRow::resetDragState()
+{
+    is_dragging_row_ = false;
+    drag_target_row_index_ = row_index_;
+    drag_hotspot_ = {};
+    drag_snapshot_ = {};
 }
 
 void FxOutputDeviceRow::paint(Graphics& g)

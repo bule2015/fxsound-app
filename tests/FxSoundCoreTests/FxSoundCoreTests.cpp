@@ -243,6 +243,44 @@ OutputResolutionContext makeTestOutputResolutionContext(const ScenarioState& sta
 	return makeTestOutputResolutionContext(state.selected_output, state.output_name, priorities);
 }
 
+FxSound::OutputDeviceSelection::InitDecision buildStartupInitDecision(
+	const SoundDevice& selected_output,
+	const std::vector<SoundDevice>& sound_devices,
+	const std::vector<PriorityEntry>& priorities,
+	const std::wstring& output_name = L"")
+{
+	auto resolved_output_name = output_name.empty() ? selected_output.deviceFriendlyName : output_name;
+	auto output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		priorities,
+		true);
+
+	return FxSound::OutputDeviceSelection::buildInitDecision(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, resolved_output_name, priorities));
+}
+
+RuntimeHarness makeStartupHarness(const SoundDevice& selected_output,
+	const std::vector<SoundDevice>& sound_devices,
+	const std::vector<PriorityEntry>& priorities,
+	bool playback_device_available = true,
+	bool muted = false,
+	const std::wstring& output_name = L"")
+{
+	RuntimeHarness harness;
+	harness.state.selected_output = selected_output;
+	harness.state.output_name = output_name.empty() ? selected_output.deviceFriendlyName : output_name;
+	harness.state.playback_device_available = playback_device_available;
+	harness.state.muted = muted;
+	harness.audio.sound_devices = sound_devices;
+	harness.audio.playback_device_available = playback_device_available;
+	harness.audio.muted = muted;
+	harness.priorities = priorities;
+	return harness;
+}
+
 void expect(bool condition, const std::string& message)
 {
 	if (!condition)
@@ -2161,16 +2199,12 @@ void testBuildInitDecisionKeepsSelectedInactiveOutput()
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
 	};
 	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
-	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
-		sound_devices,
-		selected_output,
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}},
-		true);
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC"},
+		{L"spk", L"Speakers"}
+	};
 
-	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
-		sound_devices,
-		output_devices,
-		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
+	auto decision = buildStartupInitDecision(selected_output, sound_devices, priorities);
 
 	expect(decision.has_resolved_output, "init should resolve the selected inactive output");
 	expect(decision.resolved_output.pwszID == L"dac-old", "init should preserve the selected inactive output");
@@ -2184,16 +2218,12 @@ void testBuildInitDecisionFallsBackToActiveDefaultOutput()
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
 		makeOutput(L"hdmi", L"Monitor", L"HDMI", true, false, false, L"c-hdmi")
 	};
-	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
-		sound_devices,
-		SoundDevice(),
-		{{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}},
-		true);
+	std::vector<PriorityEntry> priorities {
+		{L"spk", L"Speakers"},
+		{L"hdmi", L"Monitor"}
+	};
 
-	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
-		sound_devices,
-		output_devices,
-		makeTestOutputResolutionContext(SoundDevice(), L"", {{L"spk", L"Speakers"}, {L"hdmi", L"Monitor"}}));
+	auto decision = buildStartupInitDecision({}, sound_devices, priorities);
 
 	expect(decision.has_resolved_output, "init should resolve a startup output");
 	expect(decision.resolved_output.pwszID == L"spk", "init should prefer the active default output when nothing is selected");
@@ -2207,16 +2237,12 @@ void testBuildInitDecisionResolvesReconnectedSelectedOutput()
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
 		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac")
 	};
-	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
-		sound_devices,
-		selected_output,
-		{{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}},
-		true);
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC"},
+		{L"spk", L"Speakers"}
+	};
 
-	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
-		sound_devices,
-		output_devices,
-		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC"}, {L"spk", L"Speakers"}}));
+	auto decision = buildStartupInitDecision(selected_output, sound_devices, priorities);
 
 	expect(decision.has_resolved_output, "init should resolve a reconnected selected output");
 	expect(decision.resolved_output.pwszID == L"dac-new", "init should pick the reconnected endpoint for the selected output");
@@ -2230,16 +2256,12 @@ void testBuildInitDecisionRejectsSameContainerSiblingEndpoint()
 		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
 		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
 	};
-	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
-		sound_devices,
-		selected_output,
-		{{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}},
-		true);
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
 
-	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
-		sound_devices,
-		output_devices,
-		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}}));
+	auto decision = buildStartupInitDecision(selected_output, sound_devices, priorities);
 
 	expect(decision.has_resolved_output, "init should still resolve a startup output when a sibling endpoint is present");
 	expect(decision.resolved_output.pwszID == L"spk", "init should not collapse a same-container sibling endpoint onto the stored selection");
@@ -2254,16 +2276,12 @@ void testBuildInitDecisionPrefersExactReconnectOverSameContainerSibling()
 		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac"),
 		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
 	};
-	std::vector<SoundDevice> output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
-		sound_devices,
-		selected_output,
-		{{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}},
-		true);
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
 
-	auto decision = FxSound::OutputDeviceSelection::buildInitDecision(
-		sound_devices,
-		output_devices,
-		makeTestOutputResolutionContext(selected_output, L"USB DAC", {{L"dac-old", L"USB DAC", L"c-dac"}, {L"spk", L"Speakers", L"c-spk"}}));
+	auto decision = buildStartupInitDecision(selected_output, sound_devices, priorities);
 
 	expect(decision.has_resolved_output, "init should still resolve the exact reconnected selected output when a sibling endpoint is also active");
 	expect(decision.resolved_output.pwszID == L"dac-new", "init should prefer the exact reconnected selected endpoint over a same-container sibling");
@@ -2682,17 +2700,15 @@ void testRuntimeManualSelectionRecoversThroughAudioPassthru()
 
 void testRuntimeStartupPreservesSelectedInactiveOutput()
 {
-	RuntimeHarness harness;
-	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
-	harness.state.output_name = L"USB DAC";
-	harness.audio.sound_devices = {
-		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
-	};
-	harness.audio.playback_device_available = true;
-	harness.priorities = {
+	auto harness = makeStartupHarness(
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac"),
+		{
+			makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+		},
+		{
 		{L"dac-old", L"USB DAC"},
 		{L"spk", L"Speakers"}
-	};
+		});
 
 	applyRuntimeStartup(harness);
 
@@ -2705,21 +2721,18 @@ void testRuntimeStartupPreservesSelectedInactiveOutput()
 
 void testRuntimeStartupRecoversReconnectedSelectedOutput()
 {
-	RuntimeHarness harness;
-	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
-	harness.state.output_name = L"USB DAC";
-	harness.state.playback_device_available = false;
-	harness.state.muted = true;
-	harness.audio.sound_devices = {
-		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
-		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
-	};
-	harness.audio.playback_device_available = false;
-	harness.audio.muted = true;
-	harness.priorities = {
+	auto harness = makeStartupHarness(
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac"),
+		{
+			makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+			makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac")
+		},
+		{
 		{L"dac-old", L"USB DAC"},
 		{L"spk", L"Speakers"}
-	};
+		},
+		false,
+		true);
 
 	applyRuntimeStartup(harness);
 
@@ -2732,22 +2745,19 @@ void testRuntimeStartupRecoversReconnectedSelectedOutput()
 
 void testRuntimeStartupPrefersExactReconnectOverSameContainerSibling()
 {
-	RuntimeHarness harness;
-	harness.state.selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
-	harness.state.output_name = L"USB DAC";
-	harness.state.playback_device_available = false;
-	harness.state.muted = true;
-	harness.audio.sound_devices = {
-		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
-		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac"),
-		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
-	};
-	harness.audio.playback_device_available = false;
-	harness.audio.muted = true;
-	harness.priorities = {
+	auto harness = makeStartupHarness(
+		makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac"),
+		{
+			makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+			makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, false, L"c-dac"),
+			makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+		},
+		{
 		{L"dac-old", L"USB DAC", L"c-dac"},
 		{L"spk", L"Speakers", L"c-spk"}
-	};
+		},
+		false,
+		true);
 
 	applyRuntimeStartup(harness);
 

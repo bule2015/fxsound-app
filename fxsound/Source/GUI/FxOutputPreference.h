@@ -42,13 +42,18 @@ private:
     void mouseDrag(const MouseEvent& e) override;
     void mouseUp(const MouseEvent& e) override;
     void paint(Graphics& g) override;
+    void beginRowDrag(FxOutputPreference& output_preference, const MouseEvent& e);
+    void updateRowDrag(FxOutputPreference& output_preference, ListBox& list_box, const MouseEvent& e);
+    void endRowDrag(FxOutputPreference& output_preference);
     void refreshPresetItemsIfNeeded();
     void refreshText();
+    void resetDragState();
     void syncSelectedPreset();
     void updateSelectionVisuals();
     ListBox* findParentListBox() const;
     FxOutputPreference* findParentOutputPreference() const;
     int getDropRowIndex(const MouseEvent& e) const;
+    Point<int> getCursorPositionInOutputPreference(FxOutputPreference& output_preference, const MouseEvent& e) const;
     
     FxOutputPreferenceListModel& output_preference_list_model_;
     
