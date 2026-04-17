@@ -897,6 +897,14 @@ void testOutputPriorityReorderBeginsDragSessionAtSourceRow()
 	expect(session.target_row == 2, "begin drag session should seed the target row from the source row");
 }
 
+void testOutputPriorityReorderRejectsInvalidDragSourceRow()
+{
+	auto session = FxSound::OutputPriorityReorderPolicy::beginDragSession(-1);
+	expect(!session.active, "begin drag session should stay inactive for an invalid source row");
+	expect(session.source_row == -1, "invalid drag session should keep the default source row");
+	expect(session.target_row == -1, "invalid drag session should keep the default target row");
+}
+
 void testOutputPriorityReorderUpdatesDragSessionWithoutChangingSourceRow()
 {
 	auto session = FxSound::OutputPriorityReorderPolicy::beginDragSession(1);
@@ -907,6 +915,15 @@ void testOutputPriorityReorderUpdatesDragSessionWithoutChangingSourceRow()
 	FxSound::OutputPriorityReorderPolicy::updateDragSession(session, -1, 5);
 	expect(session.source_row == 1, "invalid hover rows should still preserve the drag source row");
 	expect(session.target_row == 1, "invalid hover rows should fall back to the source row");
+}
+
+void testOutputPriorityReorderIgnoresUpdatesForInactiveSession()
+{
+	FxSound::OutputPriorityReorderPolicy::DragSession session;
+	FxSound::OutputPriorityReorderPolicy::updateDragSession(session, 2, 4);
+	expect(!session.active, "inactive drag sessions should remain inactive");
+	expect(session.source_row == -1, "inactive drag sessions should preserve the default source row");
+	expect(session.target_row == -1, "inactive drag sessions should preserve the default target row");
 }
 
 void testOutputPriorityReorderResolvesDropRows()
@@ -2269,6 +2286,83 @@ void testBuildInitDecisionResolvesReconnectedSelectedOutput()
 	expect(decision.should_apply_output, "reconnected selected output should be applied on startup");
 }
 
+void testResolveStartupSelectedOutputKeepsInactivePlaceholderWithoutSiblingConflict()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+	auto output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		priorities,
+		true);
+
+	auto resolved = FxSound::OutputDeviceSelection::resolveStartupSelectedOutput(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", priorities));
+
+	expect(resolved.pwszID == L"dac-old", "startup helper should keep the inactive selected output when no sibling conflict exists");
+	expect(!resolved.isActive, "startup helper should keep the stored inactive placeholder when no reconnect happened");
+}
+
+void testResolveStartupSelectedOutputRejectsInactivePlaceholderWhenSiblingConflictExists()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, true, L"c-spk"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+	auto output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		priorities,
+		true);
+
+	auto resolved = FxSound::OutputDeviceSelection::resolveStartupSelectedOutput(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", priorities));
+
+	expect(resolved.pwszID.empty(), "startup helper should drop the inactive placeholder when a same-container sibling is active");
+}
+
+void testResolveStartupSelectedOutputPrefersExactReconnectOverSiblingConflict()
+{
+	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
+	std::vector<SoundDevice> sound_devices {
+		makeOutput(L"spk", L"Speakers", L"Built-in", true, true, false, L"c-spk"),
+		makeOutput(L"dac-new", L"USB DAC", L"USB Audio", true, false, true, L"c-dac"),
+		makeOutput(L"dac-chat", L"USB DAC Chat", L"USB Audio", true, false, false, L"c-dac")
+	};
+	std::vector<PriorityEntry> priorities {
+		{L"dac-old", L"USB DAC", L"c-dac"},
+		{L"spk", L"Speakers", L"c-spk"}
+	};
+	auto output_devices = FxSound::OutputDeviceSelection::buildVisibleOutputDevices(
+		sound_devices,
+		selected_output,
+		priorities,
+		true);
+
+	auto resolved = FxSound::OutputDeviceSelection::resolveStartupSelectedOutput(
+		sound_devices,
+		output_devices,
+		makeTestOutputResolutionContext(selected_output, L"USB DAC", priorities));
+
+	expect(resolved.pwszID == L"dac-new", "startup helper should still prefer the exact reconnect when a same-container sibling is also active");
+	expect(resolved.isActive, "startup helper should return the active reconnected endpoint");
+}
+
 void testBuildInitDecisionRejectsSameContainerSiblingEndpoint()
 {
 	SoundDevice selected_output = makeOutput(L"dac-old", L"USB DAC", L"USB Audio", false, false, false, L"c-dac");
@@ -2954,7 +3048,9 @@ int main()
 		runTest("output preset selection maps preset ids and names", testOutputPresetSelectionMapsPresetIdsAndNames);
 		runTest("output priority reorder starts drag after threshold", testOutputPriorityReorderStartsDragAfterThreshold);
 		runTest("output priority reorder begins drag session at source row", testOutputPriorityReorderBeginsDragSessionAtSourceRow);
+		runTest("output priority reorder rejects invalid drag source row", testOutputPriorityReorderRejectsInvalidDragSourceRow);
 		runTest("output priority reorder updates drag session without changing source row", testOutputPriorityReorderUpdatesDragSessionWithoutChangingSourceRow);
+		runTest("output priority reorder ignores updates for inactive session", testOutputPriorityReorderIgnoresUpdatesForInactiveSession);
 		runTest("output priority reorder resolves drop rows", testOutputPriorityReorderResolvesDropRows);
 		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
 		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);
@@ -3048,6 +3144,9 @@ int main()
 		runTest("init decision keeps selected inactive output", testBuildInitDecisionKeepsSelectedInactiveOutput);
 		runTest("init decision falls back to active default output", testBuildInitDecisionFallsBackToActiveDefaultOutput);
 		runTest("init decision resolves reconnected selected output", testBuildInitDecisionResolvesReconnectedSelectedOutput);
+		runTest("startup selected output keeps inactive placeholder without sibling conflict", testResolveStartupSelectedOutputKeepsInactivePlaceholderWithoutSiblingConflict);
+		runTest("startup selected output rejects inactive placeholder when sibling conflict exists", testResolveStartupSelectedOutputRejectsInactivePlaceholderWhenSiblingConflictExists);
+		runTest("startup selected output prefers exact reconnect over sibling conflict", testResolveStartupSelectedOutputPrefersExactReconnectOverSiblingConflict);
 		runTest("init decision rejects same-container sibling endpoint", testBuildInitDecisionRejectsSameContainerSiblingEndpoint);
 		runTest("init decision prefers exact reconnect over same-container sibling", testBuildInitDecisionPrefersExactReconnectOverSameContainerSibling);
 		runTest("idle sync decision keeps inactive selected output", testBuildIdleSyncDecisionKeepsInactiveSelectedOutput);
