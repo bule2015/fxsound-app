@@ -541,6 +541,27 @@ namespace FxSound::OutputDeviceSelection
 		return name_match != output_devices.end() ? &(*name_match) : nullptr;
 	}
 
+	inline bool shouldPreserveSelectedOutputOnStartup(const std::vector<SoundDevice>& sound_devices,
+		const SoundDevice& selected_output)
+	{
+		if (selected_output.containerId.empty())
+		{
+			return true;
+		}
+
+		auto active_sibling = std::find_if(sound_devices.begin(), sound_devices.end(),
+			[&selected_output](const SoundDevice& sound_device)
+			{
+				return sound_device.isRealDevice &&
+					sound_device.isActive &&
+					sound_device.deviceNumChannel >= 2 &&
+					sound_device.containerId == selected_output.containerId &&
+					sound_device.deviceFriendlyName != selected_output.deviceFriendlyName;
+			});
+
+		return active_sibling == sound_devices.end();
+	}
+
 	// Resolves the best output candidate by checking the explicit selection first,
 	// then the last stored name, then the configured priority order.
 	inline SoundDevice resolveSelectedOutput(const std::vector<SoundDevice>& output_devices,
@@ -616,21 +637,33 @@ namespace FxSound::OutputDeviceSelection
 	{
 		InitDecision decision;
 		decision.resolved_output = findDefaultProcessingOutput(sound_devices);
+		const auto should_preserve_selected_output =
+			shouldPreserveSelectedOutputOnStartup(sound_devices, context.selected_output);
 
 		if (const auto* selected_match = findSelectedOutputMatch(output_devices, context.selected_output))
 		{
-			decision.resolved_output = *selected_match;
+			if (should_preserve_selected_output)
+			{
+				decision.resolved_output = *selected_match;
+			}
 		}
 		else if (decision.resolved_output.pwszID.empty() &&
 			(!context.selected_output.pwszID.empty() || !context.selected_output.deviceFriendlyName.empty()) &&
-			context.selected_output.deviceNumChannel >= 2)
+			context.selected_output.deviceNumChannel >= 2 &&
+			should_preserve_selected_output)
 		{
 			decision.resolved_output = context.selected_output;
 		}
 
 		if (decision.resolved_output.pwszID.empty() && !output_devices.empty())
 		{
-			decision.resolved_output = resolveSelectedOutput(output_devices, context);
+			auto resolution_context = context;
+			if (!should_preserve_selected_output)
+			{
+				resolution_context.selected_output = {};
+			}
+
+			decision.resolved_output = resolveSelectedOutput(output_devices, resolution_context);
 		}
 
 		auto resolved_state = buildResolvedOutputState(decision.resolved_output, context);

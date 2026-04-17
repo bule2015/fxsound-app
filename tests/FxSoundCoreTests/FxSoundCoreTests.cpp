@@ -13,6 +13,7 @@
 #include "../../fxsound/Source/GUI/LanguageLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/LanguageSelectorPolicy.h"
 #include "../../fxsound/Source/GUI/OutputPresetSelectionPolicy.h"
+#include "../../fxsound/Source/GUI/OutputPriorityReorderPolicy.h"
 #include "../../fxsound/Source/GUI/PresetAutoSavePolicy.h"
 #include "../../fxsound/Source/GUI/SettingsDialogLayoutPolicy.h"
 #include "../../fxsound/Source/GUI/StartupOptionPolicy.h"
@@ -838,6 +839,29 @@ void testOutputPresetSelectionMapsPresetIdsAndNames()
 
 	expect(selected_id == FxSound::OutputPresetSelectionPolicy::kNoPresetId + 2, "preset selection should reserve the no-preset id");
 	expect(preset_name == L"Studio", "preset selection should round-trip real preset names");
+}
+
+void testOutputPriorityReorderStartsDragAfterThreshold()
+{
+	expect(
+		!FxSound::OutputPriorityReorderPolicy::shouldStartDrag(3),
+		"dragging should wait until the pointer moves past the threshold");
+	expect(
+		FxSound::OutputPriorityReorderPolicy::shouldStartDrag(4),
+		"dragging should start once the pointer reaches the threshold");
+}
+
+void testOutputPriorityReorderResolvesDropRows()
+{
+	expect(
+		FxSound::OutputPriorityReorderPolicy::resolveDropRow(2, 0, 4) == 2,
+		"valid hovered rows should become the drop target");
+	expect(
+		FxSound::OutputPriorityReorderPolicy::resolveDropRow(-1, 1, 4) == 1,
+		"invalid hovered rows should keep the current row");
+	expect(
+		FxSound::OutputPriorityReorderPolicy::resolveDropRow(8, 1, 4) == 1,
+		"out-of-range hovered rows should keep the current row");
 }
 
 void testAutoEqPolicyResetsAnalysisAfterPresetLoad()
@@ -2848,6 +2872,8 @@ int main()
 		runTest("language selector falls back to first language", testLanguageSelectorFallsBackToFirstLanguage);
 		runTest("output preset selection returns empty for no preset", testOutputPresetSelectionReturnsEmptyForNoPreset);
 		runTest("output preset selection maps preset ids and names", testOutputPresetSelectionMapsPresetIdsAndNames);
+		runTest("output priority reorder starts drag after threshold", testOutputPriorityReorderStartsDragAfterThreshold);
+		runTest("output priority reorder resolves drop rows", testOutputPriorityReorderResolvesDropRows);
 		runTest("auto eq policy resets after preset load", testAutoEqPolicyResetsAnalysisAfterPresetLoad);
 		runTest("auto eq policy resets after filter Q change", testAutoEqPolicyResetsAnalysisAfterFilterQChange);
 		runTest("auto eq policy resets after band count change", testAutoEqPolicyResetsAnalysisAfterBandCountChange);

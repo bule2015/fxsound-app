@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <JuceHeader.h>
 
 class FxOutputPreferenceListModel;
+class FxOutputPreference;
 
 class FxOutputDeviceRow : public Component
 {
@@ -37,11 +38,17 @@ private:
     static constexpr int PRESET_LIST_WIDTH = 150;
 
     void lookAndFeelChanged() override;
+    void mouseDown(const MouseEvent& e) override;
+    void mouseDrag(const MouseEvent& e) override;
+    void mouseUp(const MouseEvent& e) override;
     void paint(Graphics& g) override;
     void refreshPresetItemsIfNeeded();
     void refreshText();
     void syncSelectedPreset();
     void updateSelectionVisuals();
+    ListBox* findParentListBox() const;
+    FxOutputPreference* findParentOutputPreference() const;
+    int getDropRowIndex(const MouseEvent& e) const;
     
     FxOutputPreferenceListModel& output_preference_list_model_;
     
@@ -58,6 +65,10 @@ private:
     int row_index_;
     bool is_row_selected_;
     DeviceConfig device_config_;
+    bool is_dragging_row_ = false;
+    int drag_target_row_index_ = -1;
+    Point<int> drag_hotspot_;
+    Image drag_snapshot_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxOutputDeviceRow)
 };
@@ -73,8 +84,8 @@ public:
 
     Component* refreshComponentForRow(int rowNumber, bool isRowSelected, Component* existingComponent) override;
 
+    bool moveRow(int from_index, int to_index);
     void moveRowUp(int index);
-
     void moveRowDown(int index);
 
     void modelChanged(FxModel::Event model_event);
@@ -103,6 +114,8 @@ public:
     int getPreferredWidth() const;
 
 private:
+    friend class FxOutputDeviceRow;
+
     static constexpr int ROW_HEIGHT = 40;
 
     bool keyPressed(const KeyPress& key, Component* originating_component) override;
@@ -112,9 +125,13 @@ private:
     void refreshListBox();
     void refreshListBox(int selected_row);
     void refreshText();
+    void showDragGhost(const Image& snapshot, Point<int> cursor_position, Point<int> hotspot);
+    void moveDragGhost(Point<int> cursor_position, Point<int> hotspot);
+    void hideDragGhost();
 
     ListBox output_preference_list_;
     FxOutputPreferenceListModel output_preference_model_;
+    ImageComponent drag_ghost_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FxOutputPreference)
 };

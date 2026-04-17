@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "FxOutputPreference.h"
 #include "OutputDeviceSelection.h"
 #include "OutputPresetSelectionPolicy.h"
+#include "OutputPriorityReorderPolicy.h"
 
 namespace
 {
@@ -99,7 +100,8 @@ int getOutputPreferencePreferredWidth(const Font& font, const juce::Array<Device
 
 FxOutputDeviceRow::FxOutputDeviceRow(FxOutputPreferenceListModel& model) : up_button_("up", DrawableButton::ImageFitted), down_button_("down", DrawableButton::ImageFitted), output_preference_list_model_(model)
 {
-    setInterceptsMouseClicks(false, true);
+    setInterceptsMouseClicks(true, true);
+    setMouseCursor(MouseCursor::DraggingHandCursor);
 
     up_image_ = Drawable::createFromImageData(FXIMAGE(ArrowUp), FXIMAGESIZE(ArrowUp));
     down_image_ = Drawable::createFromImageData(FXIMAGE(ArrowDown), FXIMAGESIZE(ArrowDown));
@@ -177,6 +179,80 @@ void FxOutputDeviceRow::lookAndFeelChanged()
 {
     refreshText();
     updateSelectionVisuals();
+}
+
+void FxOutputDeviceRow::mouseDown(const MouseEvent&)
+{
+    is_dragging_row_ = false;
+    drag_target_row_index_ = row_index_;
+    drag_hotspot_ = getMouseXYRelative();
+    drag_snapshot_ = {};
+
+    if (auto* list_box = findParentListBox())
+    {
+        list_box->selectRow(row_index_);
+        list_box->grabKeyboardFocus();
+    }
+}
+
+void FxOutputDeviceRow::mouseDrag(const MouseEvent& e)
+{
+    if (row_index_ < 0)
+    {
+        return;
+    }
+
+    if (!is_dragging_row_ &&
+        !FxSound::OutputPriorityReorderPolicy::shouldStartDrag(e.getDistanceFromDragStart()))
+    {
+        return;
+    }
+
+    if (!is_dragging_row_)
+    {
+        is_dragging_row_ = true;
+        drag_snapshot_ = createComponentSnapshot(getLocalBounds());
+
+        if (auto* output_preference = findParentOutputPreference())
+        {
+            auto cursor_position = e.getEventRelativeTo(output_preference).position.toInt();
+            output_preference->showDragGhost(drag_snapshot_, cursor_position, drag_hotspot_);
+        }
+    }
+
+    is_dragging_row_ = true;
+    drag_target_row_index_ = FxSound::OutputPriorityReorderPolicy::resolveDropRow(
+        getDropRowIndex(e),
+        row_index_,
+        output_preference_list_model_.getNumRows());
+
+    if (auto* list_box = findParentListBox())
+    {
+        list_box->selectRow(drag_target_row_index_);
+    }
+
+    if (auto* output_preference = findParentOutputPreference())
+    {
+        auto cursor_position = e.getEventRelativeTo(output_preference).position.toInt();
+        output_preference->moveDragGhost(cursor_position, drag_hotspot_);
+    }
+}
+
+void FxOutputDeviceRow::mouseUp(const MouseEvent&)
+{
+    if (is_dragging_row_)
+    {
+        output_preference_list_model_.moveRow(row_index_, drag_target_row_index_);
+    }
+
+    if (auto* output_preference = findParentOutputPreference())
+    {
+        output_preference->hideDragGhost();
+    }
+
+    is_dragging_row_ = false;
+    drag_target_row_index_ = -1;
+    drag_snapshot_ = {};
 }
 
 void FxOutputDeviceRow::refreshText()
@@ -269,6 +345,31 @@ void FxOutputDeviceRow::update(int index, bool is_row_selected, const DeviceConf
 
     refreshPresetItemsIfNeeded();
     syncSelectedPreset();
+    is_dragging_row_ = false;
+    drag_target_row_index_ = row_index_;
+    drag_snapshot_ = {};
+}
+
+ListBox* FxOutputDeviceRow::findParentListBox() const
+{
+    return findParentComponentOfClass<ListBox>();
+}
+
+FxOutputPreference* FxOutputDeviceRow::findParentOutputPreference() const
+{
+    return findParentComponentOfClass<FxOutputPreference>();
+}
+
+int FxOutputDeviceRow::getDropRowIndex(const MouseEvent& e) const
+{
+    auto* list_box = findParentListBox();
+    if (list_box == nullptr)
+    {
+        return row_index_;
+    }
+
+    auto position = e.getEventRelativeTo(list_box).position;
+    return list_box->getRowContainingPosition(roundToInt(position.x), roundToInt(position.y));
 }
 
 void FxOutputDeviceRow::paint(Graphics& g)
@@ -319,28 +420,34 @@ Component* FxOutputPreferenceListModel::refreshComponentForRow(int rowNumber, bo
     return row;
 }
 
-void FxOutputPreferenceListModel::moveRowUp(int index)
+bool FxOutputPreferenceListModel::moveRow(int from_index, int to_index)
 {
-    if (index <= 0)
-        return;
+    if (from_index < 0 ||
+        to_index < 0 ||
+        from_index >= device_configs_.size() ||
+        to_index >= device_configs_.size() ||
+        from_index == to_index)
+    {
+        return false;
+    }
 
-    device_configs_.swap(index, index - 1);
+    device_configs_.move(from_index, to_index);
     persist();
 
     if (onRowMoved)
-        onRowMoved(index - 1);
+        onRowMoved(to_index);
+
+    return true;
+}
+
+void FxOutputPreferenceListModel::moveRowUp(int index)
+{
+    moveRow(index, index - 1);
 }
 
 void FxOutputPreferenceListModel::moveRowDown(int index)
 {
-    if (index >= device_configs_.size() - 1)
-        return;
-
-    device_configs_.swap(index, index + 1);
-    persist();
-
-    if (onRowMoved)
-        onRowMoved(index + 1);
+    moveRow(index, index + 1);
 }
 
 void FxOutputPreferenceListModel::modelChanged(FxModel::Event model_event)
@@ -408,6 +515,10 @@ FxOutputPreference::FxOutputPreference()
     output_preference_list_.setWantsKeyboardFocus(true);
 
     addAndMakeVisible(output_preference_list_);
+    addAndMakeVisible(drag_ghost_);
+    drag_ghost_.setInterceptsMouseClicks(false, false);
+    drag_ghost_.setAlpha(0.65f);
+    drag_ghost_.setVisible(false);
 
     output_preference_list_.setRowHeight(ROW_HEIGHT);
     output_preference_list_.setMultipleSelectionEnabled(false);
@@ -475,7 +586,37 @@ void FxOutputPreference::paint(Graphics& g)
 
 void FxOutputPreference::refreshText()
 {
-    output_preference_list_.setTooltip(TRANS("Use Shift+Up or Shift+Down to change the device priority"));
+    output_preference_list_.setTooltip(TRANS("Drag rows or use Shift+Up and Shift+Down to change the device priority"));
+}
+
+void FxOutputPreference::showDragGhost(const Image& snapshot, Point<int> cursor_position, Point<int> hotspot)
+{
+    if (snapshot.isNull())
+    {
+        return;
+    }
+
+    drag_ghost_.setImage(snapshot);
+    drag_ghost_.setSize(snapshot.getWidth(), snapshot.getHeight());
+    drag_ghost_.setVisible(true);
+    drag_ghost_.toFront(false);
+    moveDragGhost(cursor_position, hotspot);
+}
+
+void FxOutputPreference::moveDragGhost(Point<int> cursor_position, Point<int> hotspot)
+{
+    if (!drag_ghost_.isVisible())
+    {
+        return;
+    }
+
+    drag_ghost_.setTopLeftPosition(cursor_position - hotspot);
+}
+
+void FxOutputPreference::hideDragGhost()
+{
+    drag_ghost_.setVisible(false);
+    drag_ghost_.setImage(Image());
 }
 
 void FxOutputPreference::refreshListBox()
